@@ -7,7 +7,9 @@
 # conectado — por isso o `prisma migrate deploy` foi tirado do script de build.
 
 [build]
-builder = "nixpacks"
+# Força o Nixpacks (enum em MAIÚSCULAS) — sem isto a Railway pode cair no
+# auto-detect e usar um Dockerfile. O Dockerfile foi removido do repositório.
+builder = "NIXPACKS"
 # Explícito: o `prisma generate` roda na fase de BUILD (código completo presente),
 # não no install — evita "Could not find Prisma Schema" do postinstall no Nixpacks.
 buildCommand = "npm run build"
