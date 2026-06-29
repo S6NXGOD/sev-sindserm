@@ -151,7 +151,8 @@ export default async function LocaisPage({
         <CardContent className="space-y-4">
           <WorkplacesFilterBar basePath={BASE} />
 
-          <div className="rounded-md border">
+          {/* DESKTOP (lg+): tabela completa — intacta. */}
+          <div className="hidden rounded-md border lg:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -230,6 +231,80 @@ export default async function LocaisPage({
                 )}
               </TableBody>
             </Table>
+          </div>
+
+          {/* MOBILE (< lg): cada local vira um cartão. */}
+          <div className="space-y-3 lg:hidden">
+            {workplaces.length === 0 ? (
+              <div className="rounded-md border py-8 text-center text-sm text-muted-foreground">
+                Nenhum local encontrado com os filtros atuais.
+              </div>
+            ) : (
+              workplaces.map((w) => (
+                <div
+                  key={w.id}
+                  className="rounded-lg border bg-white p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <Link
+                        href={`${BASE}/${w.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {w.nome}
+                      </Link>
+                      <div className="truncate font-mono text-xs text-muted-foreground">
+                        /votacao/{w.linkToken}
+                      </div>
+                    </div>
+                    <div className="shrink-0">
+                      {statusBadge(w.dataInicioVotacao, w.dataFimVotacao)}
+                    </div>
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-2">
+                    <Badge variant="outline" className="shrink-0">
+                      {w.zona}
+                    </Badge>
+                    <p className="min-w-0 truncate text-sm text-muted-foreground">
+                      {w.orgao}
+                    </p>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="rounded-md bg-slate-50 py-1.5">
+                      <div className="font-semibold text-foreground">
+                        {w._count.candidates}
+                      </div>
+                      <div className="text-muted-foreground">Cand.</div>
+                    </div>
+                    <div className="rounded-md bg-slate-50 py-1.5">
+                      <div className="font-semibold text-foreground">
+                        {calcularVagas(w._count.candidates)}
+                      </div>
+                      <div className="text-muted-foreground">Vagas</div>
+                    </div>
+                    <div className="rounded-md bg-slate-50 py-1.5">
+                      <div className="font-semibold text-foreground">
+                        {w._count.votes}
+                        {w.voteLimit ? `/${w.voteLimit}` : ""}
+                      </div>
+                      <div className="text-muted-foreground">Votos</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-end gap-1 border-t pt-3">
+                    <CopyButton
+                      value={`${votingBaseUrl}/votacao/${w.linkToken}`}
+                      size="icon"
+                    />
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href={`${BASE}/${w.id}`}>Gerenciar</Link>
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
           <div className="flex items-center justify-between">

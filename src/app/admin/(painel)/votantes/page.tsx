@@ -136,7 +136,8 @@ export default async function VotantesPage({
         <CardContent className="space-y-4">
           <VotersFilterBar locais={locais} />
 
-          <div className="rounded-md border">
+          {/* DESKTOP (lg+): tabela completa — intacta. */}
+          <div className="hidden rounded-md border lg:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -191,6 +192,50 @@ export default async function VotantesPage({
                 )}
               </TableBody>
             </Table>
+          </div>
+
+          {/* MOBILE (< lg): cada votante vira um cartão. */}
+          <div className="space-y-3 lg:hidden">
+            {voters.length === 0 ? (
+              <div className="rounded-md border py-8 text-center text-sm text-muted-foreground">
+                Nenhum votante encontrado.
+              </div>
+            ) : (
+              voters.map((v) => (
+                <div
+                  key={v.id}
+                  className="rounded-lg border bg-white p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 break-words font-medium">{v.nome}</p>
+                    <div className="shrink-0">
+                      {v.isFiliado ? (
+                        <Badge variant="success">Filiado</Badge>
+                      ) : (
+                        <Badge variant="outline">Não filiado</Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-2">
+                    <Link
+                      href={`/admin/locais/${v.workplace.id}`}
+                      className="text-sm hover:underline"
+                    >
+                      {v.workplace.nome}
+                    </Link>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {v.workplace.orgao}
+                    </p>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
+                    <Badge variant="outline">{v.workplace.zona}</Badge>
+                    <span>{formatDateTime(v.createdAt)}</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
           <div className="flex items-center justify-between">
