@@ -302,7 +302,7 @@ candidato escolhido, preservando o sigilo.
 ## Deploy
 
 Guia completo em [`DEPLOY.md`](DEPLOY.md): **A)** Node/VPS, **B)** Render,
-**C)** Docker/Compose.
+**C)** Railway (Nixpacks).
 
 ### D) Deploy via Railway
 

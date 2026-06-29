@@ -10,7 +10,6 @@ Guia de implantação do **Sistema Eletrônico de Votação do SINDSERM**.
 ## Requisitos
 - Node.js **20+**
 - PostgreSQL **14+**
-- (Opcional) Docker / Docker Compose
 
 ## Variáveis de ambiente
 Modelo completo em [`.env.example`](.env.example).
@@ -37,15 +36,14 @@ Use um gerenciador de processos (PM2/systemd) e um proxy reverso (Nginx) com HTT
 ## B) Render (1 clique via Blueprint)
 Use [`render.yaml`](render.yaml): em **Blueprints → New Blueprint Instance**, aponte para o repositório. Ele provisiona **PostgreSQL + Web Service**, gera o `SESSION_SECRET`, roda `build → migrate → seed` e monta um **disco persistente** para as logos. Defina `ADMIN_PASSWORD` no painel se não quiser o padrão.
 
-## C) Docker / Docker Compose (self-host)
-Stack completa (app + Postgres) com [`docker-compose.yml`](docker-compose.yml):
-```bash
-cp .env.example .env        # defina ao menos SESSION_SECRET (e ADMIN_PASSWORD)
-docker compose up -d --build
+## C) Railway (Nixpacks)
+Configuração em [`railway.toml`](railway.toml). A Railway constrói o projeto com **Nixpacks** (`builder = "NIXPACKS"`), roda `npm run build` na fase de build e, **no start**, aplica as migrações e o seed antes de subir o servidor:
+```toml
+startCommand = "npm run db:deploy && (npm run db:seed || true) && npm run start"
 ```
-- App em `http://localhost:3000`, Postgres interno, **volumes** persistentes para o banco e para `public/uploads`.
-- As migrações são aplicadas **no start** do contêiner (`docker-entrypoint.sh` → `prisma migrate deploy`).
-- Só a imagem do app: `docker build -t sev-sindserm .` e forneça `DATABASE_URL`, `SESSION_SECRET`, `ADMIN_PASSWORD`, `NEXT_PUBLIC_CURRENT_ELECTION_YEAR`.
+- Provisione um **PostgreSQL** (plugin da Railway) e use a `DATABASE_URL` gerada no serviço do app.
+- Defina `SESSION_SECRET`, `ADMIN_PASSWORD` e `NEXT_PUBLIC_CURRENT_ELECTION_YEAR` nas variáveis do serviço.
+- Para persistir as logos entre deploys, monte um **volume** em `/app/public/uploads`.
 
 ## Primeiro acesso (pós-deploy)
 1. Acesse **`/login`** e entre com `Sindserm@2026` (ou o `ADMIN_PASSWORD` definido).
@@ -54,10 +52,10 @@ docker compose up -d --build
 4. Rotas públicas: **`/transparencia`** (portal) e **`/votacao/<slug>`** (votação).
 
 ## ⚠️ Notas de produção
-- **Uploads de logos** ficam em `public/uploads/logos` no disco do servidor. Use **disco/volume persistente** (Render `disk:`, volume do Docker), senão as logos somem a cada redeploy.
-- **Migrações** rodam como passo próprio (`npm run db:deploy`), **fora** do `build` — assim o `next build` nunca depende do banco. Cada plataforma aplica as migrações no momento certo: Render (no `buildCommand`), Railway (no `startCommand` do `railway.toml`) e Docker (no _entrypoint_, no start do contêiner).
+- **Uploads de logos** ficam em `public/uploads/logos` no disco do servidor. Use **disco/volume persistente** (Render `disk:`, volume da Railway), senão as logos somem a cada redeploy.
+- **Migrações** rodam como passo próprio (`npm run db:deploy`), **fora** do `build` — assim o `next build` nunca depende do banco. Cada plataforma aplica as migrações no momento certo: Render (no `buildCommand`) e Railway (no `startCommand` do `railway.toml`).
 - **`SESSION_SECRET`** é obrigatório em produção (sem ele há um segredo inseguro de desenvolvimento).
-- **Bootstrap do admin**: o `npm run db:seed` grava a senha com hash no banco. No Docker enxuto (standalone) o seed não roda no contêiner — use `ADMIN_PASSWORD` (fallback) ou rode `npm run db:seed` a partir de um ambiente completo apontando para o mesmo banco.
+- **Bootstrap do admin**: o `npm run db:seed` grava a senha com hash no banco. Se o seed não rodar (ou falhar), o login ainda funciona via `ADMIN_PASSWORD` (fallback); para gravar a senha no banco, rode `npm run db:seed` apontando para o mesmo banco.
 - **Reset de desenvolvimento**: `npx prisma migrate reset` recria o banco e aplica todas as migrações.
 
 ## Scripts úteis
