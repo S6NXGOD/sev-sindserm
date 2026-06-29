@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma, ElectionStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { generateSlug } from "@/lib/slug";
-import { DEFAULT_LOGO } from "@/lib/logo-constants";
+import { DEFAULT_LOGO, UPLOADS_PREFIX } from "@/lib/logo-constants";
 import type { ActionState } from "@/lib/types";
 
 /** Resolve o slug livre (anti-conflito): adiciona sufixo incremental se preciso. */
@@ -46,7 +46,6 @@ const MAX_BYTES = 2_000_000;
 // A LISTAGEM da galeria fica em lib/system-settings.ts (listGalleryImages) —
 // fonte ÚNICA; aqui ficam apenas a escrita/validação usadas pelas actions.
 const UPLOADS_DIR = path.join(process.cwd(), "public", "uploads", "logos");
-const UPLOADS_PREFIX = "/uploads/logos/";
 const IMG_EXT = /\.(png|jpe?g|webp|svg)$/i;
 
 /** Verifica se uma URL aponta para uma imagem existente da galeria de uploads. */

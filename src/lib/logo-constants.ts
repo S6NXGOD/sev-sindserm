@@ -8,11 +8,14 @@
 export const DEFAULT_LOGO = "/logos/logo_default.png";
 
 // Prefixo público das imagens da galeria de mídia (uploads de logos).
-export const UPLOADS_PREFIX = "/uploads/logos/";
+// As imagens são servidas pelo Route Handler /api/uploads/[...file] (lê do
+// volume em disco), pois o Next.js 14 NÃO serve arquivos adicionados a /public
+// em runtime. No disco elas vivem em public/uploads/logos/.
+export const UPLOADS_PREFIX = "/api/uploads/logos/";
 
 /** Imagem da galeria de mídia (pasta public/uploads/logos/). Tipo client-safe. */
 export type GalleryImage = {
-  /** URL pública (ex.: "/uploads/logos/sindserm-...png"). */
+  /** URL pública (ex.: "/api/uploads/logos/sindserm-...png"). */
   url: string;
   /** Nome do arquivo. */
   name: string;

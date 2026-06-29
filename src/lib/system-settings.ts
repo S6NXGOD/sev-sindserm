@@ -1,7 +1,11 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
-import { DEFAULT_LOGO, type GalleryImage } from "@/lib/logo-constants";
+import {
+  DEFAULT_LOGO,
+  UPLOADS_PREFIX,
+  type GalleryImage,
+} from "@/lib/logo-constants";
 
 // IMPORTANTE: este módulo lê do disco e do Prisma — use-o apenas no servidor
 // (Server Actions e Server Components). Componentes "use client" devem receber
@@ -42,7 +46,7 @@ export async function listGalleryImages(): Promise<GalleryImage[]> {
   const comData = await Promise.all(
     arquivos.map(async (name) => {
       const s = await stat(path.join(GALLERY_DIR, name));
-      return { name, url: `/uploads/logos/${name}`, mtime: s.mtimeMs };
+      return { name, url: `${UPLOADS_PREFIX}${name}`, mtime: s.mtimeMs };
     }),
   );
 

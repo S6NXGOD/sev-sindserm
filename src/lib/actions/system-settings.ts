@@ -77,7 +77,8 @@ export async function uploadGalleryImage(
 }
 
 // Aceita apenas URLs internas da galeria/logos do próprio sistema (anti-abuso).
-const SAFE_LOGO_URL = /^\/(uploads\/logos|logos)\/[A-Za-z0-9._-]+$/;
+// Galeria é servida via /api/uploads/logos/<arquivo>; o default fica em /logos/.
+const SAFE_LOGO_URL = /^\/(api\/uploads\/logos|logos)\/[A-Za-z0-9._-]+$/;
 
 /**
  * Define a LOGO DA TELA DE LOGIN (configuração GLOBAL/Singleton).
