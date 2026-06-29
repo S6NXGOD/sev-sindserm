@@ -1,0 +1,15 @@
+# Normaliza finais de linha (evita CRLF do Windows quebrar scripts no Linux).
+* text=auto eol=lf
+
+# Scripts de shell DEVEM ser LF (senão o Docker/Alpine falha: "bad interpreter").
+*.sh text eol=lf
+
+# Binários (não normalizar / não fazer diff de texto).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.mp3 binary
+*.pdf binary

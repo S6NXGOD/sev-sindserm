@@ -1,0 +1,67 @@
+name: CI
+
+# Roda a cada push e em cada Pull Request.
+on:
+  push:
+  pull_request:
+
+# Cancela execuções antigas do mesmo branch/PR ao chegar um novo commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Lint · Typecheck · Build
+    runs-on: ubuntu-latest
+
+    # Postgres efêmero: valida as migrações e permite o `next build`
+    # (o Prisma Client exige uma DATABASE_URL válida ao ser instanciado).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sindserm_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/sindserm_ci?schema=public
+      SESSION_SECRET: ci-secret-not-used-in-runtime
+      NEXT_PUBLIC_CURRENT_ELECTION_YEAR: "2026"
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma Client
+        run: npx prisma generate
+
+      - name: Apply migrations (valida o schema)
+        run: npx prisma migrate deploy
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx next lint
+
+      - name: Build
+        run: npx next build

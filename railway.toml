@@ -1,0 +1,19 @@
+# Configuração de deploy na Railway (https://railway.app) — SEV SINDSERM.
+#
+# Build com Nixpacks (detecta Next.js + Prisma automaticamente e roda
+# `npm run build` = `prisma generate && next build`).
+#
+# As MIGRAÇÕES e o SEED rodam no START (deploy), quando o banco já está online e
+# conectado — por isso o `prisma migrate deploy` foi tirado do script de build.
+
+[build]
+builder = "nixpacks"
+
+[deploy]
+# 1) aplica as migrações (cria as tabelas) — se falhar, NÃO sobe (gated por &&).
+# 2) cria o admin (idempotente) — tolerante a falha: `|| true` impede que um
+#    erro no seed derrube o app (o login ainda funciona via ADMIN_PASSWORD).
+# 3) sobe o servidor Next na porta fornecida pela Railway (env PORT).
+startCommand = "npm run db:deploy && (npm run db:seed || true) && npm run start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

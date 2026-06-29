@@ -1,0 +1,180 @@
+// Prisma schema — Sistema de Votação SINDSERM
+// Banco: PostgreSQL local
+// Princípio de sigilo: NÃO existe nenhuma relação (foreign key) entre Voter e Vote.
+// A unicidade do voto é garantida exclusivamente pelo banco (cpf e matricula @unique).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Zona {
+  SUL
+  LESTE
+  SUDESTE
+  NORTE
+  CENTRO
+  RURAL
+}
+
+/// Situação do pleito. Só pleitos ATIVO aceitam votos (trava de segurança).
+enum ElectionStatus {
+  RASCUNHO
+  ATIVO
+  ENCERRADO
+}
+
+/// Configurações chave/valor do sistema (ex.: hash da senha de admin).
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+/// Configurações GLOBAIS do sistema — padrão Singleton: existe sempre UM único
+/// registro, com id fixo "global". Isolado dos Pleitos (Election): alterar aqui
+/// nunca toca nos dados de nenhum pleito/triênio.
+model SystemSettings {
+  // ID fixo "global" garante o Singleton: todo upsert recai na mesma linha.
+  id           String   @id @default("global")
+  // Logo da tela de login. null = usa a logo padrão (fallback estrito no /login).
+  loginLogoUrl String?
+  updatedAt    DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+/// Pleito/eleição. Guarda as logos ISOLADAS por triênio — assim a troca de
+/// pleito nunca mistura/substitui as imagens de outro ano.
+/// Relaciona-se logicamente com Workplace/Voter/Vote via o campo `anoEleicao`.
+///
+/// REGRA DE ANO: `ano` NÃO é mais único. A regra "no máximo 1 pleito REGULAR por
+/// ano" é garantida na aplicação (trava anti-conflito em createElection/updateElection).
+/// Eleições especiais/suplementares (isEleicaoEspecial = true) podem coexistir no
+/// mesmo ano de um pleito regular — por isso a unicidade saiu do banco.
+model Election {
+  id              String         @id @default(cuid())
+  ano             Int
+  // Slug único e amigável (anti-conflito de URLs entre anos/nomes parecidos).
+  slug            String         @unique
+  titulo          String?
+  // Duração do mandato em anos (triênio = 3). Define o fim do título institucional.
+  duracaoMandato  Int            @default(3)
+  // Janela GERAL do pleito (independente da janela por local). Trava a votação.
+  dataInicioGeral DateTime?
+  dataFimGeral    DateTime?
+  // E-mail oficial exibido nas instruções/rodapés (envio de atas etc.).
+  emailOficial    String?
+  status          ElectionStatus @default(ATIVO)
+  // Eleição especial/suplementar: dispensa a trava anti-conflito de ano (pode
+  // coexistir com o pleito regular do mesmo ano). Pleito regular = false.
+  isEleicaoEspecial Boolean      @default(false)
+  logoSindsermUrl String?
+  logoPleitoUrl   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ano])
+  @@map("elections")
+}
+
+/// Local de trabalho. Cada local possui um link público e uma janela de votação.
+/// anoEleicao isola os dados por eleição (triênio): o mesmo slug pode ser
+/// reutilizado em anos diferentes (linkToken é único POR ano).
+model Workplace {
+  id                String   @id @default(cuid())
+  nome              String
+  zona              Zona
+  orgao             String
+  linkToken         String
+  anoEleicao        Int
+  dataInicioVotacao DateTime
+  dataFimVotacao    DateTime
+  // Limite de votos do local. null = ilimitado.
+  voteLimit         Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  candidates Candidate[]
+  votes      Vote[]
+  voters     Voter[]
+
+  @@unique([linkToken, anoEleicao])
+  @@index([anoEleicao])
+  @@map("workplaces")
+}
+
+/// Candidato vinculado a um local de trabalho.
+model Candidate {
+  id          String @id @default(cuid())
+  nome        String
+  workplaceId String
+
+  workplace Workplace @relation(fields: [workplaceId], references: [id], onDelete: Cascade)
+  votes     Vote[]
+
+  createdAt DateTime @default(now())
+
+  @@index([workplaceId])
+  @@map("candidates")
+}
+
+/// Eleitor. Armazena os dados pessoais SOMENTE para impedir voto duplicado e
+/// registrar a participação (lista de votantes / comparecimento).
+/// A unicidade do voto é POR eleição: @@unique([cpf, anoEleicao]) e
+/// @@unique([matricula, anoEleicao]) — assim um eleitor não vota duas vezes no
+/// mesmo ano, mas PODE participar nas eleições dos anos seguintes.
+/// IMPORTANTE: este modelo NÃO se relaciona com Vote (sigilo do voto).
+/// O vínculo com Workplace registra apenas ONDE a pessoa votou — nunca EM QUEM.
+model Voter {
+  id          String  @id @default(cuid())
+  nome        String
+  cpf         String
+  telefone    String?
+  matricula   String
+  email       String?
+  workplaceId String
+  anoEleicao  Int
+  // Filiação ao SINDSERM declarada no ato do voto (campanhas de filiação).
+  isFiliado   Boolean @default(false)
+  // Protocolo do comprovante de votação (impresso no PDF). Não revela o voto.
+  protocolo   String  @unique
+
+  // createdAt = horário do comparecimento (exibido na lista de votantes).
+  createdAt DateTime @default(now())
+
+  workplace Workplace @relation(fields: [workplaceId], references: [id], onDelete: Cascade)
+
+  @@unique([cpf, anoEleicao])
+  @@unique([matricula, anoEleicao])
+  @@index([workplaceId])
+  @@index([anoEleicao])
+  @@map("voters")
+}
+
+/// Voto computado de forma ANÔNIMA.
+/// Relaciona-se apenas com Candidate e Workplace — jamais com Voter.
+/// SEM campo de data/hora: a ausência de timestamp impede correlacionar, por
+/// horário, um voto a um eleitor da lista de votantes (reforço do sigilo).
+model Vote {
+  id          String @id @default(cuid())
+  candidateId String
+  workplaceId String
+  anoEleicao  Int
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  workplace Workplace @relation(fields: [workplaceId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId])
+  @@index([workplaceId])
+  @@index([anoEleicao])
+  @@map("votes")
+}
