@@ -8,6 +8,9 @@
 
 [build]
 builder = "nixpacks"
+# Explícito: o `prisma generate` roda na fase de BUILD (código completo presente),
+# não no install — evita "Could not find Prisma Schema" do postinstall no Nixpacks.
+buildCommand = "npm run build"
 
 [deploy]
 # 1) aplica as migrações (cria as tabelas) — se falhar, NÃO sobe (gated por &&).
