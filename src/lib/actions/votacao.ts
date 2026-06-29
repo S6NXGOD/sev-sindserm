@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { isValidCpf, maskCpf, normalizeCpf } from "@/lib/cpf";
 import { formatDateTime } from "@/lib/format";
 import { getCurrentElectionYear, getElectionLogos } from "@/lib/election";
+import { normalizeForSearch } from "@/lib/slug";
 import type { VoteActionState } from "@/lib/types";
 
 // Sentinela para sinalizar "limite atingido" de dentro da transação.
@@ -252,8 +253,8 @@ export type CandidateOption = { id: string; nome: string };
 /**
  * Busca assíncrona de candidatos para o autocomplete público.
  * Recebe o linkToken do local + termo de busca e devolve no máximo 20
- * candidatos (busca por "contém", case-insensitive). NUNCA retorna a lista
- * inteira — essencial para locais com milhares de candidatos.
+ * candidatos. A busca é ACENTO- e MAIÚSCULAS/MINÚSCULAS-insensível ("João"
+ * casa com "JOAO"). NUNCA devolve a lista inteira ao cliente.
  */
 export async function searchCandidates(
   linkToken: string,
@@ -262,21 +263,40 @@ export async function searchCandidates(
   const token = (linkToken ?? "").trim();
   if (!token) return [];
 
-  const termo = (search ?? "").trim();
-
   const workplace = await prisma.workplace.findFirst({
     where: { linkToken: token, anoEleicao: getCurrentElectionYear() },
     select: { id: true },
   });
   if (!workplace) return [];
 
-  return prisma.candidate.findMany({
-    where: {
-      workplaceId: workplace.id,
-      ...(termo ? { nome: { contains: termo, mode: "insensitive" } } : {}),
-    },
+  const termo = normalizeForSearch(search ?? "");
+
+  // Sem termo: devolve os 20 primeiros (ordem alfabética).
+  if (!termo) {
+    return prisma.candidate.findMany({
+      where: { workplaceId: workplace.id },
+      select: { id: true, nome: true },
+      orderBy: { nome: "asc" },
+      take: 20,
+    });
+  }
+
+  // Com termo: o `contains` do Postgres é case-insensitive mas NÃO ignora
+  // acentos ("João" não casaria com "JOAO"). Por isso carregamos os candidatos
+  // do local (universo de UM local) e filtramos em memória com o mesmo
+  // normalizador (acento- e caixa-insensível). Leve mesmo com milhares de nomes.
+  const candidatos = await prisma.candidate.findMany({
+    where: { workplaceId: workplace.id },
     select: { id: true, nome: true },
     orderBy: { nome: "asc" },
-    take: 20,
   });
+
+  const resultado: CandidateOption[] = [];
+  for (const c of candidatos) {
+    if (normalizeForSearch(c.nome).includes(termo)) {
+      resultado.push(c);
+      if (resultado.length >= 20) break;
+    }
+  }
+  return resultado;
 }

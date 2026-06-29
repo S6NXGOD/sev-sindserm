@@ -24,12 +24,28 @@ export function isValidSlug(value: string): boolean {
 }
 
 /**
- * Slug base de um PLEITO (Election) — concatena OBRIGATORIAMENTE o ano para
- * evitar conflito entre eleições de anos diferentes ou nomes parecidos.
- * Ex.: generateSlug("Eleição de Base", 2026) -> "eleicao-de-base-2026".
- * A garantia de unicidade (sufixo incremental) é feita na Server Action.
+ * Normaliza texto para BUSCA: remove acentos, passa para minúsculas e colapsa
+ * espaços (mantém os espaços, ao contrário do slugify, para casar nomes
+ * compostos). Ex.: "João DA Silva" -> "joao da silva". Use o MESMO normalizador
+ * no termo digitado e no campo pesquisado para uma busca acento-insensível.
+ */
+export function normalizeForSearch(value: string): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Slug base de um PLEITO (Election). PREFIXO por ano da eleição ("eleicao-<ano>-")
+ * para AGRUPAR por pleito e tornar impossível a colisão entre eleições de anos
+ * diferentes, mesmo com títulos iguais. Ex.: generateSlug("Eleição de Base",
+ * 2026) -> "eleicao-2026-eleicao-de-base". A unicidade final (sufixo incremental
+ * para títulos repetidos no MESMO ano) é garantida na Server Action.
  */
 export function generateSlug(titulo: string, anoReferencia: number): string {
   const base = slugify(titulo) || "pleito";
-  return `${base}-${anoReferencia}`;
+  return `eleicao-${anoReferencia}-${base}`.slice(0, 80).replace(/-+$/, "");
 }
