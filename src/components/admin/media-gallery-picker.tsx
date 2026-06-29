@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
 import { toast } from "sonner";
-import { Check, ImagePlus, Loader2, Upload } from "lucide-react";
-import { uploadGalleryImage } from "@/lib/actions/system-settings";
+import { Check, ImagePlus, Loader2, Trash2, Upload } from "lucide-react";
+import {
+  deleteGalleryImage,
+  uploadGalleryImage,
+} from "@/lib/actions/system-settings";
 import { initialActionState } from "@/lib/types";
 import type { GalleryImage } from "@/lib/system-settings";
 import { Button } from "@/components/ui/button";
@@ -47,6 +50,7 @@ export function MediaGalleryPicker({
   images,
   selectedUrl = null,
   onSelect,
+  onImageDeleted,
   triggerLabel = "Escolher da galeria",
   title = "Galeria de Mídia",
   description = "Clique numa imagem para usá-la, ou envie uma nova.",
@@ -55,6 +59,8 @@ export function MediaGalleryPicker({
   images: GalleryImage[];
   selectedUrl?: string | null;
   onSelect: (url: string) => void;
+  /** Avisado quando uma imagem é excluída (para limpar seleções pendentes). */
+  onImageDeleted?: (url: string) => void;
   triggerLabel?: string;
   title?: string;
   description?: string;
@@ -67,6 +73,33 @@ export function MediaGalleryPicker({
     initialActionState,
   );
   const formRef = useRef<HTMLFormElement>(null);
+  const [deletingUrl, setDeletingUrl] = useState<string | null>(null);
+  const [, startDelete] = useTransition();
+
+  function handleDelete(img: GalleryImage) {
+    if (
+      !window.confirm(
+        `Excluir "${img.name}" da galeria? Esta ação não pode ser desfeita.`,
+      )
+    ) {
+      return;
+    }
+    setDeletingUrl(img.url);
+    startDelete(async () => {
+      try {
+        const res = await deleteGalleryImage(img.url);
+        if (res.status === "success") {
+          toast.success(res.message);
+          onImageDeleted?.(img.url);
+          router.refresh();
+        } else {
+          toast.error(res.message);
+        }
+      } finally {
+        setDeletingUrl(null);
+      }
+    });
+  }
 
   useEffect(() => {
     if (state.status === "success") {
@@ -106,29 +139,45 @@ export function MediaGalleryPicker({
           <div className="grid max-h-[45vh] grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3">
             {images.map((img) => {
               const isSelected = img.url === selectedUrl;
+              const isDeleting = deletingUrl === img.url;
               return (
-                <button
-                  key={img.url}
-                  type="button"
-                  onClick={() => handlePick(img.url)}
-                  title={img.name}
-                  className={cn(
-                    "group relative flex aspect-[4/3] items-center justify-center rounded-lg border bg-slate-50 p-2 transition hover:border-primary hover:ring-2 hover:ring-primary/30",
-                    isSelected && "border-primary ring-2 ring-primary",
-                  )}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={img.url}
-                    alt={img.name}
-                    className="max-h-full max-w-full object-contain"
-                  />
-                  {isSelected && (
-                    <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                      <Check className="h-3.5 w-3.5" />
-                    </span>
-                  )}
-                </button>
+                <div key={img.url} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => handlePick(img.url)}
+                    title={img.name}
+                    className={cn(
+                      "flex aspect-[4/3] w-full items-center justify-center rounded-lg border bg-slate-50 p-2 transition hover:border-primary hover:ring-2 hover:ring-primary/30",
+                      isSelected && "border-primary ring-2 ring-primary",
+                    )}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.url}
+                      alt={img.name}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                    {isSelected && (
+                      <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                        <Check className="h-3.5 w-3.5" />
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(img)}
+                    disabled={deletingUrl !== null}
+                    title="Excluir da galeria"
+                    aria-label={`Excluir ${img.name}`}
+                    className="absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-red-600 shadow-sm ring-1 ring-red-200 transition hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
               );
             })}
           </div>

@@ -97,6 +97,13 @@ export function LogoPickerField({
               images={images}
               selectedUrl={selection.kind === "existing" ? selection.url : null}
               onSelect={(url) => setSelection({ kind: "existing", url })}
+              onImageDeleted={(url) => {
+                // Se a imagem excluída era a selecionada (ainda não salva),
+                // limpa a seleção para não ficar com preview quebrado.
+                if (selection.kind === "existing" && selection.url === url) {
+                  setSelection({ kind: "none" });
+                }
+              }}
               triggerLabel={
                 selection.kind === "existing" ? "Trocar imagem" : "Escolher / enviar"
               }

@@ -26,7 +26,7 @@ export default async function LoginPage({
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-6">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-md">
         <Card className="shadow-lg">
           <CardHeader className="items-center space-y-2 text-center">
             {/* Logo configurável (Configurações Globais) com fallback estrito. */}
@@ -34,9 +34,9 @@ export default async function LoginPage({
             <img
               src={loginLogoUrl}
               alt="SEV SINDSERM"
-              width={128}
-              height={128}
-              className="h-32 w-32 object-contain"
+              width={208}
+              height={208}
+              className="h-52 w-52 object-contain"
             />
             <CardTitle className="text-2xl">SEV SINDSERM</CardTitle>
             <CardDescription>

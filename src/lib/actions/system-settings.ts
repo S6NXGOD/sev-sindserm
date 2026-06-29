@@ -1,10 +1,11 @@
 "use server";
 
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { SYSTEM_SETTINGS_ID } from "@/lib/system-settings";
+import { UPLOADS_PREFIX } from "@/lib/logo-constants";
 import type { ActionState } from "@/lib/types";
 
 const ALLOWED = new Map<string, string>([
@@ -74,6 +75,66 @@ export async function uploadGalleryImage(
     status: "success",
     message: "Imagem enviada para a galeria.",
   };
+}
+
+/**
+ * EXCLUI uma imagem da Galeria de Mídia (apaga o arquivo do disco/volume).
+ *
+ * Segurança: só aceita arquivos sob o prefixo da galeria (`/api/uploads/logos/`)
+ * e bloqueia travessia de diretório. NUNCA toca a logo padrão estática (/logos/).
+ *
+ * Proteção: recusa excluir uma imagem EM USO (logo de algum pleito ou da tela de
+ * login) — assim o sistema nunca passa a exibir uma imagem quebrada.
+ */
+export async function deleteGalleryImage(url: string): Promise<ActionState> {
+  if (typeof url !== "string" || !url.startsWith(UPLOADS_PREFIX)) {
+    return { status: "error", message: "Imagem inválida." };
+  }
+  const name = url.slice(UPLOADS_PREFIX.length);
+  if (!/^[A-Za-z0-9._-]+$/.test(name) || name.includes("..")) {
+    return { status: "error", message: "Nome de arquivo inválido." };
+  }
+
+  // Não deixa excluir uma imagem que está sendo usada como logo em algum lugar.
+  const [emPleito, emLogin] = await Promise.all([
+    prisma.election.findFirst({
+      where: { OR: [{ logoSindsermUrl: url }, { logoPleitoUrl: url }] },
+      select: { titulo: true, ano: true },
+    }),
+    prisma.systemSettings.findFirst({
+      where: { loginLogoUrl: url },
+      select: { id: true },
+    }),
+  ]);
+  if (emPleito) {
+    return {
+      status: "error",
+      message: `Imagem em uso no pleito "${
+        emPleito.titulo ?? emPleito.ano
+      }". Troque a logo desse pleito antes de excluir.`,
+    };
+  }
+  if (emLogin) {
+    return {
+      status: "error",
+      message:
+        "Imagem em uso na tela de login. Troque a logo de login antes de excluir.",
+    };
+  }
+
+  const dir = path.join(process.cwd(), "public", "uploads", "logos");
+  try {
+    await unlink(path.join(dir, name));
+  } catch (error) {
+    // Já não existe no disco → trata como sucesso (idempotente).
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error("Erro ao excluir imagem da galeria:", error);
+      return { status: "error", message: "Não foi possível excluir o arquivo." };
+    }
+  }
+
+  revalidatePath("/admin/configuracoes");
+  return { status: "success", message: "Imagem removida da galeria." };
 }
 
 // Aceita apenas URLs internas da galeria/logos do próprio sistema (anti-abuso).
