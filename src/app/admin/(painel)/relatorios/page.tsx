@@ -225,8 +225,8 @@ export default async function RelatoriosPage({
       <ReportControls locais={locais} ano={ano} />
 
       {/* Cabeçalho oficial da ata/relatório (visível na impressão) */}
-      <div className="rounded-lg border bg-white p-6">
-        <div className="flex items-center justify-between gap-4 border-b pb-4">
+      <div className="rounded-lg border bg-white p-4 sm:p-6">
+        <div className="flex flex-col items-center gap-4 border-b pb-4 sm:flex-row sm:justify-between print:flex-row print:justify-between">
           {/* Esquerda: logo do SINDSERM do pleito */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -256,7 +256,7 @@ export default async function RelatoriosPage({
               className="h-14 w-14 shrink-0 object-contain"
             />
           ) : (
-            <div className="h-14 w-14 shrink-0" aria-hidden />
+            <div className="hidden h-14 w-14 shrink-0 sm:block print:block" aria-hidden />
           )}
         </div>
         <div className="flex flex-wrap justify-between gap-2 pt-3 text-xs text-muted-foreground">
@@ -321,7 +321,7 @@ export default async function RelatoriosPage({
                       <TableBody>
                         {data.summary.porOrgao.map((o) => (
                           <TableRow key={o.orgao}>
-                            <TableCell className="max-w-[260px] truncate text-sm">
+                            <TableCell className="max-w-[150px] truncate text-sm sm:max-w-[260px]">
                               {o.orgao}
                             </TableCell>
                             <TableCell className="text-center">
