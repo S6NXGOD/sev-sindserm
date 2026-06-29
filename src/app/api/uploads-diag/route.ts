@@ -9,6 +9,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +57,31 @@ export async function GET() {
     const err = e as NodeJS.ErrnoException;
     report.writeTest = "FAIL";
     report.writeErr = `${err.code}: ${err.message}`;
+  }
+
+  // Estado no banco: o que está salvo como logo dos pleitos e da tela de login.
+  try {
+    report.elections = await prisma.election.findMany({
+      select: {
+        id: true,
+        ano: true,
+        titulo: true,
+        logoSindsermUrl: true,
+        logoPleitoUrl: true,
+      },
+      orderBy: { ano: "desc" },
+    });
+  } catch (e) {
+    report.electionsErr = (e as Error).message;
+  }
+  try {
+    const s = await prisma.systemSettings.findUnique({
+      where: { id: "global" },
+      select: { loginLogoUrl: true },
+    });
+    report.loginLogoUrl = s?.loginLogoUrl ?? null;
+  } catch (e) {
+    report.loginLogoErr = (e as Error).message;
   }
 
   return NextResponse.json(report);
