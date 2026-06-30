@@ -99,20 +99,65 @@ export async function createWorkplace(
     };
   }
 
+  // Candidatos (OPCIONAL): lista de nomes enviada pelo formulário como JSON.
+  // Vazia/ausente => cria só o local. O cadastro de candidatos é 100% opcional.
+  let candidatos: string[] = [];
+  const candidatosRaw = String(formData.get("candidatos") ?? "").trim();
+  if (candidatosRaw) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(candidatosRaw);
+    } catch {
+      return { status: "error", message: "Lista de candidatos inválida." };
+    }
+    if (!Array.isArray(parsed)) {
+      return { status: "error", message: "Lista de candidatos inválida." };
+    }
+    const vistos = new Set<string>();
+    candidatos = parsed
+      .map((n) => String(n ?? "").trim().slice(0, 120))
+      .filter((n) => {
+        if (!n) return false;
+        const chave = n.toLowerCase(); // sem duplicatas (case-insensitive)
+        if (vistos.has(chave)) return false;
+        vistos.add(chave);
+        return true;
+      });
+  }
+  const MAX_CANDIDATOS = 5000;
+  if (candidatos.length > MAX_CANDIDATOS) {
+    return {
+      status: "error",
+      message: `Máximo de ${MAX_CANDIDATOS} candidatos por cadastro. Para listas maiores, crie o local e use a importação por CSV na tela do local.`,
+    };
+  }
+
   try {
-    await prisma.workplace.create({
-      data: {
-        nome,
-        zona: zona as Zona,
-        orgao,
-        linkToken: slug,
-        // Usa ESTRITAMENTE o pleito recebido do contexto da sidebar.
-        anoEleicao,
-        dataInicioVotacao,
-        dataFimVotacao,
-        voteLimit,
+    // TRANSAÇÃO (tudo-ou-nada): cria o local e, havendo candidatos, insere-os em
+    // LOTE amarrados ao novo ID. Se a inserção falhar, o local não é criado.
+    await prisma.$transaction(
+      async (tx) => {
+        const workplace = await tx.workplace.create({
+          data: {
+            nome,
+            zona: zona as Zona,
+            orgao,
+            linkToken: slug,
+            // Usa ESTRITAMENTE o pleito recebido do contexto da sidebar.
+            anoEleicao,
+            dataInicioVotacao,
+            dataFimVotacao,
+            voteLimit,
+          },
+        });
+        if (candidatos.length > 0) {
+          await tx.candidate.createMany({
+            data: candidatos.map((nome) => ({ nome, workplaceId: workplace.id })),
+          });
+        }
       },
-    });
+      { timeout: 20000 },
+    );
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -131,7 +176,10 @@ export async function createWorkplace(
   revalidatePath("/admin/locais");
   return {
     status: "success",
-    message: `Local criado. Link público: /votacao/${slug}`,
+    message:
+      candidatos.length > 0
+        ? `Local criado com ${candidatos.length} candidato(s). Link público: /votacao/${slug}`
+        : `Local criado. Link público: /votacao/${slug}`,
   };
 }
 
