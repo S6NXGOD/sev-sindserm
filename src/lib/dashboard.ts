@@ -12,6 +12,24 @@ export type LocalAdesao = {
   votos: number;
 };
 
+/** Local de trabalho com baixa adesão (poucos votos) — painel estratégico. */
+export type LowTurnoutLocal = {
+  id: string;
+  nome: string;
+  zona: string;
+  orgao: string;
+  /** Votos válidos registrados no local (no pleito do ano). */
+  votos: number;
+  /**
+   * Limite de votos do local (Workplace.voteLimit). É o ÚNICO denominador
+   * disponível no schema — NÃO existe "total de eleitores cadastrados" por
+   * local. null = local sem limite (ilimitado).
+   */
+  limite: number | null;
+  /** Adesão = votos/limite (0–100), só quando há limite definido; senão null. */
+  adesaoPct: number | null;
+};
+
 export type DashboardData = {
   ano: number;
   kpis: {
@@ -49,6 +67,14 @@ export type LiderancaLocal = {
 };
 
 type RitmoRaw = { hora: number; votos: number };
+type LowTurnoutRaw = {
+  id: string;
+  nome: string;
+  zona: string;
+  orgao: string;
+  votos: number;
+  limite: number | null;
+};
 type EleitoRaw = { wid: string; cid: string; nome: string; votos: number };
 type VotedRaw = { wid: string; n: number };
 type EleitoRankedRaw = { wid: string; nome: string; votos: number; rn: number };
@@ -287,6 +313,60 @@ export async function getDashboardData(
     }).format(now),
     proximoEncerramento: proximoFim?.dataFimVotacao.toISOString() ?? null,
   };
+}
+
+/**
+ * Locais de trabalho com MENOR adesão (menos votos) do pleito do ano.
+ *
+ * Decisões de modelagem:
+ * - Só considera locais cuja votação JÁ COMEÇOU (`dataInicioVotacao <= agora`).
+ *   Locais "não iniciados" têm 0 votos por definição — incluí-los encheria o
+ *   ranking de falsos "piores". Locais ABERTOS e ENCERRADOS entram.
+ * - INCLUI locais com 0 votos (LEFT JOIN): eles são, justamente, os de menor
+ *   adesão. Um `groupBy` em `votes` os deixaria de fora.
+ * - LIMIT aplicado no BANCO (`ORDER BY votos ASC ... LIMIT n`): traz só os
+ *   piores, nunca centenas de linhas para a dashboard.
+ * - Porcentagem: o schema NÃO tem "total de eleitores" por local; o único
+ *   denominador existente é `voteLimit` (teto esperado de votos). Quando ele
+ *   existe, devolvemos `adesaoPct = votos/limite`; senão, só o nº absoluto.
+ */
+export async function getLowTurnoutLocations(
+  anoEleicao: number,
+  limit = 5,
+): Promise<LowTurnoutLocal[]> {
+  const now = new Date();
+  // Trava de segurança: nunca deixar a dashboard pedir um volume enorme.
+  const take = Math.min(Math.max(Math.trunc(limit) || 5, 1), 20);
+
+  const rows = await prisma.$queryRaw<LowTurnoutRaw[]>(Prisma.sql`
+    SELECT w.id, w.nome, w.zona, w.orgao,
+           w."voteLimit" AS limite,
+           COUNT(v.id)::int AS votos
+    FROM workplaces w
+    LEFT JOIN votes v
+      ON v."workplaceId" = w.id AND v."anoEleicao" = ${anoEleicao}
+    WHERE w."anoEleicao" = ${anoEleicao}
+      AND w."dataInicioVotacao" <= ${now}
+    GROUP BY w.id
+    ORDER BY votos ASC, w.nome ASC
+    LIMIT ${take}
+  `);
+
+  return rows.map((r) => {
+    const votos = Number(r.votos);
+    return {
+      id: r.id,
+      nome: r.nome,
+      zona: r.zona,
+      orgao: r.orgao,
+      votos,
+      limite: r.limite,
+      adesaoPct:
+        r.limite && r.limite > 0
+          ? Math.round((votos / r.limite) * 100)
+          : null,
+    } satisfies LowTurnoutLocal;
+  });
 }
 
 export type RitmoRange =

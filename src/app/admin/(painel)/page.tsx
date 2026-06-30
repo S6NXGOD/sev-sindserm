@@ -38,6 +38,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { AutoRefresh } from "@/components/admin/auto-refresh";
+import { LowTurnoutLocations } from "@/components/admin/low-turnout-locations";
 import { RitmoCard } from "@/components/admin/ritmo-card";
 import { StatusPieChart } from "@/components/admin/status-pie-chart";
 import { PresentationMode } from "@/components/admin/presentation/presentation-mode";
@@ -380,6 +381,9 @@ export default async function DashboardPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Painel estratégico: locais com menor adesão (Mobile-First) */}
+      <LowTurnoutLocations ano={ano} geradoEm={d.geradoEm} limit={5} />
 
       {/* Alertas */}
       {totalAlertas > 0 && (
