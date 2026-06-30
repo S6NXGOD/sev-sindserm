@@ -224,6 +224,53 @@ export async function updateSlug(
   return { status: "success", message: "Link atualizado." };
 }
 
+/**
+ * Atualiza os DADOS CADASTRAIS do local (nome, órgão, zona). O ano do pleito
+ * (anoEleicao) NÃO é editável aqui — mudá-lo moveria o local entre pleitos. O
+ * link (slug), os horários e o limite têm suas próprias ações.
+ */
+export async function updateWorkplace(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const id = String(formData.get("id") ?? "").trim();
+  const nome = String(formData.get("nome") ?? "").trim();
+  const zona = String(formData.get("zona") ?? "").trim();
+  const orgao = String(formData.get("orgao") ?? "").trim();
+
+  if (!id) return { status: "error", message: "Local inválido." };
+  if (!nome) {
+    return { status: "error", message: "Informe o nome do local de trabalho." };
+  }
+  if (!ZONA_VALUES.includes(zona)) {
+    return { status: "error", message: "Selecione uma zona válida." };
+  }
+  if (!ORGAO_VALUES.includes(orgao)) {
+    return { status: "error", message: "Selecione um órgão válido da lista." };
+  }
+
+  try {
+    await prisma.workplace.update({
+      where: { id },
+      data: { nome, zona: zona as Zona, orgao },
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return { status: "error", message: "Local de trabalho não encontrado." };
+    }
+    console.error("Erro ao atualizar o local:", error);
+    return { status: "error", message: "Erro ao atualizar o local de trabalho." };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/locais");
+  revalidatePath(`/admin/locais/${id}`);
+  return { status: "success", message: "Dados do local atualizados." };
+}
+
 export async function updateWorkplaceSchedule(
   _prevState: ActionState,
   formData: FormData,

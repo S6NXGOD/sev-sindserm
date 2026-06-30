@@ -59,6 +59,7 @@ import {
 } from "@/components/ui/dialog";
 import { CopyButton } from "@/components/admin/copy-button";
 import { ImportCandidates } from "@/components/admin/import-candidates";
+import { EditWorkplaceForm } from "@/components/admin/edit-workplace-form";
 
 export type ManagerCandidate = { id: string; nome: string; votes: number };
 export type ManagerVoter = { id: string; nome: string; horario: string };
@@ -678,7 +679,13 @@ export function WorkplaceManager({ data }: { data: ManagerData }) {
                 {data.orgao} · Zona {data.zona}
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <EditWorkplaceForm
+                id={data.id}
+                nome={data.nome}
+                orgao={data.orgao}
+                zona={data.zona}
+              />
               <Button asChild variant="outline" size="sm">
                 <Link href={`/admin/relatorios?tipo=local&localId=${data.id}`}>
                   <FileText className="mr-2 h-4 w-4" />
