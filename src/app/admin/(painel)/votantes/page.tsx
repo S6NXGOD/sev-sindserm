@@ -73,7 +73,7 @@ export default async function VotantesPage({
     filiacao: searchParams.filiacao,
   });
 
-  const [total, filtered, filiados, voters, locais] = await Promise.all([
+  const [total, filtered, filiados, voters, selectedLocal] = await Promise.all([
     prisma.voter.count({ where: { anoEleicao: ano } }),
     prisma.voter.count({ where }),
     prisma.voter.count({ where: { ...where, isFiliado: true } }),
@@ -93,13 +93,17 @@ export default async function VotantesPage({
         },
       },
     }),
-    prisma.workplace.findMany({
-      where: { anoEleicao: ano },
-      select: { id: true, nome: true },
-      orderBy: { nome: "asc" },
-    }),
+    // Autocomplete de local é server-side (WorkplaceCombobox); aqui só
+    // resolvemos o NOME do local selecionado (se houver) para exibir no filtro.
+    searchParams.localId
+      ? prisma.workplace.findUnique({
+          where: { id: searchParams.localId },
+          select: { nome: true },
+        })
+      : Promise.resolve(null),
   ]);
 
+  const selectedLocalNome = selectedLocal?.nome ?? "";
   const totalPages = Math.max(1, Math.ceil(filtered / PAGE_SIZE));
 
   return (
@@ -134,7 +138,7 @@ export default async function VotantesPage({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <VotersFilterBar locais={locais} />
+          <VotersFilterBar ano={ano} selectedLocalNome={selectedLocalNome} />
 
           {/* DESKTOP (lg+): tabela completa — intacta. */}
           <div className="hidden rounded-md border lg:block">

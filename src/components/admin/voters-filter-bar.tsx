@@ -6,6 +6,8 @@ import { Loader2, Search, X } from "lucide-react";
 import { ORGAOS, ZONAS } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
+import { WorkplaceCombobox } from "@/components/admin/workplace-combobox";
 import {
   Select,
   SelectContent,
@@ -16,11 +18,15 @@ import {
 
 const ALL = "all";
 const BASE = "/admin/votantes";
+const ORGAO_OPTIONS = ORGAOS.map((o) => ({ value: o, label: o }));
 
 export function VotersFilterBar({
-  locais,
+  ano,
+  selectedLocalNome,
 }: {
-  locais: { id: string; nome: string }[];
+  ano: number;
+  /** Nome do local selecionado (resolvido no servidor) para o autocomplete. */
+  selectedLocalNome: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -28,9 +34,14 @@ export function VotersFilterBar({
 
   const [q, setQ] = useState(searchParams.get("q") ?? "");
   const zona = searchParams.get("zona") ?? ALL;
-  const orgao = searchParams.get("orgao") ?? ALL;
-  const localId = searchParams.get("localId") ?? ALL;
+  const orgao = searchParams.get("orgao") ?? "";
+  const localId = searchParams.get("localId") ?? "";
   const filiacao = searchParams.get("filiacao") ?? ALL;
+
+  // Rótulo do local mostrado no botão (imediato ao selecionar; ressincroniza
+  // quando a navegação conclui e o servidor devolve o nome atualizado).
+  const [localLabel, setLocalLabel] = useState(selectedLocalNome);
+  useEffect(() => setLocalLabel(selectedLocalNome), [selectedLocalNome]);
 
   useEffect(() => {
     setQ(searchParams.get("q") ?? "");
@@ -57,8 +68,8 @@ export function VotersFilterBar({
   const hasFilters =
     (searchParams.get("q") ?? "") !== "" ||
     zona !== ALL ||
-    orgao !== ALL ||
-    localId !== ALL ||
+    orgao !== "" ||
+    localId !== "" ||
     filiacao !== ALL;
 
   return (
@@ -77,10 +88,7 @@ export function VotersFilterBar({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Select
-          value={filiacao}
-          onValueChange={(v) => pushWith({ filiacao: v })}
-        >
+        <Select value={filiacao} onValueChange={(v) => pushWith({ filiacao: v })}>
           <SelectTrigger>
             <SelectValue placeholder="Filiação" />
           </SelectTrigger>
@@ -91,19 +99,16 @@ export function VotersFilterBar({
           </SelectContent>
         </Select>
 
-        <Select value={localId} onValueChange={(v) => pushWith({ localId: v })}>
-          <SelectTrigger>
-            <SelectValue placeholder="Local de trabalho" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>Todos os locais</SelectItem>
-            {locais.map((l) => (
-              <SelectItem key={l.id} value={l.id}>
-                {l.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Autocomplete de local (busca no servidor, resultados limitados). */}
+        <WorkplaceCombobox
+          ano={ano}
+          value={localId}
+          valueLabel={localLabel}
+          onSelect={(id, label) => {
+            setLocalLabel(label);
+            pushWith({ localId: id });
+          }}
+        />
 
         <Select value={zona} onValueChange={(v) => pushWith({ zona: v })}>
           <SelectTrigger>
@@ -119,19 +124,15 @@ export function VotersFilterBar({
           </SelectContent>
         </Select>
 
-        <Select value={orgao} onValueChange={(v) => pushWith({ orgao: v })}>
-          <SelectTrigger>
-            <SelectValue placeholder="Órgão" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>Todos os órgãos</SelectItem>
-            {ORGAOS.map((o) => (
-              <SelectItem key={o} value={o}>
-                {o}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Autocomplete de órgão (busca digitando na lista). */}
+        <Combobox
+          value={orgao}
+          onChange={(v) => pushWith({ orgao: v })}
+          options={ORGAO_OPTIONS}
+          placeholder="Todos os órgãos"
+          searchPlaceholder="Buscar órgão..."
+          clearLabel="Todos os órgãos"
+        />
       </div>
 
       {hasFilters && (
@@ -140,9 +141,9 @@ export function VotersFilterBar({
             variant="ghost"
             size="sm"
             onClick={() => {
-              const ano = searchParams.get("ano");
+              const anoParam = searchParams.get("ano");
               startTransition(() =>
-                router.push(ano ? `${BASE}?ano=${ano}` : BASE),
+                router.push(anoParam ? `${BASE}?ano=${anoParam}` : BASE),
               );
             }}
           >

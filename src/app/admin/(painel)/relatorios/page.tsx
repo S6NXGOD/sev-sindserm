@@ -188,12 +188,14 @@ export default async function RelatoriosPage({
     opts.somenteEncerradas = true;
   }
 
-  const [locais, logos, pleito] = await Promise.all([
-    prisma.workplace.findMany({
-      where: { anoEleicao: ano },
-      select: { id: true, nome: true },
-      orderBy: { nome: "asc" },
-    }),
+  const [selectedLocal, logos, pleito] = await Promise.all([
+    // Autocomplete de local é server-side; só resolvemos o nome do selecionado.
+    searchParams.localId
+      ? prisma.workplace.findUnique({
+          where: { id: searchParams.localId },
+          select: { nome: true },
+        })
+      : Promise.resolve(null),
     getElectionLogos(ano),
     // `ano` não é único (eleições especiais) — usa o pleito REGULAR do ano.
     prisma.election.findFirst({
@@ -202,6 +204,7 @@ export default async function RelatoriosPage({
       select: { titulo: true, duracaoMandato: true, emailOficial: true },
     }),
   ]);
+  const selectedLocalNome = selectedLocal?.nome ?? "";
   const duracao = pleito?.duracaoMandato ?? 3;
   const emailOficial = pleito?.emailOficial?.trim() || null;
 
@@ -222,7 +225,7 @@ export default async function RelatoriosPage({
         </div>
       </div>
 
-      <ReportControls locais={locais} ano={ano} />
+      <ReportControls ano={ano} selectedLocalNome={selectedLocalNome} />
 
       {/* Cabeçalho oficial da ata/relatório (visível na impressão) */}
       <div className="rounded-lg border bg-white p-4 sm:p-6">

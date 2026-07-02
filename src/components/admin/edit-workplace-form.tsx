@@ -27,6 +27,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
+
+const ORGAO_OPTIONS = ORGAOS.map((o) => ({ value: o, label: o }));
 
 function SaveButton() {
   const { pending } = useFormStatus();
@@ -119,18 +122,15 @@ export function EditWorkplaceForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="edit-orgao">Órgão *</Label>
-              <Select value={orgao} onValueChange={setOrgao}>
-                <SelectTrigger id="edit-orgao">
-                  <SelectValue placeholder="Selecione o órgão" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ORGAOS.map((o) => (
-                    <SelectItem key={o} value={o}>
-                      {o}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Combobox
+                id="edit-orgao"
+                value={orgao}
+                onChange={setOrgao}
+                options={ORGAO_OPTIONS}
+                placeholder="Selecione ou digite o órgão"
+                searchPlaceholder="Buscar ou cadastrar órgão..."
+                creatable
+              />
             </div>
 
             <div className="space-y-2">

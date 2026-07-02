@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Printer } from "lucide-react";
 import { ORGAOS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/ui/combobox";
+import { WorkplaceCombobox } from "@/components/admin/workplace-combobox";
 import {
   Select,
   SelectContent,
@@ -14,6 +17,7 @@ import {
 } from "@/components/ui/select";
 
 const ALL = "all";
+const ORGAO_OPTIONS = ORGAOS.map((o) => ({ value: o, label: o }));
 
 const TIPOS = [
   { value: "geral", label: "Geral (todos os locais)" },
@@ -23,18 +27,22 @@ const TIPOS = [
 ];
 
 export function ReportControls({
-  locais,
   ano,
+  selectedLocalNome,
 }: {
-  locais: { id: string; nome: string }[];
   ano: number;
+  /** Nome do local selecionado (resolvido no servidor) para o autocomplete. */
+  selectedLocalNome: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const tipo = searchParams.get("tipo") ?? "geral";
-  const orgao = searchParams.get("orgao") ?? ALL;
+  const orgao = searchParams.get("orgao") ?? "";
   const localId = searchParams.get("localId") ?? "";
+
+  const [localLabel, setLocalLabel] = useState(selectedLocalNome);
+  useEffect(() => setLocalLabel(selectedLocalNome), [selectedLocalNome]);
 
   function go(params: Record<string, string>) {
     const sp = new URLSearchParams();
@@ -66,43 +74,31 @@ export function ReportControls({
       {tipo === "orgao" && (
         <div className="space-y-1.5 lg:w-80">
           <Label className="text-xs">Órgão</Label>
-          <Select
+          <Combobox
             value={orgao}
-            onValueChange={(v) => go({ tipo: "orgao", orgao: v })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>Todos os órgãos</SelectItem>
-              {ORGAOS.map((o) => (
-                <SelectItem key={o} value={o}>
-                  {o}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(v) => go({ tipo: "orgao", orgao: v })}
+            options={ORGAO_OPTIONS}
+            placeholder="Todos os órgãos"
+            searchPlaceholder="Buscar órgão..."
+            clearLabel="Todos os órgãos"
+          />
         </div>
       )}
 
       {tipo === "local" && (
         <div className="space-y-1.5 lg:w-80">
           <Label className="text-xs">Local de trabalho</Label>
-          <Select
+          <WorkplaceCombobox
+            ano={ano}
             value={localId}
-            onValueChange={(v) => go({ tipo: "local", localId: v })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione um local" />
-            </SelectTrigger>
-            <SelectContent>
-              {locais.map((l) => (
-                <SelectItem key={l.id} value={l.id}>
-                  {l.nome}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            valueLabel={localLabel}
+            placeholder="Selecione um local"
+            clearLabel="Limpar seleção"
+            onSelect={(id, label) => {
+              setLocalLabel(label);
+              go({ tipo: "local", localId: id });
+            }}
+          />
         </div>
       )}
 

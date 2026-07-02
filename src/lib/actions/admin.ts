@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma, Zona } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { ORGAOS, ZONAS } from "@/lib/constants";
-import { isValidSlug, slugify } from "@/lib/slug";
+import { ZONAS } from "@/lib/constants";
+import { isValidSlug, normalizeForSearch, slugify } from "@/lib/slug";
 import { formatDateTime } from "@/lib/format";
 import { buildVoterWhere, type VoterFiltros } from "@/lib/voter-filters";
 import type { ActionState } from "@/lib/types";
@@ -26,7 +26,9 @@ function parseVoteLimit(raw: FormDataEntryValue | null): number | null | "invali
 }
 
 const ZONA_VALUES = ZONAS as string[];
-const ORGAO_VALUES = ORGAOS as readonly string[];
+// Órgão é TEXTO LIVRE: a lista fixa (ORGAOS) é apenas sugestão no combo-box;
+// o admin pode cadastrar um órgão novo digitando. Aqui validamos só o básico.
+const ORGAO_MAX = 150;
 
 /* -------------------------------------------------------------------------- */
 /*                              Locais de Trabalho                             */
@@ -69,8 +71,11 @@ export async function createWorkplace(
   if (!ZONA_VALUES.includes(zona)) {
     return { status: "error", message: "Selecione uma zona válida." };
   }
-  if (!ORGAO_VALUES.includes(orgao)) {
-    return { status: "error", message: "Selecione um órgão válido da lista." };
+  if (!orgao || orgao.length > ORGAO_MAX) {
+    return {
+      status: "error",
+      message: `Informe um órgão válido (até ${ORGAO_MAX} caracteres).`,
+    };
   }
 
   // Slug: usa o informado ou deriva do nome. Valida o formato.
@@ -183,6 +188,41 @@ export async function createWorkplace(
   };
 }
 
+export type WorkplaceOption = { id: string; nome: string };
+
+/**
+ * Busca de locais para autocomplete (filtros de Votantes/Relatórios). Devolve
+ * no máximo `limit` (teto 50), ACENTO- e caixa-insensível. Carrega os locais do
+ * ano e filtra em memória (universo pequeno por pleito) — mesmo padrão do
+ * searchCandidates. NUNCA devolve a lista inteira de uma vez ao cliente.
+ */
+export async function searchWorkplacesLite(
+  anoEleicao: number,
+  search: string,
+  limit = 20,
+): Promise<WorkplaceOption[]> {
+  if (!Number.isInteger(anoEleicao)) return [];
+  const take = Math.min(Math.max(Math.trunc(limit) || 20, 1), 50);
+  const termo = normalizeForSearch(search ?? "");
+
+  const locais = await prisma.workplace.findMany({
+    where: { anoEleicao },
+    select: { id: true, nome: true },
+    orderBy: { nome: "asc" },
+  });
+
+  if (!termo) return locais.slice(0, take);
+
+  const out: WorkplaceOption[] = [];
+  for (const l of locais) {
+    if (normalizeForSearch(l.nome).includes(termo)) {
+      out.push(l);
+      if (out.length >= take) break;
+    }
+  }
+  return out;
+}
+
 export async function updateSlug(
   _prevState: ActionState,
   formData: FormData,
@@ -245,8 +285,11 @@ export async function updateWorkplace(
   if (!ZONA_VALUES.includes(zona)) {
     return { status: "error", message: "Selecione uma zona válida." };
   }
-  if (!ORGAO_VALUES.includes(orgao)) {
-    return { status: "error", message: "Selecione um órgão válido da lista." };
+  if (!orgao || orgao.length > ORGAO_MAX) {
+    return {
+      status: "error",
+      message: `Informe um órgão válido (até ${ORGAO_MAX} caracteres).`,
+    };
   }
 
   try {

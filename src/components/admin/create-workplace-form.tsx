@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -36,6 +37,7 @@ import {
 // Quantos chips renderizar (listas grandes vêm de CSV; o restante fica só no
 // estado/contagem para não pesar o DOM).
 const CHIPS_VISIVEIS = 150;
+const ORGAO_OPTIONS = ORGAOS.map((o) => ({ value: o, label: o }));
 
 function SubmitButton({ qtdCandidatos }: { qtdCandidatos: number }) {
   const { pending } = useFormStatus();
@@ -178,18 +180,18 @@ export function CreateWorkplaceForm({
 
         <div className="space-y-2">
           <Label htmlFor="orgao">Órgão *</Label>
-          <Select value={orgao} onValueChange={setOrgao}>
-            <SelectTrigger id="orgao">
-              <SelectValue placeholder="Selecione o órgão" />
-            </SelectTrigger>
-            <SelectContent>
-              {ORGAOS.map((o) => (
-                <SelectItem key={o} value={o}>
-                  {o}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Combobox
+            id="orgao"
+            value={orgao}
+            onChange={setOrgao}
+            options={ORGAO_OPTIONS}
+            placeholder="Selecione ou digite o órgão"
+            searchPlaceholder="Buscar ou cadastrar órgão..."
+            creatable
+          />
+          <p className="text-xs text-muted-foreground">
+            Não achou? Digite o nome e clique em “Cadastrar …”.
+          </p>
         </div>
 
         <div className="space-y-2">
