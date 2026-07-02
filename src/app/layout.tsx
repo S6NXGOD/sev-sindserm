@@ -28,6 +28,12 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#0f172a",
+  width: "device-width",
+  initialScale: 1,
+  // Comportamento de app nativo: impede o "zoom automático" do iOS Safari ao
+  // focar campos (reforçado por fontes >= 16px nos inputs — ver globals.css).
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

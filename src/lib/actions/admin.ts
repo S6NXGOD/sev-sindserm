@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma, Zona } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { ZONAS } from "@/lib/constants";
+import { ORGAOS, ZONAS } from "@/lib/constants";
 import { isValidSlug, normalizeForSearch, slugify } from "@/lib/slug";
 import { formatDateTime } from "@/lib/format";
 import { buildVoterWhere, type VoterFiltros } from "@/lib/voter-filters";
@@ -26,9 +26,8 @@ function parseVoteLimit(raw: FormDataEntryValue | null): number | null | "invali
 }
 
 const ZONA_VALUES = ZONAS as string[];
-// Órgão é TEXTO LIVRE: a lista fixa (ORGAOS) é apenas sugestão no combo-box;
-// o admin pode cadastrar um órgão novo digitando. Aqui validamos só o básico.
-const ORGAO_MAX = 150;
+// Órgão é LISTA FIXA (não se cadastra órgão novo): só valores da lista oficial.
+const ORGAO_VALUES = ORGAOS as readonly string[];
 
 /* -------------------------------------------------------------------------- */
 /*                              Locais de Trabalho                             */
@@ -71,11 +70,8 @@ export async function createWorkplace(
   if (!ZONA_VALUES.includes(zona)) {
     return { status: "error", message: "Selecione uma zona válida." };
   }
-  if (!orgao || orgao.length > ORGAO_MAX) {
-    return {
-      status: "error",
-      message: `Informe um órgão válido (até ${ORGAO_MAX} caracteres).`,
-    };
+  if (!ORGAO_VALUES.includes(orgao)) {
+    return { status: "error", message: "Selecione um órgão válido da lista." };
   }
 
   // Slug: usa o informado ou deriva do nome. Valida o formato.
@@ -285,11 +281,8 @@ export async function updateWorkplace(
   if (!ZONA_VALUES.includes(zona)) {
     return { status: "error", message: "Selecione uma zona válida." };
   }
-  if (!orgao || orgao.length > ORGAO_MAX) {
-    return {
-      status: "error",
-      message: `Informe um órgão válido (até ${ORGAO_MAX} caracteres).`,
-    };
+  if (!ORGAO_VALUES.includes(orgao)) {
+    return { status: "error", message: "Selecione um órgão válido da lista." };
   }
 
   try {

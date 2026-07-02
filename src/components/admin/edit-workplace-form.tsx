@@ -127,9 +127,8 @@ export function EditWorkplaceForm({
                 value={orgao}
                 onChange={setOrgao}
                 options={ORGAO_OPTIONS}
-                placeholder="Selecione ou digite o órgão"
-                searchPlaceholder="Buscar ou cadastrar órgão..."
-                creatable
+                placeholder="Selecione o órgão"
+                searchPlaceholder="Buscar órgão..."
               />
             </div>
 

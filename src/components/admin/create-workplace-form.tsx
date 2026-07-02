@@ -185,13 +185,9 @@ export function CreateWorkplaceForm({
             value={orgao}
             onChange={setOrgao}
             options={ORGAO_OPTIONS}
-            placeholder="Selecione ou digite o órgão"
-            searchPlaceholder="Buscar ou cadastrar órgão..."
-            creatable
+            placeholder="Selecione o órgão"
+            searchPlaceholder="Buscar órgão..."
           />
-          <p className="text-xs text-muted-foreground">
-            Não achou? Digite o nome e clique em “Cadastrar …”.
-          </p>
         </div>
 
         <div className="space-y-2">

@@ -39,9 +39,19 @@ type SearchParams = {
   zona?: string;
   orgao?: string;
   status?: string;
+  sort?: string;
   page?: string;
   ano?: string;
 };
+
+/** Ordenação da listagem. Padrão: recém-criados no topo (createdAt desc). */
+function buildOrderBy(
+  sort?: string,
+): Prisma.WorkplaceOrderByWithRelationInput {
+  if (sort === "nome") return { nome: "asc" };
+  if (sort === "antigos") return { createdAt: "asc" };
+  return { createdAt: "desc" };
+}
 
 function buildWhere(
   sp: SearchParams,
@@ -85,6 +95,7 @@ function pageHref(sp: SearchParams, page: number) {
   if (sp.zona) params.set("zona", sp.zona);
   if (sp.orgao) params.set("orgao", sp.orgao);
   if (sp.status) params.set("status", sp.status);
+  if (sp.sort) params.set("sort", sp.sort);
   if (sp.ano) params.set("ano", sp.ano);
   params.set("page", String(page));
   return `${BASE}?${params.toString()}`;
@@ -111,7 +122,7 @@ export default async function LocaisPage({
     prisma.workplace.count({ where }),
     prisma.workplace.findMany({
       where,
-      orderBy: { nome: "asc" },
+      orderBy: buildOrderBy(searchParams.sort),
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       include: { _count: { select: { votes: true, candidates: true } } },

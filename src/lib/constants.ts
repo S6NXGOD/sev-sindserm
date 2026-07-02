@@ -18,7 +18,7 @@ export const ORGAOS = [
   "SAAD Sudeste",
   "SAAD Sul 1",
   "SAAD Sul 2",
-  "SEMA – Secretaria Municipal de Meio Ambiente e Recursos Hídricos",
+  "SEMA – Secretaria Municipal de Administração",
   "SEMAN – Secretaria Municipal de Meio Ambiente",
   "SEMCASPI – Secretaria Municipal de Cidadania, Assistência Social e Políticas Integradas",
   "SEMCOM – Secretaria Municipal de Comunicação Social",

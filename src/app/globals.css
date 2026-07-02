@@ -58,6 +58,17 @@
   }
 }
 
+/* Anti-zoom do iOS: campos com fonte < 16px fazem o Safari dar zoom ao focar.
+   Forçamos >= 16px APENAS no mobile (no desktop mantemos o text-sm compacto).
+   `!important` para vencer utilitárias como `text-sm`. */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 /* ===== Modo Apresentação (telão) ===== */
 /* Rolagem vertical contínua (marquee) — a lista é duplicada e o trilho sobe 50%. */
 @keyframes sev-marquee {

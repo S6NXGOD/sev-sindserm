@@ -35,6 +35,7 @@ export function WorkplacesFilterBar({
   const zona = searchParams.get("zona") ?? ALL;
   const orgao = searchParams.get("orgao") ?? ALL;
   const status = searchParams.get("status") ?? ALL;
+  const sort = searchParams.get("sort") ?? "recentes";
 
   // Mantém o input sincronizado quando a URL muda externamente (ex.: "Limpar").
   useEffect(() => {
@@ -122,6 +123,21 @@ export function WorkplacesFilterBar({
               {s.label}
             </SelectItem>
           ))}
+        </SelectContent>
+      </Select>
+
+      {/* Ordenação — padrão "Mais recentes" (recém-criados no topo). */}
+      <Select
+        value={sort}
+        onValueChange={(v) => pushWith({ sort: v === "recentes" ? "" : v })}
+      >
+        <SelectTrigger className="lg:w-44">
+          <SelectValue placeholder="Ordenar" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="recentes">Mais recentes</SelectItem>
+          <SelectItem value="antigos">Mais antigos</SelectItem>
+          <SelectItem value="nome">Nome (A–Z)</SelectItem>
         </SelectContent>
       </Select>
 
