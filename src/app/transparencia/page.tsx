@@ -6,6 +6,7 @@ import {
 import { StatusPieChart } from "@/components/admin/status-pie-chart";
 import { PleitoSelector } from "@/components/transparencia/pleito-selector";
 import { FiltrosBar } from "@/components/transparencia/filtros-bar";
+import { BuscaUrna } from "@/components/transparencia/busca-urna";
 import { LocaisGrid } from "@/components/transparencia/locais-grid";
 import { ExportCsvButton } from "@/components/transparencia/export-csv-button";
 import { NovoResultadoSom } from "@/components/transparencia/novo-resultado-som";
@@ -131,6 +132,9 @@ export default async function TransparenciaPage({
             Triênio {pleito.trienio} · Dados públicos e auditáveis · sem login.
           </p>
         </div>
+
+        {/* Central de Links: o filiado acha sua urna e vai votar. */}
+        <BuscaUrna electionId={pleitoId} />
 
         {/* Toolbar: seletor de pleito + relatório geral */}
         <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border bg-card p-4 shadow-sm">

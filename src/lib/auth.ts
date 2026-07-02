@@ -11,7 +11,10 @@
  */
 
 export const SESSION_COOKIE = "admin_session";
-const SESSION_TTL_MS = 1000 * 60 * 60 * 8; // 8 horas
+// Sessão PERSISTENTE: só termina no logout manual (botão "Sair"). O token vale
+// por ~10 anos e o cookie é REEMITIDO a cada requisição no middleware (refresh
+// deslizante), então o usuário nunca é deslogado por tempo de token/inatividade.
+const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 365 * 10; // ~10 anos
 
 function getSecret(): string {
   return process.env.SESSION_SECRET ?? "dev-insecure-secret-change-me";

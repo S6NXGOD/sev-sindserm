@@ -6,6 +6,7 @@ import { Loader2, Search, X } from "lucide-react";
 import { ORGAOS, ZONAS } from "@/lib/constants";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/select";
 
 const ALL = "all";
+const ORGAO_OPTIONS = ORGAOS.map((o) => ({ value: o, label: o }));
 
 const STATUS_OPTIONS = [
   { value: "open", label: "Abertas" },
@@ -84,19 +86,16 @@ export function WorkplacesFilterBar({
         />
       </div>
 
-      <Select value={orgao} onValueChange={(v) => pushWith({ orgao: v })}>
-        <SelectTrigger className="lg:w-56">
-          <SelectValue placeholder="Órgão" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL}>Todos os órgãos</SelectItem>
-          {ORGAOS.map((o) => (
-            <SelectItem key={o} value={o}>
-              {o}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="lg:w-56">
+        <Combobox
+          value={orgao === ALL ? "" : orgao}
+          onChange={(v) => pushWith({ orgao: v })}
+          options={ORGAO_OPTIONS}
+          placeholder="Órgão"
+          searchPlaceholder="Buscar órgão..."
+          clearLabel="Todos os órgãos"
+        />
+      </div>
 
       <Select value={zona} onValueChange={(v) => pushWith({ zona: v })}>
         <SelectTrigger className="lg:w-36">

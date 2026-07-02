@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import {
+  SESSION_COOKIE,
+  SESSION_MAX_AGE_SECONDS,
+  verifySessionToken,
+} from "@/lib/auth";
 
 /**
  * Proteção de rotas (edge).
@@ -32,7 +36,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  // Sessão persistente: REEMITE o cookie a cada requisição (refresh deslizante).
+  // Assim a expiração do cookie do navegador é sempre renovada e o usuário só
+  // sai ao clicar em "Sair" — nunca por inatividade/tempo de token.
+  const res = NextResponse.next();
+  if (token) {
+    res.cookies.set(SESSION_COOKIE, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: SESSION_MAX_AGE_SECONDS,
+    });
+  }
+  return res;
 }
 
 // Protege EXCLUSIVAMENTE as rotas administrativas. Qualquer outra rota é pública.

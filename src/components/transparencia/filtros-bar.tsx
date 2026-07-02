@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Select,
   SelectContent,
@@ -12,8 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-const TODOS = "__todos__";
 
 /**
  * Barra de filtros do portal: texto livre (local/órgão), órgão e status. Cada
@@ -83,22 +82,16 @@ export function FiltrosBar({ orgaos }: { orgaos: string[] }) {
         <Label className="text-xs font-semibold uppercase text-muted-foreground">
           Órgão
         </Label>
-        <Select
-          value={orgao || TODOS}
-          onValueChange={(v) => aplicar({ orgao: v === TODOS ? "" : v })}
-        >
-          <SelectTrigger className="h-11 sm:w-[220px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={TODOS}>Todos os órgãos</SelectItem>
-            {orgaos.map((o) => (
-              <SelectItem key={o} value={o}>
-                {o}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="sm:w-[220px]">
+          <Combobox
+            value={orgao}
+            onChange={(v) => aplicar({ orgao: v })}
+            options={orgaos.map((o) => ({ value: o, label: o }))}
+            placeholder="Todos os órgãos"
+            searchPlaceholder="Buscar órgão..."
+            clearLabel="Todos os órgãos"
+          />
+        </div>
       </div>
 
       <div className="space-y-1">
