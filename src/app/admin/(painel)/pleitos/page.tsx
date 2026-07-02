@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DeleteElectionButton } from "@/components/admin/delete-election-button";
+import { ClonePleitoButton } from "@/components/admin/clone-pleito-button";
 import {
   Card,
   CardContent,
@@ -149,19 +150,30 @@ export default async function PleitosPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <Button asChild size="sm">
-                    <Link href={`/admin/pleitos/${e.id}/editar`}>
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Editar pleito
-                    </Link>
-                  </Button>
-                  <DeleteElectionButton
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button asChild size="sm">
+                      <Link href={`/admin/pleitos/${e.id}/editar`}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Editar pleito
+                      </Link>
+                    </Button>
+                    <DeleteElectionButton
+                      electionId={e.id}
+                      ano={e.ano}
+                      trienio={trienioLabel(e.ano, e.duracaoMandato)}
+                      locais={locaisMap.get(e.ano) ?? 0}
+                      compartilhaAno={(pleitosPorAno.get(e.ano) ?? 0) > 1}
+                    />
+                  </div>
+                  <ClonePleitoButton
                     electionId={e.id}
-                    ano={e.ano}
-                    trienio={trienioLabel(e.ano, e.duracaoMandato)}
-                    locais={locaisMap.get(e.ano) ?? 0}
-                    compartilhaAno={(pleitosPorAno.get(e.ano) ?? 0) > 1}
+                    anoOriginal={e.ano}
+                    tituloOriginal={tituloInstitucional(
+                      e.titulo,
+                      e.ano,
+                      e.duracaoMandato,
+                    )}
                   />
                 </div>
               </CardContent>

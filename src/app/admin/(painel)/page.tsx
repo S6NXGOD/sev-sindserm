@@ -172,10 +172,9 @@ export default async function DashboardPage({
         />
       </div>
 
-      {/* KPIs secundários */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      {/* KPIs secundários (Candidatos vive agora no card "Representação da Base"). */}
+      <div className="grid grid-cols-3 gap-3 sm:gap-4">
         <Kpi label="Locais" value={d.kpis.locais} icon={Building2} />
-        <Kpi label="Candidatos" value={d.kpis.candidatos} icon={Users} />
         <Kpi
           label="Não iniciadas"
           value={d.kpis.naoIniciadas}

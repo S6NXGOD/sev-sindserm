@@ -370,6 +370,200 @@ export async function createElection(
 }
 
 /**
+ * DUPLICA/CLONA um pleito: cria um NOVO pleito (novo ano + novo título + slug
+ * único) reaproveitando a ESTRUTURA CADASTRAL — locais e candidatos —, mas
+ * NASCENDO LIMPO: nenhum voto, eleitor ou status de comparecimento é copiado.
+ *
+ * Como a transação protege contra IDs duplicados:
+ *  - Todos os IDs novos são gerados pelo banco (cuid) — nunca reusa IDs.
+ *  - O SLUG do pleito é resolvido para um valor ÚNICO (resolveUniqueSlug).
+ *  - Os locais preservam o linkToken (é único por [linkToken, ano]; como o ano
+ *    de destino é NOVO e sem locais, não há colisão).
+ *  - Tudo roda em UMA prisma.$transaction: se qualquer passo violar uma
+ *    constraint (P2002), a transação inteira faz rollback — nada é criado pela
+ *    metade.
+ *
+ * CPF/Matrícula: a unicidade do eleitor é por ANO (@@unique[cpf, anoEleicao] /
+ * [matricula, anoEleicao]). Como o clone é um ANO diferente, o mesmo CPF pode
+ * votar normalmente no novo pleito — não é bloqueado pelo voto do pleito antigo.
+ */
+export async function clonePleito(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const sourceId = String(formData.get("sourceId") ?? "").trim();
+  const novoTitulo = String(formData.get("titulo") ?? "").trim();
+  const novoAno = Number(formData.get("ano"));
+
+  if (!sourceId) return { status: "error", message: "Pleito de origem inválido." };
+  if (!novoTitulo) {
+    return { status: "error", message: "Informe o título do novo pleito." };
+  }
+  if (!Number.isInteger(novoAno) || novoAno < 2000 || novoAno > 3000) {
+    return { status: "error", message: "Ano de referência inválido." };
+  }
+
+  const original = await prisma.election.findUnique({ where: { id: sourceId } });
+  if (!original) {
+    return { status: "error", message: "Pleito de origem não encontrado." };
+  }
+  if (novoAno === original.ano) {
+    return {
+      status: "error",
+      message:
+        "Escolha um ANO diferente do original — a estrutura (locais/candidatos) é isolada por ano.",
+    };
+  }
+
+  // O ano de destino precisa estar VAZIO de locais (senão misturaria estruturas
+  // ou colidiria linkTokens de anos diferentes no mesmo ano).
+  const jaTemLocais = await prisma.workplace.count({
+    where: { anoEleicao: novoAno },
+  });
+  if (jaTemLocais > 0) {
+    return {
+      status: "error",
+      message: `O ano ${novoAno} já possui ${jaTemLocais} local(is). Escolha um ano ainda sem locais para clonar.`,
+    };
+  }
+  // Trava anti-conflito: no máximo 1 pleito REGULAR por ano (o clone é regular).
+  const conflitoRegular = await prisma.election.findFirst({
+    where: { ano: novoAno, isEleicaoEspecial: false },
+    select: { id: true },
+  });
+  if (conflitoRegular) {
+    return {
+      status: "error",
+      message: `Já existe um pleito regular para ${novoAno}.`,
+    };
+  }
+
+  const slug = await resolveUniqueSlug(novoTitulo, novoAno);
+
+  // Lê a estrutura original (somente leitura, fora da transação).
+  const [workplaces, candidatos] = await Promise.all([
+    prisma.workplace.findMany({
+      where: { anoEleicao: original.ano },
+      select: {
+        id: true,
+        nome: true,
+        orgao: true,
+        zona: true,
+        voteLimit: true,
+        linkToken: true,
+        dataInicioVotacao: true,
+        dataFimVotacao: true,
+      },
+    }),
+    prisma.candidate.findMany({
+      where: { workplace: { anoEleicao: original.ano } },
+      select: { nome: true, workplaceId: true },
+    }),
+  ]);
+  const candsByWp = new Map<string, string[]>();
+  for (const c of candidatos) {
+    const arr = candsByWp.get(c.workplaceId) ?? [];
+    arr.push(c.nome);
+    candsByWp.set(c.workplaceId, arr);
+  }
+
+  // Desloca as datas em (novoAno - anoOriginal) anos, para o novo pleito nascer
+  // com a janela aproximada do ano de destino (o admin ajusta os detalhes).
+  const anosDiff = novoAno - original.ano;
+  const shift = (d: Date) => {
+    const n = new Date(d);
+    n.setFullYear(n.getFullYear() + anosDiff);
+    return n;
+  };
+
+  let totalLocais = 0;
+  let totalCandidatos = 0;
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.election.create({
+          data: {
+            ano: novoAno,
+            slug,
+            titulo: novoTitulo,
+            duracaoMandato: original.duracaoMandato,
+            dataInicioGeral: original.dataInicioGeral
+              ? shift(original.dataInicioGeral)
+              : null,
+            dataFimGeral: original.dataFimGeral
+              ? shift(original.dataFimGeral)
+              : null,
+            emailOficial: original.emailOficial,
+            status: original.status,
+            isEleicaoEspecial: false,
+            logoSindsermUrl: original.logoSindsermUrl,
+            logoPleitoUrl: original.logoPleitoUrl,
+          },
+        });
+
+        if (workplaces.length > 0) {
+          await tx.workplace.createMany({
+            data: workplaces.map((w) => ({
+              nome: w.nome,
+              orgao: w.orgao,
+              zona: w.zona,
+              voteLimit: w.voteLimit,
+              anoEleicao: novoAno,
+              linkToken: w.linkToken, // único por [linkToken, ano]; ano destino vazio
+              dataInicioVotacao: shift(w.dataInicioVotacao),
+              dataFimVotacao: shift(w.dataFimVotacao),
+            })),
+          });
+        }
+        totalLocais = workplaces.length;
+
+        // Mapeia local ANTIGO -> NOVO pelo linkToken (preservado) e copia os
+        // candidatos amarrando ao novo local. Votos/eleitores NÃO são copiados.
+        const novos = await tx.workplace.findMany({
+          where: { anoEleicao: novoAno },
+          select: { id: true, linkToken: true },
+        });
+        const newIdByToken = new Map(novos.map((w) => [w.linkToken, w.id]));
+        const candData: { nome: string; workplaceId: string }[] = [];
+        for (const w of workplaces) {
+          const novoId = newIdByToken.get(w.linkToken);
+          if (!novoId) continue;
+          for (const nome of candsByWp.get(w.id) ?? []) {
+            candData.push({ nome, workplaceId: novoId });
+          }
+        }
+        for (let i = 0; i < candData.length; i += 5000) {
+          await tx.candidate.createMany({ data: candData.slice(i, i + 5000) });
+        }
+        totalCandidatos = candData.length;
+      },
+      { timeout: 120000, maxWait: 15000 },
+    );
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return {
+        status: "error",
+        message:
+          "Conflito de dados ao clonar (slug ou link já em uso). Tente novamente.",
+      };
+    }
+    console.error("Erro ao clonar pleito:", error);
+    return { status: "error", message: "Erro ao clonar o pleito." };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/pleitos");
+  revalidatePath("/admin/locais");
+  return {
+    status: "success",
+    message: `Pleito duplicado para ${novoAno}: ${totalLocais} local(is) e ${totalCandidatos} candidato(s) copiados, sem votos nem eleitores.`,
+  };
+}
+
+/**
  * Exclui um PLEITO (Election).
  *
  * Os locais/votantes/votos são ligados por ANO (anoEleicao), não por FK ao
