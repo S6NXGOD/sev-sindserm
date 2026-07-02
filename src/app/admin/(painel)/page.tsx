@@ -190,6 +190,76 @@ export default async function DashboardPage({
         />
       </div>
 
+      {/* Representação da Base: Candidatos vs Vagas vs Vagas preenchidas. */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Users className="h-5 w-5" />
+            Representação da Base
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Adesão e “buracos” na representação — vagas preenchidas por candidatos
+            que já receberam votos.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border bg-slate-50 p-3">
+              <p className="text-2xl font-bold leading-none">
+                {d.kpis.candidatos.toLocaleString("pt-BR")}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Candidatos</p>
+            </div>
+            <div className="rounded-lg border bg-slate-50 p-3">
+              <p className="text-2xl font-bold leading-none">
+                {d.kpis.vagas.toLocaleString("pt-BR")}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Vagas do pleito</p>
+            </div>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <p className="text-2xl font-bold leading-none text-emerald-700">
+                {d.kpis.vagasPreenchidas.toLocaleString("pt-BR")}
+              </p>
+              <p className="mt-1 text-xs text-emerald-700/80">Vagas preenchidas</p>
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-2xl font-bold leading-none text-amber-700">
+                {Math.max(
+                  0,
+                  d.kpis.vagas - d.kpis.vagasPreenchidas,
+                ).toLocaleString("pt-BR")}
+              </p>
+              <p className="mt-1 text-xs text-amber-700/80">Vagas em aberto</p>
+            </div>
+          </div>
+          <div>
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-emerald-500"
+                style={{
+                  width: `${
+                    d.kpis.vagas > 0
+                      ? Math.round(
+                          (d.kpis.vagasPreenchidas / d.kpis.vagas) * 100,
+                        )
+                      : 0
+                  }%`,
+                }}
+              />
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {d.kpis.vagas > 0
+                ? Math.round((d.kpis.vagasPreenchidas / d.kpis.vagas) * 100)
+                : 0}
+              % das vagas preenchidas ({d.kpis.vagasPreenchidas.toLocaleString(
+                "pt-BR",
+              )}{" "}
+              de {d.kpis.vagas.toLocaleString("pt-BR")})
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Gráficos */}
       <div className="grid gap-6 lg:grid-cols-3">
         <RitmoCard ano={ano} inicial={d.ritmoHoje} />

@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/table";
 import { WorkplacesFilterBar } from "@/components/admin/workplaces-filter-bar";
 import { CopyButton } from "@/components/admin/copy-button";
+import { ReportGenerator } from "@/components/admin/report-generator";
 
 export const dynamic = "force-dynamic";
 
@@ -144,12 +145,15 @@ export default async function LocaisPage({
             {filtered !== total ? `de ${total} no total` : ""}
           </p>
         </div>
-        <Button asChild>
-          <Link href={`${BASE}/novo?ano=${ano}`}>
-            <Plus className="mr-2 h-4 w-4" />
-            Cadastrar local
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <ReportGenerator ano={ano} />
+          <Button asChild>
+            <Link href={`${BASE}/novo?ano=${ano}`}>
+              <Plus className="mr-2 h-4 w-4" />
+              Cadastrar local
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card>

@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ReportControls } from "@/components/admin/report-controls";
+import { ExportEleitosButton } from "@/components/admin/export-eleitos-button";
 
 export const dynamic = "force-dynamic";
 
@@ -223,6 +224,7 @@ export default async function RelatoriosPage({
             tipo e use “Imprimir / Salvar PDF”.
           </p>
         </div>
+        <ExportEleitosButton ano={ano} />
       </div>
 
       <ReportControls ano={ano} selectedLocalNome={selectedLocalNome} />

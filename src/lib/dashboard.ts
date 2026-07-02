@@ -39,6 +39,10 @@ export type DashboardData = {
     naoIniciadas: number;
     votos: number;
     candidatos: number;
+    /** Soma das vagas de TODOS os locais (regra de progressão por candidatos). */
+    vagas: number;
+    /** Vagas preenchidas = candidatos com votos, limitado às vagas de cada local. */
+    vagasPreenchidas: number;
     votosUltimaHora: number;
   };
   statusPie: StatusFatia[];
@@ -277,6 +281,28 @@ export async function getDashboardData(
     })
     .map((w) => ({ id: w.id, nome: w.nome, voteLimit: w.voteLimit as number }));
 
+  // Representação: vagas totais do pleito e vagas efetivamente preenchidas
+  // (candidatos que já receberam votos, limitado às vagas de cada local).
+  const [candPorLocal, votadosPorLocal] = await Promise.all([
+    prisma.candidate.groupBy({
+      by: ["workplaceId"],
+      where: { workplace: { anoEleicao } },
+      _count: { workplaceId: true },
+    }),
+    prisma.$queryRaw<{ wid: string; n: number }[]>`
+      SELECT "workplaceId" AS wid, COUNT(DISTINCT "candidateId")::int AS n
+      FROM votes WHERE "anoEleicao" = ${anoEleicao}
+      GROUP BY "workplaceId"`,
+  ]);
+  const votadosMap = new Map(votadosPorLocal.map((r) => [r.wid, Number(r.n)]));
+  let vagasTotais = 0;
+  let vagasPreenchidas = 0;
+  for (const c of candPorLocal) {
+    const vagasLocal = calcularVagas(c._count.workplaceId);
+    vagasTotais += vagasLocal;
+    vagasPreenchidas += Math.min(vagasLocal, votadosMap.get(c.workplaceId) ?? 0);
+  }
+
   return {
     ano: anoEleicao,
     kpis: {
@@ -286,6 +312,8 @@ export async function getDashboardData(
       naoIniciadas,
       votos: totalVotos,
       candidatos: totalCandidatos,
+      vagas: vagasTotais,
+      vagasPreenchidas,
       votosUltimaHora,
     },
     statusPie: [
