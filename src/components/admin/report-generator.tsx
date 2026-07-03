@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Download, FileSpreadsheet, Loader2 } from "lucide-react";
-import { exportLocaisReport } from "@/lib/actions/admin";
+import { Download, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
+import { exportLocaisReport, getLocaisReportData } from "@/lib/actions/admin";
+import { downloadLocaisReportPdf } from "@/lib/locais-report-pdf";
 import { ORGAOS, ZONAS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -38,6 +39,7 @@ const ORGAO_OPTIONS = ORGAOS.map((o) => ({ value: o, label: o }));
 export function ReportGenerator({ ano }: { ano: number }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const [zona, setZona] = useState(ALL);
   const [orgao, setOrgao] = useState("");
@@ -48,19 +50,23 @@ export function ReportGenerator({ ano }: { ano: number }) {
   const [somenteFiliados, setSomenteFiliados] = useState(false);
   const [incluirCandidatos, setIncluirCandidatos] = useState(false);
 
-  async function gerar() {
+  function buildOpts() {
+    return {
+      anoEleicao: ano,
+      zona: zona === ALL ? undefined : zona,
+      orgao: orgao || undefined,
+      status: status === ALL ? undefined : status,
+      localId: localId || undefined,
+      incluirFiliados,
+      somenteFiliados,
+      incluirCandidatos,
+    };
+  }
+
+  async function gerarCsv() {
     setLoading(true);
     try {
-      const csv = await exportLocaisReport({
-        anoEleicao: ano,
-        zona: zona === ALL ? undefined : zona,
-        orgao: orgao || undefined,
-        status: status === ALL ? undefined : status,
-        localId: localId || undefined,
-        incluirFiliados,
-        somenteFiliados,
-        incluirCandidatos,
-      });
+      const csv = await exportLocaisReport(buildOpts());
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -72,12 +78,26 @@ export function ReportGenerator({ ano }: { ano: number }) {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      toast.success("Relatório gerado com os filtros escolhidos.");
+      toast.success("CSV gerado com os filtros escolhidos.");
       setOpen(false);
     } catch {
-      toast.error("Não foi possível gerar o relatório.");
+      toast.error("Não foi possível gerar o CSV.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function gerarPdf() {
+    setPdfLoading(true);
+    try {
+      const dados = await getLocaisReportData(buildOpts());
+      await downloadLocaisReportPdf(dados);
+      toast.success("PDF gerado com os filtros escolhidos.");
+      setOpen(false);
+    } catch {
+      toast.error("Não foi possível gerar o PDF.");
+    } finally {
+      setPdfLoading(false);
     }
   }
 
@@ -189,19 +209,20 @@ export function ReportGenerator({ ano }: { ano: number }) {
           </div>
         </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="flex-col gap-2 sm:flex-row">
           <Button
             type="button"
             variant="outline"
             onClick={() => setOpen(false)}
-            className="w-full sm:w-auto"
+            className="w-full sm:mr-auto sm:w-auto"
           >
             Cancelar
           </Button>
           <Button
             type="button"
-            onClick={gerar}
-            disabled={loading}
+            variant="outline"
+            onClick={gerarCsv}
+            disabled={loading || pdfLoading}
             className="w-full sm:w-auto"
           >
             {loading ? (
@@ -209,7 +230,20 @@ export function ReportGenerator({ ano }: { ano: number }) {
             ) : (
               <Download className="mr-2 h-4 w-4" />
             )}
-            Gerar CSV
+            CSV
+          </Button>
+          <Button
+            type="button"
+            onClick={gerarPdf}
+            disabled={loading || pdfLoading}
+            className="w-full sm:w-auto"
+          >
+            {pdfLoading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="mr-2 h-4 w-4" />
+            )}
+            PDF
           </Button>
         </DialogFooter>
       </DialogContent>

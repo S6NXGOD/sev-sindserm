@@ -9,6 +9,7 @@ import { isValidSlug, normalizeForSearch, slugify } from "@/lib/slug";
 import { formatDateTime } from "@/lib/format";
 import { buildVoterWhere, type VoterFiltros } from "@/lib/voter-filters";
 import { calcularVagas } from "@/lib/vagas";
+import { DEFAULT_LOGO } from "@/lib/logo-constants";
 import type { ActionState } from "@/lib/types";
 
 function parseLocalDateTime(value: string): Date | null {
@@ -806,6 +807,182 @@ export async function exportLocaisReport(
   }
 
   return toCsv([header, ...linhas]);
+}
+
+export type LocaisReportLocal = {
+  nome: string;
+  orgao: string;
+  zona: string;
+  status: string;
+  votantes: {
+    nome: string;
+    telefone: string;
+    email: string;
+    isFiliado: boolean;
+  }[];
+  candidatos: string[];
+};
+export type LocaisReportData = {
+  geradoEm: string;
+  filtros: string;
+  incluiFiliados: boolean;
+  somenteFiliados: boolean;
+  incluiCandidatos: boolean;
+  logoSindserm: string;
+  totalLocais: number;
+  totalVotantes: number;
+  totalCandidatos: number;
+  truncado: boolean;
+  locais: LocaisReportLocal[];
+};
+
+// Teto de linhas RENDERIZADAS no PDF (o CSV continua completo, sem corte).
+const PDF_ROW_CAP = 4000;
+
+/**
+ * Mesmos filtros/opções do relatório de locais, porém devolvendo os dados
+ * ESTRUTURADOS (agrupados por local) + a logo do SINDSERM do pleito, para o
+ * cliente montar o PDF personalizado.
+ */
+export async function getLocaisReportData(
+  opts: LocaisReportOpts,
+): Promise<LocaisReportData> {
+  const now = new Date();
+  const where: Prisma.WorkplaceWhereInput = { anoEleicao: opts.anoEleicao };
+  if (opts.localId) where.id = opts.localId;
+  if (opts.orgao) where.orgao = opts.orgao;
+  if (opts.zona) where.zona = opts.zona as Zona;
+
+  let locais = await prisma.workplace.findMany({
+    where,
+    orderBy: [{ orgao: "asc" }, { zona: "asc" }, { nome: "asc" }],
+    select: {
+      id: true,
+      nome: true,
+      orgao: true,
+      zona: true,
+      dataInicioVotacao: true,
+      dataFimVotacao: true,
+    },
+  });
+  if (opts.status) {
+    locais = locais.filter((l) => {
+      const s =
+        l.dataInicioVotacao > now
+          ? "upcoming"
+          : l.dataFimVotacao < now
+            ? "closed"
+            : "open";
+      return s === opts.status;
+    });
+  }
+  const ids = locais.map((l) => l.id);
+
+  const votersByLocal = new Map<string, LocaisReportLocal["votantes"]>();
+  const candsByLocal = new Map<string, string[]>();
+
+  if (opts.incluirFiliados && ids.length) {
+    const voters = await prisma.voter.findMany({
+      where: {
+        workplaceId: { in: ids },
+        ...(opts.somenteFiliados ? { isFiliado: true } : {}),
+      },
+      orderBy: { nome: "asc" },
+      take: PDF_ROW_CAP,
+      select: {
+        nome: true,
+        telefone: true,
+        email: true,
+        isFiliado: true,
+        workplaceId: true,
+      },
+    });
+    for (const v of voters) {
+      const arr = votersByLocal.get(v.workplaceId) ?? [];
+      arr.push({
+        nome: v.nome,
+        telefone: v.telefone ?? "",
+        email: v.email ?? "",
+        isFiliado: v.isFiliado,
+      });
+      votersByLocal.set(v.workplaceId, arr);
+    }
+  }
+  if (opts.incluirCandidatos && ids.length) {
+    const cands = await prisma.candidate.findMany({
+      where: { workplaceId: { in: ids } },
+      orderBy: { nome: "asc" },
+      take: PDF_ROW_CAP,
+      select: { nome: true, workplaceId: true },
+    });
+    for (const c of cands) {
+      const arr = candsByLocal.get(c.workplaceId) ?? [];
+      arr.push(c.nome);
+      candsByLocal.set(c.workplaceId, arr);
+    }
+  }
+
+  let usados = 0;
+  let truncado = false;
+  let totalVotantes = 0;
+  let totalCandidatos = 0;
+  const out: LocaisReportLocal[] = [];
+  for (const l of locais) {
+    const votantes = opts.incluirFiliados ? (votersByLocal.get(l.id) ?? []) : [];
+    const candidatos = opts.incluirCandidatos
+      ? (candsByLocal.get(l.id) ?? [])
+      : [];
+    totalVotantes += votantes.length;
+    totalCandidatos += candidatos.length;
+
+    const vCorte = votantes.slice(0, Math.max(0, PDF_ROW_CAP - usados));
+    usados += vCorte.length;
+    const cCorte = candidatos.slice(0, Math.max(0, PDF_ROW_CAP - usados));
+    usados += cCorte.length;
+    if (vCorte.length < votantes.length || cCorte.length < candidatos.length) {
+      truncado = true;
+    }
+
+    out.push({
+      nome: l.nome,
+      orgao: l.orgao,
+      zona: l.zona,
+      status: statusPt(l.dataInicioVotacao, l.dataFimVotacao, now),
+      votantes: vCorte,
+      candidatos: cCorte,
+    });
+  }
+
+  const pleito = await prisma.election.findFirst({
+    where: { ano: opts.anoEleicao },
+    orderBy: [{ isEleicaoEspecial: "asc" }, { createdAt: "asc" }],
+    select: { logoSindsermUrl: true },
+  });
+
+  const statusTxt: Record<string, string> = {
+    open: "Em andamento",
+    closed: "Encerradas",
+    upcoming: "Não iniciadas",
+  };
+  const filtrosArr: string[] = [];
+  if (opts.localId && out.length === 1) filtrosArr.push(`Local: ${out[0].nome}`);
+  if (opts.zona) filtrosArr.push(`Zona: ${opts.zona}`);
+  if (opts.orgao) filtrosArr.push(`Órgão: ${opts.orgao}`);
+  if (opts.status) filtrosArr.push(`Status: ${statusTxt[opts.status] ?? opts.status}`);
+
+  return {
+    geradoEm: formatDateTime(now),
+    filtros: filtrosArr.length ? filtrosArr.join(" · ") : "Todos os locais",
+    incluiFiliados: !!opts.incluirFiliados,
+    somenteFiliados: !!opts.somenteFiliados,
+    incluiCandidatos: !!opts.incluirCandidatos,
+    logoSindserm: pleito?.logoSindsermUrl ?? DEFAULT_LOGO,
+    totalLocais: out.length,
+    totalVotantes,
+    totalCandidatos,
+    truncado,
+    locais: out,
+  };
 }
 
 /**
