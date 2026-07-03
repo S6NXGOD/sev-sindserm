@@ -58,10 +58,15 @@ function SubmitButton({ qtdCandidatos }: { qtdCandidatos: number }) {
 export function CreateWorkplaceForm({
   anoEleicao,
   trienio,
+  inicioPadrao = "",
+  fimPadrao = "",
 }: {
   /** Pleito (ano) selecionado na sidebar — contexto obrigatório do cadastro. */
   anoEleicao: number;
   trienio: string;
+  /** Datas gerais do pleito (datetime-local) — pré-preenchem a janela do local. */
+  inicioPadrao?: string;
+  fimPadrao?: string;
 }) {
   const router = useRouter();
   const [state, formAction] = useFormState(createWorkplace, initialActionState);
@@ -97,16 +102,13 @@ export function CreateWorkplaceForm({
   function addCandidatoManual() {
     const novo = candInput.trim().slice(0, 120);
     if (!novo) return;
-    setCandidatos((prev) =>
-      prev.some((c) => c.toLowerCase() === novo.toLowerCase())
-        ? prev
-        : [...prev, novo],
-    );
+    // Permite homônimos: dois candidatos com o mesmo nome são distintos.
+    setCandidatos((prev) => [...prev, novo]);
     setCandInput("");
   }
 
-  function removeCandidato(nome: string) {
-    setCandidatos((prev) => prev.filter((c) => c !== nome));
+  function removeCandidato(index: number) {
+    setCandidatos((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function processarCsv(file: File) {
@@ -117,21 +119,9 @@ export function CreateWorkplaceForm({
         toast.error('Nenhum nome detectado. Verifique a coluna "nome".');
         return;
       }
-      setCandidatos((prev) => {
-        const vistos = new Set(prev.map((c) => c.toLowerCase()));
-        const merged = [...prev];
-        for (const n of nomes) {
-          const k = n.toLowerCase();
-          if (!vistos.has(k)) {
-            vistos.add(k);
-            merged.push(n);
-          }
-        }
-        return merged;
-      });
-      toast.success(
-        `${nomes.length} nome(s) lidos do CSV (duplicados ignorados).`,
-      );
+      // Acrescenta TODOS os nomes (sem deduplicar — homônimos são válidos).
+      setCandidatos((prev) => [...prev, ...nomes]);
+      toast.success(`${nomes.length} nome(s) adicionados do CSV.`);
       setOpenCand(true);
     } catch {
       toast.error("Não foi possível ler o arquivo CSV.");
@@ -233,6 +223,7 @@ export function CreateWorkplaceForm({
             id="dataInicioVotacao"
             name="dataInicioVotacao"
             type="datetime-local"
+            defaultValue={inicioPadrao}
             required
           />
         </div>
@@ -242,6 +233,7 @@ export function CreateWorkplaceForm({
             id="dataFimVotacao"
             name="dataFimVotacao"
             type="datetime-local"
+            defaultValue={fimPadrao}
             required
           />
         </div>
@@ -399,15 +391,15 @@ export function CreateWorkplaceForm({
                   </Button>
                 </div>
                 <div className="flex max-h-52 flex-wrap gap-2 overflow-y-auto rounded-md border bg-slate-50 p-2">
-                  {candidatos.slice(0, CHIPS_VISIVEIS).map((c) => (
+                  {candidatos.slice(0, CHIPS_VISIVEIS).map((c, i) => (
                     <span
-                      key={c}
+                      key={`${i}-${c}`}
                       className="inline-flex max-w-full items-center gap-1 rounded-full border bg-white py-1 pl-3 pr-1 text-sm"
                     >
                       <span className="max-w-[200px] truncate">{c}</span>
                       <button
                         type="button"
-                        onClick={() => removeCandidato(c)}
+                        onClick={() => removeCandidato(i)}
                         aria-label={`Remover ${c}`}
                         className="rounded-full p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                       >

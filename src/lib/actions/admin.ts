@@ -115,16 +115,10 @@ export async function createWorkplace(
     if (!Array.isArray(parsed)) {
       return { status: "error", message: "Lista de candidatos inválida." };
     }
-    const vistos = new Set<string>();
+    // NÃO deduplica: homônimos são candidatos distintos. Só remove vazios.
     candidatos = parsed
       .map((n) => String(n ?? "").trim().slice(0, 120))
-      .filter((n) => {
-        if (!n) return false;
-        const chave = n.toLowerCase(); // sem duplicatas (case-insensitive)
-        if (vistos.has(chave)) return false;
-        vistos.add(chave);
-        return true;
-      });
+      .filter((n) => n.length > 0);
   }
   const MAX_CANDIDATOS = 5000;
   if (candidatos.length > MAX_CANDIDATOS) {

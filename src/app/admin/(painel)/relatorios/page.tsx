@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getReportData, type Apuracao } from "@/lib/reports";
+import { getReportData } from "@/lib/reports";
 import {
   getCurrentElectionYear,
   getElectionLogos,
@@ -7,7 +7,6 @@ import {
   requirePleito,
   tituloInstitucional,
 } from "@/lib/election";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -24,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { ReportControls } from "@/components/admin/report-controls";
 import { ExportEleitosButton } from "@/components/admin/export-eleitos-button";
+import { ApuracoesList } from "@/components/admin/apuracoes-list";
 
 export const dynamic = "force-dynamic";
 
@@ -35,123 +35,6 @@ type SearchParams = {
   ano?: string;
 };
 
-const STATUS_LABEL: Record<Apuracao["status"], string> = {
-  open: "Em andamento",
-  closed: "Encerrada",
-  upcoming: "Não iniciada",
-};
-
-const STATUS_VARIANT: Record<
-  Apuracao["status"],
-  "success" | "destructive" | "secondary"
-> = {
-  open: "success",
-  closed: "destructive",
-  upcoming: "secondary",
-};
-
-const MAX_ELEITOS_NOMES = 8;
-
-function ApuracaoBlock({ a }: { a: Apuracao }) {
-  const semVotos = a.totalVotos === 0;
-  const eleitosMostrados = a.eleitos.slice(0, MAX_ELEITOS_NOMES);
-  const eleitosRestantes = a.eleitos.length - eleitosMostrados.length;
-  const empatadosMostrados = a.empatados.slice(0, MAX_ELEITOS_NOMES);
-  const semVotosCount = a.totalCandidatos - a.votadosCount;
-  const naoListados = a.votadosCount - a.ranking.length;
-
-  return (
-    <Card className="break-inside-avoid">
-      <CardHeader className="pb-3">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <CardTitle className="text-base">{a.nome}</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              {a.orgao} · Zona {a.zona}
-            </p>
-          </div>
-          <Badge variant={STATUS_VARIANT[a.status]}>
-            {STATUS_LABEL[a.status]}
-          </Badge>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Janela: {a.inicioDisplay} até {a.fimDisplay} ·{" "}
-          {a.totalCandidatos} candidato(s) · {a.vagas}{" "}
-          {a.vagas === 1 ? "vaga" : "vagas"} · {a.totalVotos}{" "}
-          {a.totalVotos === 1 ? "voto" : "votos"}
-          {a.voteLimit ? ` (limite ${a.voteLimit})` : ""}
-        </p>
-        {semVotos ? (
-          <p className="text-sm text-muted-foreground">Sem votos.</p>
-        ) : (
-          <div className="text-sm">
-            {a.eleitos.length > 0 && (
-              <p className="font-medium text-emerald-700">
-                {a.status === "closed" ? "Eleito(s)" : "Parcial (projeção)"}:{" "}
-                {eleitosMostrados.join(", ")}
-                {eleitosRestantes > 0 ? ` +${eleitosRestantes}` : ""}
-              </p>
-            )}
-            {a.temEmpate && (
-              <p className="font-medium text-amber-700">
-                Empate para {a.vagasEmDisputa}{" "}
-                {a.vagasEmDisputa === 1 ? "vaga" : "vagas"}:{" "}
-                {empatadosMostrados.join(", ")} — necessário desempate.
-              </p>
-            )}
-          </div>
-        )}
-      </CardHeader>
-
-      {!semVotos && (
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Candidato</TableHead>
-                <TableHead className="text-right">Votos</TableHead>
-                <TableHead className="text-right">%</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {a.ranking.map((c, i) => (
-                <TableRow key={`${a.id}-${i}`}>
-                  <TableCell className={c.eleito ? "font-semibold" : undefined}>
-                    <span className="inline-flex items-center gap-2">
-                      {i + 1}. {c.nome}
-                      {c.eleito ? (
-                        <Badge variant="success">Eleito</Badge>
-                      ) : (
-                        <Badge
-                          variant="outline"
-                          className="border-sky-300 text-sky-700"
-                        >
-                          Suplente
-                        </Badge>
-                      )}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">{c.votos}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">
-                    {c.pct}%
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {(naoListados > 0 || semVotosCount > 0) && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              {naoListados > 0 &&
-                `+${naoListados} candidato(s) com votos não listados. `}
-              {semVotosCount > 0 &&
-                `${semVotosCount} candidato(s) sem votos.`}
-            </p>
-          )}
-        </CardContent>
-      )}
-    </Card>
-  );
-}
 
 export default async function RelatoriosPage({
   searchParams,
@@ -378,11 +261,7 @@ export default async function RelatoriosPage({
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-4 lg:grid-cols-2 print:grid-cols-1">
-                {data.apuracoes.map((a) => (
-                  <ApuracaoBlock key={a.id} a={a} />
-                ))}
-              </div>
+              <ApuracoesList apuracoes={data.apuracoes} />
             )}
           </div>
         </>

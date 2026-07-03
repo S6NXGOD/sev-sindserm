@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { toDateTimeLocalValue } from "@/lib/format";
 import {
   getSelectedElectionYear,
   requirePleito,
@@ -30,7 +31,11 @@ export default async function NovoLocalPage({
   const pleito = await prisma.election.findFirst({
     where: { ano },
     orderBy: [{ isEleicaoEspecial: "asc" }, { createdAt: "asc" }],
-    select: { duracaoMandato: true },
+    select: {
+      duracaoMandato: true,
+      dataInicioGeral: true,
+      dataFimGeral: true,
+    },
   });
 
   return (
@@ -56,6 +61,16 @@ export default async function NovoLocalPage({
           <CreateWorkplaceForm
             anoEleicao={ano}
             trienio={trienioLabel(ano, pleito?.duracaoMandato ?? 3)}
+            inicioPadrao={
+              pleito?.dataInicioGeral
+                ? toDateTimeLocalValue(pleito.dataInicioGeral)
+                : ""
+            }
+            fimPadrao={
+              pleito?.dataFimGeral
+                ? toDateTimeLocalValue(pleito.dataFimGeral)
+                : ""
+            }
           />
         </CardContent>
       </Card>

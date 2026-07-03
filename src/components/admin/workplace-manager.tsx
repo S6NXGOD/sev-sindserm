@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Clock,
   Crown,
+  Download,
   FileText,
   Gauge,
   LinkIcon,
@@ -60,6 +61,7 @@ import {
 import { CopyButton } from "@/components/admin/copy-button";
 import { ImportCandidates } from "@/components/admin/import-candidates";
 import { EditWorkplaceForm } from "@/components/admin/edit-workplace-form";
+import { downloadLocalReportPdf } from "@/lib/local-report-pdf";
 
 export type ManagerCandidate = { id: string; nome: string; votes: number };
 export type ManagerVoter = { id: string; nome: string; horario: string };
@@ -660,6 +662,18 @@ function DeleteWorkplaceButton({ data }: { data: ManagerData }) {
 }
 
 export function WorkplaceManager({ data }: { data: ManagerData }) {
+  const [pdfLoading, setPdfLoading] = useState(false);
+  async function baixarPdf() {
+    setPdfLoading(true);
+    try {
+      await downloadLocalReportPdf(data);
+    } catch {
+      toast.error("Não foi possível gerar o PDF.");
+    } finally {
+      setPdfLoading(false);
+    }
+  }
+
   const status = STATUS_META[data.status];
   const isClosed = data.status === "closed";
   const eleitosIds = new Set(data.eleitosIds);
@@ -691,6 +705,20 @@ export function WorkplaceManager({ data }: { data: ManagerData }) {
                   <FileText className="mr-2 h-4 w-4" />
                   Relatório
                 </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={baixarPdf}
+                disabled={pdfLoading}
+              >
+                {pdfLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                PDF
               </Button>
               <Badge variant={status.variant}>{status.label}</Badge>
             </div>

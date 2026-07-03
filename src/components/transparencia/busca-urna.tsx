@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Loader2, MapPin, Search, Vote } from "lucide-react";
+import { Loader2, Search, Vote } from "lucide-react";
 import { searchUrnas, type UrnaPublica } from "@/lib/actions/transparencia";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -79,39 +79,49 @@ export function BuscaUrna({ electionId }: { electionId: string }) {
       </div>
 
       {buscou && (
-        <div className="mt-3 space-y-2">
+        <div className="mt-3">
           {loading ? null : results.length === 0 ? (
             <p className="py-4 text-center text-sm text-muted-foreground">
               Nenhum local encontrado. Tente outro nome ou o órgão.
             </p>
           ) : (
-            results.map((l) => {
-              const url = origin
-                ? `${origin}/votacao/${l.linkToken}`
-                : `/votacao/${l.linkToken}`;
-              return (
-                <div key={l.id} className="rounded-lg border bg-background p-3">
-                  <div className="flex items-start gap-2">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0">
-                      <p className="font-semibold leading-tight">{l.nome}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {l.orgao} · Zona {l.zona}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <Button asChild className="flex-1">
-                      <Link href={`/votacao/${l.linkToken}`}>
-                        <Vote className="mr-2 h-4 w-4" />
-                        Ir para Votação
-                      </Link>
-                    </Button>
-                    <CopyButton value={url} size="icon" />
-                  </div>
-                </div>
-              );
-            })
+            <>
+              {/* Cards compactos (uma linha cada) — leve mesmo com vários. */}
+              <ul className="max-h-[55vh] space-y-2 overflow-y-auto">
+                {results.map((l) => {
+                  const url = origin
+                    ? `${origin}/votacao/${l.linkToken}`
+                    : `/votacao/${l.linkToken}`;
+                  return (
+                    <li
+                      key={l.id}
+                      className="flex items-center gap-2 rounded-lg border bg-background p-2.5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold leading-tight">
+                          {l.nome}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {l.orgao} · Zona {l.zona}
+                        </p>
+                      </div>
+                      <Button asChild size="sm" className="shrink-0">
+                        <Link href={`/votacao/${l.linkToken}`}>
+                          <Vote className="mr-1.5 h-4 w-4" />
+                          Votar
+                        </Link>
+                      </Button>
+                      <CopyButton value={url} size="icon" />
+                    </li>
+                  );
+                })}
+              </ul>
+              {results.length >= 8 && (
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  Refine a busca (nome + órgão) para encontrar sua urna mais rápido.
+                </p>
+              )}
+            </>
           )}
         </div>
       )}

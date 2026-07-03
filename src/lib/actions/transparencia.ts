@@ -40,6 +40,9 @@ export async function searchUrnas(
     orderBy: { nome: "asc" },
   });
 
+  // Poucos resultados de propósito: a busca fica leve e o filiado refina o texto
+  // até achar a sua urna (evita listas gigantes de dezenas de locais).
+  const MAX = 8;
   const out: UrnaPublica[] = [];
   for (const l of locais) {
     if (
@@ -47,7 +50,7 @@ export async function searchUrnas(
       normalizeForSearch(l.orgao).includes(termo)
     ) {
       out.push(l);
-      if (out.length >= 15) break;
+      if (out.length >= MAX) break;
     }
   }
   return out;

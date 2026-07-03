@@ -2,7 +2,8 @@
  * Parser leve de CSV para importação de candidatos.
  * Espera UMA coluna com cabeçalho "nome" (o cabeçalho é opcional e ignorado).
  * Trata: BOM, quebras de linha \r\n / \r / \n, campos entre aspas e separador
- * "," ou ";". Remove linhas vazias e duplicatas (case-insensitive).
+ * "," ou ";". Remove só linhas vazias — MANTÉM homônimos (cada linha vira um
+ * candidato distinto; nomes iguais NÃO são descartados).
  */
 
 function primeiraColuna(linha: string): string {
@@ -34,7 +35,6 @@ export function parseNomesCsv(content: string): string[] {
   const linhas = text.split(/\r\n|\r|\n/);
 
   const nomes: string[] = [];
-  const vistos = new Set<string>();
   let primeiraNaoVazia = true;
 
   for (const raw of linhas) {
@@ -51,10 +51,8 @@ export function parseNomesCsv(content: string): string[] {
 
     if (!valor) continue;
 
-    const chave = valor.toLowerCase();
-    if (vistos.has(chave)) continue;
-    vistos.add(chave);
-
+    // NÃO deduplica: dois candidatos podem ter o MESMO nome (homônimos) — cada
+    // linha é um candidato distinto. Descartar "duplicados" excluiria pessoas.
     nomes.push(valor.slice(0, 120));
   }
 
