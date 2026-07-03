@@ -27,6 +27,28 @@ async function resolveUniqueSlug(
   return slug;
 }
 
+/**
+ * REGRA DE VIGÊNCIA: um pleito REGULAR só pode ser criado/duplicado quando a
+ * vigência (mandato/triênio) do último pleito regular já terminou — ou seja, o
+ * novo ano é >= (ano + duração do mandato) do último triênio. Eleições
+ * ESPECIAIS/COMPLEMENTARES são isentas desta regra.
+ *
+ * Devolve a mensagem de bloqueio, ou `null` quando pode prosseguir.
+ */
+async function bloqueioPorVigencia(novoAno: number): Promise<string | null> {
+  const ultimo = await prisma.election.findFirst({
+    where: { isEleicaoEspecial: false },
+    orderBy: { ano: "desc" },
+    select: { ano: true, duracaoMandato: true },
+  });
+  if (!ultimo) return null; // ainda não há pleito regular
+  const fim = ultimo.ano + ultimo.duracaoMandato;
+  if (novoAno < fim) {
+    return `A vigência do pleito anterior (Triênio ${ultimo.ano}–${fim}) só termina em ${fim}. Um novo pleito REGULAR só pode ser criado a partir de ${fim} — para antecipar, marque como Eleição Especial/Complementar.`;
+  }
+  return null;
+}
+
 function parseDataLocal(value: unknown): Date | null {
   const s = String(value ?? "").trim();
   if (!s) return null;
@@ -288,6 +310,9 @@ export async function createElection(
         message: "Conflito: Já existe um pleito regular para este ano.",
       };
     }
+    // Só cria um novo pleito regular se a vigência do anterior já terminou.
+    const bloqueio = await bloqueioPorVigencia(ano);
+    if (bloqueio) return { status: "error", message: bloqueio };
   }
 
   // Pré-valida as fontes (arquivo novo OU imagem da galeria) ANTES de criar a
@@ -394,6 +419,9 @@ export async function clonePleito(
   const sourceId = String(formData.get("sourceId") ?? "").trim();
   const novoTitulo = String(formData.get("titulo") ?? "").trim();
   const novoAno = Number(formData.get("ano"));
+  // Clone como Eleição Especial/Complementar (isento da regra de vigência).
+  const clonEspecial =
+    String(formData.get("isEleicaoEspecial") ?? "") === "true";
 
   if (!sourceId) return { status: "error", message: "Pleito de origem inválido." };
   if (!novoTitulo) {
@@ -426,16 +454,22 @@ export async function clonePleito(
       message: `O ano ${novoAno} já possui ${jaTemLocais} local(is). Escolha um ano ainda sem locais para clonar.`,
     };
   }
-  // Trava anti-conflito: no máximo 1 pleito REGULAR por ano (o clone é regular).
-  const conflitoRegular = await prisma.election.findFirst({
-    where: { ano: novoAno, isEleicaoEspecial: false },
-    select: { id: true },
-  });
-  if (conflitoRegular) {
-    return {
-      status: "error",
-      message: `Já existe um pleito regular para ${novoAno}.`,
-    };
+  // Checagens de pleito REGULAR (isentas quando o clone é especial/complementar):
+  if (!clonEspecial) {
+    // Trava anti-conflito: no máximo 1 pleito REGULAR por ano.
+    const conflitoRegular = await prisma.election.findFirst({
+      where: { ano: novoAno, isEleicaoEspecial: false },
+      select: { id: true },
+    });
+    if (conflitoRegular) {
+      return {
+        status: "error",
+        message: `Já existe um pleito regular para ${novoAno}.`,
+      };
+    }
+    // Só duplica um pleito regular se a vigência do anterior já terminou.
+    const bloqueio = await bloqueioPorVigencia(novoAno);
+    if (bloqueio) return { status: "error", message: bloqueio };
   }
 
   const slug = await resolveUniqueSlug(novoTitulo, novoAno);
@@ -495,7 +529,7 @@ export async function clonePleito(
               : null,
             emailOficial: original.emailOficial,
             status: original.status,
-            isEleicaoEspecial: false,
+            isEleicaoEspecial: clonEspecial,
             logoSindsermUrl: original.logoSindsermUrl,
             logoPleitoUrl: original.logoPleitoUrl,
           },

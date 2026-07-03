@@ -10,6 +10,7 @@ import { initialActionState } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -53,11 +54,13 @@ export function ClonePleitoButton({
   const [state, formAction] = useFormState(clonePleito, initialActionState);
   const [titulo, setTitulo] = useState("");
   const [ano, setAno] = useState("");
+  const [especial, setEspecial] = useState(false);
 
   useEffect(() => {
     if (open) {
       setTitulo(tituloOriginal);
       setAno(String(anoOriginal + 1));
+      setEspecial(false);
     }
   }, [open, tituloOriginal, anoOriginal]);
 
@@ -91,6 +94,11 @@ export function ClonePleitoButton({
 
         <form action={formAction} className="space-y-4">
           <input type="hidden" name="sourceId" value={electionId} />
+          <input
+            type="hidden"
+            name="isEleicaoEspecial"
+            value={especial ? "true" : "false"}
+          />
           <div className="space-y-2">
             <Label htmlFor="clone-titulo">Título do novo pleito *</Label>
             <Input
@@ -118,6 +126,22 @@ export function ClonePleitoButton({
               <strong>sem locais</strong> — a estrutura é isolada por ano.
             </p>
           </div>
+
+          <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
+            <Checkbox
+              checked={especial}
+              onCheckedChange={(c) => setEspecial(Boolean(c))}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">Eleição Especial / Complementar</span>
+              <span className="block text-xs text-muted-foreground">
+                Marque para antecipar — isenta da regra de vigência do triênio
+                anterior.
+              </span>
+            </span>
+          </label>
+
           <DialogFooter className="gap-2">
             <Button
               type="button"
