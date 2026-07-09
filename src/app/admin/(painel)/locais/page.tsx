@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { Prisma, Zona } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PAGE_SIZE } from "@/lib/constants";
+import { searchScore, searchTokens } from "@/lib/slug";
 import { calcularVagas } from "@/lib/vagas";
 import {
   getCurrentElectionYear,
@@ -54,6 +55,10 @@ function buildOrderBy(
   return { createdAt: "desc" };
 }
 
+// A busca textual (`q`) NÃO entra aqui: é feita em memória (por tokens, acento/
+// caixa/ordem-insensível) no componente, pois o `contains` do Postgres é
+// sensível a acento e só casa substring contígua. Aqui ficam só os filtros
+// exatos (zona/órgão/status), que o banco resolve bem.
 function buildWhere(
   sp: SearchParams,
   anoEleicao: number,
@@ -61,14 +66,6 @@ function buildWhere(
   const now = new Date();
   const AND: Prisma.WorkplaceWhereInput[] = [{ anoEleicao }];
 
-  if (sp.q) {
-    AND.push({
-      OR: [
-        { nome: { contains: sp.q, mode: "insensitive" } },
-        { linkToken: { contains: sp.q, mode: "insensitive" } },
-      ],
-    });
-  }
   if (sp.zona) AND.push({ zona: sp.zona as Zona });
   if (sp.orgao) AND.push({ orgao: sp.orgao });
 
@@ -117,18 +114,44 @@ export default async function LocaisPage({
   const anoVigente = getCurrentElectionYear();
   const page = Math.max(1, Number(searchParams.page) || 1);
   const where = buildWhere(searchParams, ano);
+  const orderBy = buildOrderBy(searchParams.sort);
+  const include = {
+    _count: { select: { votes: true, candidates: true } },
+  } satisfies Prisma.WorkplaceInclude;
+  const tokens = searchTokens(searchParams.q ?? "");
 
-  const [total, filtered, workplaces] = await Promise.all([
-    prisma.workplace.count({ where: { anoEleicao: ano } }),
-    prisma.workplace.count({ where }),
-    prisma.workplace.findMany({
+  const total = await prisma.workplace.count({ where: { anoEleicao: ano } });
+
+  let filtered: number;
+  let workplaces: Prisma.WorkplaceGetPayload<{ include: typeof include }>[];
+
+  if (tokens.length > 0) {
+    // Com busca textual: carrega os locais que passam nos filtros exatos e casa
+    // por tokens em memória (universo pequeno por pleito), ranqueando por
+    // relevância — o resultado certo aparece mesmo com o teto de página.
+    const all = await prisma.workplace.findMany({ where, orderBy, include });
+    const ranked = all
+      .map((w) => ({
+        w,
+        score: searchScore(`${w.nome} ${w.orgao} ${w.linkToken}`, tokens),
+      }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score);
+    filtered = ranked.length;
+    workplaces = ranked
+      .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+      .map((x) => x.w);
+  } else {
+    // Sem busca textual: paginação direta no banco (rápida).
+    filtered = await prisma.workplace.count({ where });
+    workplaces = await prisma.workplace.findMany({
       where,
-      orderBy: buildOrderBy(searchParams.sort),
+      orderBy,
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      include: { _count: { select: { votes: true, candidates: true } } },
-    }),
-  ]);
+      include,
+    });
+  }
 
   const totalPages = Math.max(1, Math.ceil(filtered / PAGE_SIZE));
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Search, X } from "lucide-react";
 import { ORGAOS, ZONAS } from "@/lib/constants";
@@ -32,6 +32,7 @@ export function WorkplacesFilterBar({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const [q, setQ] = useState(searchParams.get("q") ?? "");
   const zona = searchParams.get("zona") ?? ALL;
@@ -56,14 +57,13 @@ export function WorkplacesFilterBar({
     });
   }
 
-  // Debounce da busca textual.
-  useEffect(() => {
-    const current = searchParams.get("q") ?? "";
-    if (q === current) return;
-    const t = setTimeout(() => pushWith({ q }), 350);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
+  // A busca textual só dispara ao ENVIAR (Enter ou botão "Buscar") — nunca a
+  // cada tecla. No mobile, fecha o teclado para não cobrir os resultados.
+  function submitBusca(e?: React.FormEvent) {
+    e?.preventDefault();
+    inputRef.current?.blur();
+    pushWith({ q: q.trim() });
+  }
 
   const hasFilters =
     (searchParams.get("q") ?? "") !== "" ||
@@ -72,89 +72,107 @@ export function WorkplacesFilterBar({
     status !== ALL;
 
   return (
-    <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-      <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        {isPending && (
-          <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-        )}
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar por nome ou slug..."
-          className="pl-9"
-        />
-      </div>
-
-      <div className="lg:w-56">
-        <Combobox
-          value={orgao === ALL ? "" : orgao}
-          onChange={(v) => pushWith({ orgao: v })}
-          options={ORGAO_OPTIONS}
-          placeholder="Órgão"
-          searchPlaceholder="Buscar órgão..."
-          clearLabel="Todos os órgãos"
-        />
-      </div>
-
-      <Select value={zona} onValueChange={(v) => pushWith({ zona: v })}>
-        <SelectTrigger className="lg:w-36">
-          <SelectValue placeholder="Zona" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL}>Todas as zonas</SelectItem>
-          {ZONAS.map((z) => (
-            <SelectItem key={z} value={z}>
-              {z}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <Select value={status} onValueChange={(v) => pushWith({ status: v })}>
-        <SelectTrigger className="lg:w-40">
-          <SelectValue placeholder="Status" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL}>Todos os status</SelectItem>
-          {STATUS_OPTIONS.map((s) => (
-            <SelectItem key={s.value} value={s.value}>
-              {s.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      {/* Ordenação — padrão "Mais recentes" (recém-criados no topo). */}
-      <Select
-        value={sort}
-        onValueChange={(v) => pushWith({ sort: v === "recentes" ? "" : v })}
-      >
-        <SelectTrigger className="lg:w-44">
-          <SelectValue placeholder="Ordenar" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="recentes">Mais recentes</SelectItem>
-          <SelectItem value="antigos">Mais antigos</SelectItem>
-          <SelectItem value="nome">Nome (A–Z)</SelectItem>
-        </SelectContent>
-      </Select>
-
-      {hasFilters && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            // Preserva o ano (histórico) ao limpar os demais filtros.
-            const ano = searchParams.get("ano");
-            const url = ano ? `${basePath}?ano=${ano}` : basePath;
-            startTransition(() => router.push(url));
-          }}
-        >
-          <X className="mr-1 h-4 w-4" />
-          Limpar
+    <div className="space-y-3">
+      {/* Busca: campo + botão. Mobile-first — só consulta ao tocar "Buscar". */}
+      <form onSubmit={submitBusca} className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            ref={inputRef}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar por nome, órgão ou slug..."
+            className="h-11 pl-9"
+            inputMode="search"
+            enterKeyHint="search"
+            autoComplete="off"
+            aria-label="Buscar locais"
+          />
+        </div>
+        <Button type="submit" disabled={isPending} className="h-11 shrink-0">
+          {isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin sm:mr-2" />
+          ) : (
+            <Search className="h-4 w-4 sm:mr-2" />
+          )}
+          <span className="hidden sm:inline">Buscar</span>
         </Button>
-      )}
+      </form>
+
+      {/* Filtros — grade de 2 colunas no mobile, linha única no desktop. */}
+      <div className="grid grid-cols-2 gap-2 lg:flex lg:flex-wrap lg:items-center">
+        <div className="col-span-2 lg:w-56">
+          <Combobox
+            value={orgao === ALL ? "" : orgao}
+            onChange={(v) => pushWith({ orgao: v })}
+            options={ORGAO_OPTIONS}
+            placeholder="Órgão"
+            searchPlaceholder="Buscar órgão..."
+            clearLabel="Todos os órgãos"
+          />
+        </div>
+
+        <Select value={zona} onValueChange={(v) => pushWith({ zona: v })}>
+          <SelectTrigger className="h-11 lg:h-10 lg:w-36">
+            <SelectValue placeholder="Zona" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>Todas as zonas</SelectItem>
+            {ZONAS.map((z) => (
+              <SelectItem key={z} value={z}>
+                {z}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={status} onValueChange={(v) => pushWith({ status: v })}>
+          <SelectTrigger className="h-11 lg:h-10 lg:w-40">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>Todos os status</SelectItem>
+            {STATUS_OPTIONS.map((s) => (
+              <SelectItem key={s.value} value={s.value}>
+                {s.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Ordenação — padrão "Mais recentes" (recém-criados no topo). */}
+        <Select
+          value={sort}
+          onValueChange={(v) => pushWith({ sort: v === "recentes" ? "" : v })}
+        >
+          <SelectTrigger className="col-span-2 h-11 lg:h-10 lg:w-44">
+            <SelectValue placeholder="Ordenar" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="recentes">Mais recentes</SelectItem>
+            <SelectItem value="antigos">Mais antigos</SelectItem>
+            <SelectItem value="nome">Nome (A–Z)</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {hasFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="col-span-2 lg:w-auto"
+            onClick={() => {
+              // Preserva o ano (histórico) ao limpar os demais filtros.
+              const ano = searchParams.get("ano");
+              const url = ano ? `${basePath}?ano=${ano}` : basePath;
+              setQ("");
+              startTransition(() => router.push(url));
+            }}
+          >
+            <X className="mr-1 h-4 w-4" />
+            Limpar
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
