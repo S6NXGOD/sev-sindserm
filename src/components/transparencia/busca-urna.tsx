@@ -39,6 +39,8 @@ export function BuscaUrna({ electionId }: { electionId: string }) {
   const [loading, setLoading] = useState(false);
   const [origin, setOrigin] = useState("");
   const reqId = useRef(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -48,11 +50,23 @@ export function BuscaUrna({ electionId }: { electionId: string }) {
     e?.preventDefault();
     const termo = q.trim();
     if (termo.length < 2) return;
+    // Fecha o teclado do celular (o Enter/"buscar" mantém o foco no campo)
+    // para os resultados não ficarem escondidos atrás dele.
+    inputRef.current?.blur();
     setLoading(true);
     const meu = ++reqId.current;
     try {
       const res = await searchUrnas(electionId, termo);
-      if (meu === reqId.current) setResults(res);
+      if (meu === reqId.current) {
+        setResults(res);
+        // Traz a lista para a área visível assim que ela renderiza.
+        requestAnimationFrame(() =>
+          resultsRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "nearest",
+          }),
+        );
+      }
     } catch {
       if (meu === reqId.current) setResults([]);
     } finally {
@@ -83,6 +97,7 @@ export function BuscaUrna({ electionId }: { electionId: string }) {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            ref={inputRef}
             value={q}
             onChange={(e) => {
               setQ(e.target.value);
@@ -110,7 +125,7 @@ export function BuscaUrna({ electionId }: { electionId: string }) {
         </Button>
       </form>
 
-      <div className="mt-4">
+      <div ref={resultsRef} className="mt-4 scroll-mt-4">
         {loading ? (
           <UrnaSkeleton />
         ) : results === null ? (
