@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { normalizeForSearch } from "@/lib/slug";
+import { searchScore, searchTokens } from "@/lib/slug";
 import {
   getEleitosCsv,
   getResultadoLocal,
@@ -25,8 +25,9 @@ export async function searchUrnas(
   electionId: string,
   query: string,
 ): Promise<UrnaPublica[]> {
-  const termo = normalizeForSearch(query ?? "");
-  if (termo.length < 2) return [];
+  // Tokens do termo: casa acento/caixa/pontuação-insensível e em qualquer ordem.
+  const tokens = searchTokens(query ?? "");
+  if (tokens.join("").length < 2) return [];
 
   const election = await prisma.election.findUnique({
     where: { id: String(electionId ?? "").trim() },
@@ -40,20 +41,23 @@ export async function searchUrnas(
     orderBy: { nome: "asc" },
   });
 
+  // Casa por NOME ou ÓRGÃO (nome pesa mais) e ranqueia: o mais relevante vem
+  // primeiro, então mesmo com o teto de resultados a urna certa aparece.
+  const scored: Array<{ l: UrnaPublica; score: number }> = [];
+  for (const l of locais) {
+    const score =
+      searchScore(l.nome, tokens) * 10 +
+      searchScore(`${l.nome} ${l.orgao}`, tokens);
+    if (score > 0) scored.push({ l, score });
+  }
+  scored.sort(
+    (a, b) => b.score - a.score || a.l.nome.localeCompare(b.l.nome, "pt"),
+  );
+
   // Poucos resultados de propósito: a busca fica leve e o filiado refina o texto
   // até achar a sua urna (evita listas gigantes de dezenas de locais).
   const MAX = 8;
-  const out: UrnaPublica[] = [];
-  for (const l of locais) {
-    if (
-      normalizeForSearch(l.nome).includes(termo) ||
-      normalizeForSearch(l.orgao).includes(termo)
-    ) {
-      out.push(l);
-      if (out.length >= MAX) break;
-    }
-  }
-  return out;
+  return scored.slice(0, MAX).map((s) => s.l);
 }
 
 /**

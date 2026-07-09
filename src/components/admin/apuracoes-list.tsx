@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import type { Apuracao } from "@/lib/reports";
-import { normalizeForSearch } from "@/lib/slug";
+import { searchScore, searchTokens } from "@/lib/slug";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -166,11 +166,11 @@ function ApuracaoCard({ a }: { a: Apuracao }) {
  */
 export function ApuracoesList({ apuracoes }: { apuracoes: Apuracao[] }) {
   const [q, setQ] = useState("");
-  const termo = normalizeForSearch(q);
+  const tokens = searchTokens(q);
   const casa = (a: Apuracao) =>
-    !termo ||
-    normalizeForSearch(`${a.nome} ${a.orgao} ${a.zona}`).includes(termo);
-  const qtd = termo ? apuracoes.filter(casa).length : apuracoes.length;
+    tokens.length === 0 ||
+    searchScore(`${a.nome} ${a.orgao} ${a.zona}`, tokens) > 0;
+  const qtd = tokens.length ? apuracoes.filter(casa).length : apuracoes.length;
 
   return (
     <div className="space-y-3">
@@ -183,7 +183,7 @@ export function ApuracoesList({ apuracoes }: { apuracoes: Apuracao[] }) {
           className="pl-9"
         />
       </div>
-      {termo && (
+      {tokens.length > 0 && (
         <p className="text-xs text-muted-foreground print:hidden">
           {qtd} de {apuracoes.length} locais
         </p>

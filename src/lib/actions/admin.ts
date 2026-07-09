@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { Prisma, Zona } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ORGAOS, ZONAS } from "@/lib/constants";
-import { isValidSlug, normalizeForSearch, slugify } from "@/lib/slug";
+import { isValidSlug, searchScore, searchTokens, slugify } from "@/lib/slug";
 import { formatDateTime } from "@/lib/format";
 import { buildVoterWhere, type VoterFiltros } from "@/lib/voter-filters";
 import { calcularVagas } from "@/lib/vagas";
@@ -199,7 +199,7 @@ export async function searchWorkplacesLite(
 ): Promise<WorkplaceOption[]> {
   if (!Number.isInteger(anoEleicao)) return [];
   const take = Math.min(Math.max(Math.trunc(limit) || 20, 1), 50);
-  const termo = normalizeForSearch(search ?? "");
+  const tokens = searchTokens(search ?? "");
 
   const locais = await prisma.workplace.findMany({
     where: { anoEleicao },
@@ -207,16 +207,19 @@ export async function searchWorkplacesLite(
     orderBy: { nome: "asc" },
   });
 
-  if (!termo) return locais.slice(0, take);
+  if (tokens.length === 0) return locais.slice(0, take);
 
-  const out: WorkplaceOption[] = [];
+  // Casa por tokens (acento/caixa/pontuação-insensível, qualquer ordem) e
+  // ranqueia — o mais relevante vem primeiro, mesmo com o teto `take`.
+  const scored: Array<{ l: WorkplaceOption; score: number }> = [];
   for (const l of locais) {
-    if (normalizeForSearch(l.nome).includes(termo)) {
-      out.push(l);
-      if (out.length >= take) break;
-    }
+    const score = searchScore(l.nome, tokens);
+    if (score > 0) scored.push({ l, score });
   }
-  return out;
+  scored.sort(
+    (a, b) => b.score - a.score || a.l.nome.localeCompare(b.l.nome, "pt"),
+  );
+  return scored.slice(0, take).map((s) => s.l);
 }
 
 export async function updateSlug(
