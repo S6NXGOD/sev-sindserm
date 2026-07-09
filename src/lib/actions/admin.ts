@@ -14,7 +14,11 @@ import type { ActionState } from "@/lib/types";
 
 function parseLocalDateTime(value: string): Date | null {
   if (!value) return null;
-  const date = new Date(value);
+  // <input datetime-local> não carrega fuso. Interpretamos SEMPRE como horário
+  // de Brasília (UTC-3): o servidor (Railway) roda em UTC, então usar new Date()
+  // direto deslocaria as horas em 3h. (Brasil sem horário de verão desde 2019.)
+  const m = value.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+  const date = new Date(m ? `${m[1]}:00-03:00` : value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 

@@ -52,7 +52,10 @@ async function bloqueioPorVigencia(novoAno: number): Promise<string | null> {
 function parseDataLocal(value: unknown): Date | null {
   const s = String(value ?? "").trim();
   if (!s) return null;
-  const d = new Date(s);
+  // Interpreta a string de <input datetime-local> como horário de Brasília
+  // (UTC-3), independente do fuso do servidor (Railway roda em UTC).
+  const m = s.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+  const d = new Date(m ? `${m[1]}:00-03:00` : s);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
