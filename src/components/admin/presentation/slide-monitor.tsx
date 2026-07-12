@@ -7,7 +7,9 @@ import { FlipList } from "./flip-list";
 const STATUS = {
   open: { label: "EM ANDAMENTO", cls: "bg-emerald-500/20 text-emerald-300" },
   closed: { label: "ENCERRADA", cls: "bg-rose-500/20 text-rose-300" },
-  upcoming: { label: "AGUARDANDO", cls: "bg-amber-500/20 text-amber-300" },
+  upcoming: { label: "AGENDADA", cls: "bg-amber-500/20 text-amber-300" },
+  // Sem janela agendada — a diretoria ainda não visitou o local.
+  undefined: { label: "SEM AGENDA", cls: "bg-slate-500/20 text-slate-300" },
 } as const;
 
 /**

@@ -18,9 +18,11 @@ import {
 const ALL = "all";
 const ORGAO_OPTIONS = ORGAOS.map((o) => ({ value: o, label: o }));
 
+// 4 status mutuamente exclusivos (ver src/lib/voting-status.ts).
 const STATUS_OPTIONS = [
+  { value: "undefined", label: "Aguardando agendamento" },
+  { value: "upcoming", label: "Não iniciadas (agendadas)" },
   { value: "open", label: "Abertas" },
-  { value: "upcoming", label: "Não iniciadas" },
   { value: "closed", label: "Encerradas" },
 ];
 

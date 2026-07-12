@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
 import { toast } from "sonner";
 import {
+  CalendarClock,
   ChevronDown,
   FileUp,
   Loader2,
@@ -58,15 +59,10 @@ function SubmitButton({ qtdCandidatos }: { qtdCandidatos: number }) {
 export function CreateWorkplaceForm({
   anoEleicao,
   trienio,
-  inicioPadrao = "",
-  fimPadrao = "",
 }: {
   /** Pleito (ano) selecionado na sidebar — contexto obrigatório do cadastro. */
   anoEleicao: number;
   trienio: string;
-  /** Datas gerais do pleito (datetime-local) — pré-preenchem a janela do local. */
-  inicioPadrao?: string;
-  fimPadrao?: string;
 }) {
   const router = useRouter();
   const [state, formAction] = useFormState(createWorkplace, initialActionState);
@@ -216,26 +212,17 @@ export function CreateWorkplaceForm({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="dataInicioVotacao">Início da votação *</Label>
-          <Input
-            id="dataInicioVotacao"
-            name="dataInicioVotacao"
-            type="datetime-local"
-            defaultValue={inicioPadrao}
-            required
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="dataFimVotacao">Fim da votação *</Label>
-          <Input
-            id="dataFimVotacao"
-            name="dataFimVotacao"
-            type="datetime-local"
-            defaultValue={fimPadrao}
-            required
-          />
+      {/* NOVA REGRA: o local não herda as datas do pleito. Nasce SEM janela
+          ("Aguardando Agendamento") e a diretoria agenda ao visitar o local. */}
+      <div className="flex gap-3 rounded-md border border-amber-200 bg-amber-50 p-4">
+        <CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+        <div className="text-sm text-amber-800">
+          <p className="font-medium">A votação nasce sem data — e isso é o esperado.</p>
+          <p className="mt-0.5 text-amber-700">
+            O local será criado com o status{" "}
+            <strong>Aguardando Agendamento</strong>. A urna só abre quando a
+            diretoria visitar o local e definir início e fim na página dele.
+          </p>
         </div>
       </div>
 

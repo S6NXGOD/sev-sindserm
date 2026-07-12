@@ -10,14 +10,22 @@ import {
 } from "recharts";
 import type { StatusFatia } from "@/lib/dashboard";
 
+// 4 status mutuamente exclusivos. "Aguardando Diretoria" (sem data) é o novo —
+// cinza-claro, para ler como "ainda não entrou no fluxo"; "Agendadas" fica em
+// âmbar (já tem data e vai abrir).
 const CORES: Record<string, string> = {
-  "Aguardando Início": "#f59e0b", // amber
+  "Aguardando Diretoria": "#cbd5e1", // slate-300 (sem data ainda)
+  Agendadas: "#f59e0b", // amber
   "Em Andamento": "#10b981", // emerald
   Encerrados: "#64748b", // slate
+  // Rótulo antigo, mantido por compatibilidade com dados já renderizados.
+  "Aguardando Início": "#f59e0b",
 };
 
 export function StatusPieChart({ data }: { data: StatusFatia[] }) {
-  const total = data.reduce((s, d) => s + d.valor, 0);
+  // Fatias zeradas poluem a legenda (ex.: nenhuma encerrada ainda).
+  const fatias = data.filter((d) => d.valor > 0);
+  const total = fatias.reduce((s, d) => s + d.valor, 0);
 
   if (total === 0) {
     return (
@@ -31,7 +39,7 @@ export function StatusPieChart({ data }: { data: StatusFatia[] }) {
     <ResponsiveContainer width="100%" height={220}>
       <PieChart>
         <Pie
-          data={data}
+          data={fatias}
           dataKey="valor"
           nameKey="status"
           cx="50%"
@@ -40,7 +48,7 @@ export function StatusPieChart({ data }: { data: StatusFatia[] }) {
           outerRadius={80}
           paddingAngle={2}
         >
-          {data.map((d) => (
+          {fatias.map((d) => (
             <Cell key={d.status} fill={CORES[d.status] ?? "#94a3b8"} />
           ))}
         </Pie>

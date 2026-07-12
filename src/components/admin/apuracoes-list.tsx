@@ -18,14 +18,16 @@ import {
 } from "@/components/ui/table";
 
 const STATUS_LABEL: Record<Apuracao["status"], string> = {
+  undefined: "Aguardando agendamento",
   open: "Em andamento",
   closed: "Encerrada",
   upcoming: "Não iniciada",
 };
 const STATUS_VARIANT: Record<
   Apuracao["status"],
-  "success" | "destructive" | "secondary"
+  "success" | "destructive" | "secondary" | "outline"
 > = {
+  undefined: "outline",
   open: "success",
   closed: "destructive",
   upcoming: "secondary",

@@ -5,6 +5,7 @@ import type { Prisma, Zona } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PAGE_SIZE } from "@/lib/constants";
 import { searchScore, searchTokens } from "@/lib/slug";
+import { votingStatus } from "@/lib/voting-status";
 import { calcularVagas } from "@/lib/vagas";
 import {
   getCurrentElectionYear,
@@ -69,22 +70,41 @@ function buildWhere(
   if (sp.zona) AND.push({ zona: sp.zona as Zona });
   if (sp.orgao) AND.push({ orgao: sp.orgao });
 
+  // Os 4 status. Datas null nunca casam com lte/gt/lt no SQL, então os locais
+  // "Aguardando agendamento" só aparecem no filtro `undefined` — nunca em
+  // "upcoming" (que agora significa "agendada para o futuro").
   if (sp.status === "open") {
     AND.push({ dataInicioVotacao: { lte: now }, dataFimVotacao: { gte: now } });
   } else if (sp.status === "upcoming") {
     AND.push({ dataInicioVotacao: { gt: now } });
   } else if (sp.status === "closed") {
     AND.push({ dataFimVotacao: { lt: now } });
+  } else if (sp.status === "undefined") {
+    AND.push({ dataInicioVotacao: null });
   }
 
   return { AND };
 }
 
-function statusBadge(inicio: Date, fim: Date) {
-  const now = new Date();
-  if (now < inicio) return <Badge variant="secondary">Não iniciada</Badge>;
-  if (now > fim) return <Badge variant="destructive">Encerrada</Badge>;
-  return <Badge variant="success">Aberta</Badge>;
+/** Badge dos 4 status. Sem janela agendada = "Aguardando" (âmbar). */
+function statusBadge(inicio: Date | null, fim: Date | null) {
+  switch (votingStatus(inicio, fim)) {
+    case "undefined":
+      return (
+        <Badge
+          variant="outline"
+          className="border-amber-300 bg-amber-50 text-amber-700"
+        >
+          Aguardando agendamento
+        </Badge>
+      );
+    case "upcoming":
+      return <Badge variant="secondary">Não iniciada</Badge>;
+    case "closed":
+      return <Badge variant="destructive">Encerrada</Badge>;
+    default:
+      return <Badge variant="success">Aberta</Badge>;
+  }
 }
 
 function pageHref(sp: SearchParams, page: number) {

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calcularVagas } from "@/lib/vagas";
+import { votingStatus, type VotingStatus } from "@/lib/voting-status";
 import {
   resolvePleitoLogo,
   resolveSindsermLogo,
@@ -11,13 +12,8 @@ import {
 // Módulo server-only (importa Prisma). Componentes "use client" recebem por prop
 // ou chamam as Server Actions em lib/actions/transparencia.ts.
 
-export type LocalStatus = "upcoming" | "open" | "closed";
-
-function statusDe(inicio: Date, fim: Date, now: Date): LocalStatus {
-  if (now < inicio) return "upcoming";
-  if (now > fim) return "closed";
-  return "open";
-}
+// Reexporta o status canônico (inclui "undefined" = ainda não agendada).
+export type LocalStatus = VotingStatus;
 
 /* -------------------------------------------------------------------------- */
 /*                       Seletor global de pleitos                            */
@@ -72,8 +68,9 @@ export type TransparenciaLocal = {
   totalVotantes: number;
   totalCandidatos: number;
   vagas: number;
-  dataInicio: string;
-  dataFim: string;
+  /** null quando a votação ainda não foi agendada (status "undefined"). */
+  dataInicio: string | null;
+  dataFim: string | null;
 };
 
 export type TransparenciaPleito = {
@@ -153,21 +150,23 @@ export async function getTransparenciaData(
     nome: w.nome,
     orgao: w.orgao,
     zona: w.zona,
-    status: statusDe(w.dataInicioVotacao, w.dataFimVotacao, now),
+    status: votingStatus(w.dataInicioVotacao, w.dataFimVotacao, now),
     totalVotantes: w._count.voters,
     totalCandidatos: w._count.candidates,
     vagas: calcularVagas(w._count.candidates),
-    dataInicio: w.dataInicioVotacao.toISOString(),
-    dataFim: w.dataFimVotacao.toISOString(),
+    dataInicio: w.dataInicioVotacao?.toISOString() ?? null,
+    dataFim: w.dataFimVotacao?.toISOString() ?? null,
   }));
 
-  // KPIs do pleito inteiro (não filtrado).
+  // KPIs do pleito inteiro (não filtrado). Os 4 status são exclusivos: locais
+  // "não definidos" (sem data) NÃO entram em "não iniciadas".
   let votos = 0;
   let vagas = 0;
   let eleitos = 0;
   let abertas = 0;
   let encerradas = 0;
   let naoIniciadas = 0;
+  let naoDefinidas = 0;
   for (const l of todos) {
     votos += l.totalVotantes; // voter 1:1 voto
     vagas += l.vagas;
@@ -175,7 +174,8 @@ export async function getTransparenciaData(
     else if (l.status === "closed") {
       encerradas += 1;
       eleitos += Math.min(l.vagas, votedMap.get(l.id) ?? 0);
-    } else naoIniciadas += 1;
+    } else if (l.status === "upcoming") naoIniciadas += 1;
+    else naoDefinidas += 1;
   }
 
   const orgaos = [...new Set(todos.map((l) => l.orgao))].sort((a, b) =>
@@ -211,7 +211,8 @@ export async function getTransparenciaData(
     },
     kpis: { locais: todos.length, votos, eleitos, vagas, abertas, encerradas },
     statusPie: [
-      { status: "Aguardando Início", valor: naoIniciadas },
+      { status: "Aguardando Diretoria", valor: naoDefinidas },
+      { status: "Agendadas", valor: naoIniciadas },
       { status: "Em Andamento", valor: abertas },
       { status: "Encerradas", valor: encerradas },
     ],
@@ -231,8 +232,9 @@ export type ResultadoLocal = {
   orgao: string;
   zona: string;
   status: LocalStatus;
-  dataInicio: string;
-  dataFim: string;
+  /** null quando a votação ainda não foi agendada. */
+  dataInicio: string | null;
+  dataFim: string | null;
   vagas: number;
   totalCandidatos: number;
   totalVotantes: number;
@@ -299,9 +301,9 @@ export async function getResultadoLocal(
     nome: wp.nome,
     orgao: wp.orgao,
     zona: wp.zona,
-    status: statusDe(wp.dataInicioVotacao, wp.dataFimVotacao, new Date()),
-    dataInicio: wp.dataInicioVotacao.toISOString(),
-    dataFim: wp.dataFimVotacao.toISOString(),
+    status: votingStatus(wp.dataInicioVotacao, wp.dataFimVotacao),
+    dataInicio: wp.dataInicioVotacao?.toISOString() ?? null,
+    dataFim: wp.dataFimVotacao?.toISOString() ?? null,
     vagas,
     totalCandidatos,
     totalVotantes: wp._count.voters,
@@ -358,7 +360,7 @@ export async function getEleitosCsv(electionId: string): Promise<{
   const votedMap = new Map(votedCounts.map((v) => [v.wid, v.n]));
 
   const fechados = locais.filter(
-    (l) => l.dataInicioVotacao <= now && l.dataFimVotacao < now,
+    (l) => votingStatus(l.dataInicioVotacao, l.dataFimVotacao, now) === "closed",
   );
 
   // Top por local (apenas encerrados), via janela em SQL filtrada por IDs.

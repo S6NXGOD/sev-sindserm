@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, Vote } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime, toDateTimeLocalValue } from "@/lib/format";
+import { votingStatus } from "@/lib/voting-status";
 import { apurarEleitos, calcularVagas } from "@/lib/vagas";
 import { getCurrentElectionYear, requirePleito } from "@/lib/election";
 import { Badge } from "@/components/ui/badge";
@@ -18,12 +19,9 @@ export const dynamic = "force-dynamic";
 const CAND_PAGE_SIZE = 50;
 const RANKING_SIZE = 20;
 
-function resolveStatus(inicio: Date, fim: Date): ManagerData["status"] {
-  const agora = new Date();
-  if (agora < inicio) return "upcoming";
-  if (agora > fim) return "closed";
-  return "open";
-}
+/** Datas null viram string vazia (input datetime-local em branco) / "—". */
+const paraInput = (d: Date | null) => (d ? toDateTimeLocalValue(d) : "");
+const paraTexto = (d: Date | null) => (d ? formatDateTime(d) : "—");
 
 export default async function LocalDetailPage({
   params,
@@ -135,11 +133,14 @@ export default async function LocalDetailPage({
     orgao: workplace.orgao,
     zona: workplace.zona,
     slug: workplace.linkToken,
-    status: resolveStatus(workplace.dataInicioVotacao, workplace.dataFimVotacao),
-    inicioLocal: toDateTimeLocalValue(workplace.dataInicioVotacao),
-    fimLocal: toDateTimeLocalValue(workplace.dataFimVotacao),
-    inicioDisplay: formatDateTime(workplace.dataInicioVotacao),
-    fimDisplay: formatDateTime(workplace.dataFimVotacao),
+    status: votingStatus(
+      workplace.dataInicioVotacao,
+      workplace.dataFimVotacao,
+    ),
+    inicioLocal: paraInput(workplace.dataInicioVotacao),
+    fimLocal: paraInput(workplace.dataFimVotacao),
+    inicioDisplay: paraTexto(workplace.dataInicioVotacao),
+    fimDisplay: paraTexto(workplace.dataFimVotacao),
     totalVotes,
     voteLimit: workplace.voteLimit,
     publicUrl: `${votingBaseUrl}/votacao/${workplace.linkToken}`,

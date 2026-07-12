@@ -36,6 +36,7 @@ import {
 } from "@/lib/actions/admin";
 import { initialActionState } from "@/lib/types";
 import { slugify } from "@/lib/slug";
+import type { VotingStatus } from "@/lib/voting-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -74,9 +75,12 @@ export type ManagerData = {
   orgao: string;
   zona: string;
   slug: string;
-  status: "upcoming" | "open" | "closed";
+  /** "undefined" = sem janela agendada (Aguardando Diretoria). */
+  status: VotingStatus;
+  /** "" quando não há data (input datetime-local em branco). */
   inicioLocal: string;
   fimLocal: string;
+  /** "—" quando não há data. */
   inicioDisplay: string;
   fimDisplay: string;
   totalVotes: number;
@@ -106,11 +110,21 @@ export type ManagerData = {
 };
 
 const STATUS_META: Record<
-  ManagerData["status"],
-  { label: string; variant: "success" | "secondary" | "destructive" }
+  VotingStatus,
+  {
+    label: string;
+    variant: "success" | "secondary" | "destructive" | "outline";
+    className?: string;
+  }
 > = {
-  open: { label: "Votação aberta", variant: "success" },
+  // Sem data: âmbar, para saltar aos olhos que o local ainda espera a diretoria.
+  undefined: {
+    label: "Aguardando Agendamento",
+    variant: "outline",
+    className: "border-amber-300 bg-amber-50 text-amber-700",
+  },
   upcoming: { label: "Não iniciada", variant: "secondary" },
+  open: { label: "Votação aberta", variant: "success" },
   closed: { label: "Encerrada", variant: "destructive" },
 };
 
@@ -179,6 +193,13 @@ function ScheduleForm({ data }: { data: ManagerData }) {
   return (
     <form action={formAction} className="space-y-3">
       <input type="hidden" name="id" value={data.id} />
+      {data.status === "undefined" && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Este local <strong>ainda não foi agendado</strong>. Preencha o início e o
+          fim abaixo para abrir a urna — enquanto isso, o link público exibe um
+          aviso e não aceita votos.
+        </p>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="inicio" className="text-xs">
@@ -676,6 +697,7 @@ export function WorkplaceManager({ data }: { data: ManagerData }) {
 
   const status = STATUS_META[data.status];
   const isClosed = data.status === "closed";
+  const naoAgendado = data.status === "undefined";
   const eleitosIds = new Set(data.eleitosIds);
   const empatadosIds = new Set(data.empatados.map((c) => c.id));
   const maxVotes = Math.max(1, ...data.ranking.map((c) => c.votos));
@@ -720,15 +742,24 @@ export function WorkplaceManager({ data }: { data: ManagerData }) {
                 )}
                 PDF
               </Button>
-              <Badge variant={status.variant}>{status.label}</Badge>
+              <Badge variant={status.variant} className={status.className}>
+                {status.label}
+              </Badge>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p>
-              Janela de votação: {data.inicioDisplay} até {data.fimDisplay}
-            </p>
+            {naoAgendado ? (
+              <p className="flex items-center gap-1.5 font-medium text-amber-700">
+                <CalendarClock className="h-4 w-4" />
+                Votação ainda não agendada — defina a janela em “Link e Horários”.
+              </p>
+            ) : (
+              <p>
+                Janela de votação: {data.inicioDisplay} até {data.fimDisplay}
+              </p>
+            )}
             <Badge variant="outline">
               {data.totalCandidatos} candidato(s) · {data.vagas}{" "}
               {data.vagas === 1 ? "vaga" : "vagas"}
@@ -811,6 +842,12 @@ export function WorkplaceManager({ data }: { data: ManagerData }) {
             <Separator />
             {data.status === "closed" ? (
               <ReopenForm data={data} />
+            ) : naoAgendado ? (
+              // Sem janela agendada não há o que encerrar — a urna nunca abriu.
+              <p className="text-xs text-muted-foreground">
+                O encerramento manual fica disponível depois que a votação for
+                agendada.
+              </p>
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm font-medium">

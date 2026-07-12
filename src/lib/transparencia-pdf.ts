@@ -99,8 +99,12 @@ export async function downloadResultadoPdf(
   doc.setTextColor(90);
   doc.text(`${resultado.orgao} · Zona ${resultado.zona}`, marginX, y);
   y += 14;
+  // Local sem janela agendada não tem data de encerramento para imprimir.
+  const encerramento = resultado.dataFim
+    ? `Encerrada em ${formatData(resultado.dataFim)}`
+    : "Votação ainda não agendada";
   doc.text(
-    `Encerrada em ${formatData(resultado.dataFim)} · ${resultado.vagas} vaga(s) · ${resultado.totalVotantes} votante(s) · ${resultado.totalCandidatos} candidato(s)`,
+    `${encerramento} · ${resultado.vagas} vaga(s) · ${resultado.totalVotantes} votante(s) · ${resultado.totalCandidatos} candidato(s)`,
     marginX,
     y,
   );

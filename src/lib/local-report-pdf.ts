@@ -1,6 +1,7 @@
 import type { ManagerData } from "@/components/admin/workplace-manager";
 
 const STATUS_LABEL: Record<ManagerData["status"], string> = {
+  undefined: "Aguardando agendamento",
   open: "Votação em andamento",
   closed: "Votação encerrada",
   upcoming: "Não iniciada",

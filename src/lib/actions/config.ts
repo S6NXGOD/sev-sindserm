@@ -547,8 +547,12 @@ export async function clonePleito(
               voteLimit: w.voteLimit,
               anoEleicao: novoAno,
               linkToken: w.linkToken, // único por [linkToken, ano]; ano destino vazio
-              dataInicioVotacao: shift(w.dataInicioVotacao),
-              dataFimVotacao: shift(w.dataFimVotacao),
+              // Local sem janela agendada continua sem janela no clone
+              // ("Não definida" — a diretoria agenda ao visitar).
+              dataInicioVotacao: w.dataInicioVotacao
+                ? shift(w.dataInicioVotacao)
+                : null,
+              dataFimVotacao: w.dataFimVotacao ? shift(w.dataFimVotacao) : null,
             })),
           });
         }

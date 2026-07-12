@@ -27,6 +27,11 @@ const STATUS = {
   open: { label: "Em andamento", cls: "bg-emerald-100 text-emerald-700" },
   closed: { label: "Encerrada", cls: "bg-slate-200 text-slate-700" },
   upcoming: { label: "Não iniciada", cls: "bg-amber-100 text-amber-700" },
+  // Votação ainda não agendada pela diretoria (local sem janela).
+  undefined: {
+    label: "Aguardando agendamento",
+    cls: "bg-slate-100 text-slate-600",
+  },
 } as const;
 
 function ListaCandidatos({

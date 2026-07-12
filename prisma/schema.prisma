@@ -95,8 +95,13 @@ model Workplace {
   orgao             String
   linkToken         String
   anoEleicao        Int
-  dataInicioVotacao DateTime
-  dataFimVotacao    DateTime
+  // JANELA DE VOTAÇÃO — OPCIONAL (null = "Não definida"/aguardando diretoria).
+  // Regra de negócio: o local NÃO herda mais as datas do pleito. A diretoria
+  // visita o local e só então agenda início/fim. Os 4 status derivam daqui:
+  // null = Não definida · início > agora = Não iniciada (agendada)
+  // agora entre início e fim = Ativa · fim < agora = Encerrada.
+  dataInicioVotacao DateTime?
+  dataFimVotacao    DateTime?
   // Limite de votos do local. null = ilimitado.
   voteLimit         Int?
 

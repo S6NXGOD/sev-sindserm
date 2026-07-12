@@ -7,6 +7,7 @@ import { isValidCpf, maskCpf, normalizeCpf } from "@/lib/cpf";
 import { formatDateTime } from "@/lib/format";
 import { getCurrentElectionYear, getElectionLogos } from "@/lib/election";
 import { normalizeForSearch } from "@/lib/slug";
+import { votingStatus } from "@/lib/voting-status";
 import type { VoteActionState } from "@/lib/types";
 
 // Sentinela para sinalizar "limite atingido" de dentro da transação.
@@ -95,15 +96,28 @@ export async function castVote(
     return { status: "error", message: "Local de votação não encontrado." };
   }
 
-  // 2. Validação da janela de votação (data/hora atual)
+  // 2. Validação da janela de votação (data/hora atual).
+  // TRAVA DE SERVIDOR: vale mesmo que alguém poste direto, sem passar pela tela.
   const agora = new Date();
-  if (agora < workplace.dataInicioVotacao) {
+  const status = votingStatus(
+    workplace.dataInicioVotacao,
+    workplace.dataFimVotacao,
+    agora,
+  );
+  if (status === "undefined") {
+    return {
+      status: "error",
+      message:
+        "A votação para este local ainda não foi agendada. Aguarde a visita da diretoria do SINDSERM.",
+    };
+  }
+  if (status === "upcoming") {
     return {
       status: "error",
       message: "A votação ainda não foi iniciada para este local.",
     };
   }
-  if (agora > workplace.dataFimVotacao) {
+  if (status === "closed") {
     return {
       status: "error",
       message: "A votação está encerrada para este local.",

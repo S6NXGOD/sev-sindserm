@@ -7,6 +7,7 @@ import {
   getElectionLogos,
 } from "@/lib/election";
 import { formatDateTime } from "@/lib/format";
+import { votingStatus } from "@/lib/voting-status";
 import { VotingForm } from "@/components/voting-form";
 import {
   Card,
@@ -32,8 +33,9 @@ function ClosedScreen({
 }: {
   titulo: string;
   mensagem: string;
-  inicio: Date;
-  fim: Date;
+  /** null = janela ainda não agendada — não exibe as linhas de início/fim. */
+  inicio: Date | null;
+  fim: Date | null;
   /** Logo do pleito; null = oculta graciosamente (sem fallback). */
   logoPleito: string | null;
 }) {
@@ -58,16 +60,20 @@ function ClosedScreen({
           <CardTitle className="text-2xl">{titulo}</CardTitle>
           <CardDescription>{mensagem}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-1 text-sm text-slate-600">
-          <p>
-            <span className="font-medium">Início:</span>{" "}
-            {formatDateTime(inicio)}
-          </p>
-          <p>
-            <span className="font-medium">Encerramento:</span>{" "}
-            {formatDateTime(fim)}
-          </p>
-        </CardContent>
+        {/* Sem janela agendada não há datas para mostrar — o card fica só com a
+            mensagem, sem linhas vazias. */}
+        {inicio && fim && (
+          <CardContent className="space-y-1 text-sm text-slate-600">
+            <p>
+              <span className="font-medium">Início:</span>{" "}
+              {formatDateTime(inicio)}
+            </p>
+            <p>
+              <span className="font-medium">Encerramento:</span>{" "}
+              {formatDateTime(fim)}
+            </p>
+          </CardContent>
+        )}
       </Card>
     </main>
   );
@@ -92,26 +98,45 @@ export default async function VotacaoPage({ params }: PageProps) {
   const logos = await getElectionLogos(workplace.anoEleicao);
   const emailOficial = await getElectionEmail(workplace.anoEleicao);
   const agora = new Date();
+  const inicio = workplace.dataInicioVotacao;
+  const fim = workplace.dataFimVotacao;
+  const status = votingStatus(inicio, fim, agora);
 
-  if (agora < workplace.dataInicioVotacao) {
+  // Local ainda SEM janela agendada: a urna não existe até a diretoria visitar.
+  // Vem antes de qualquer outra checagem (nem candidatos importam aqui).
+  // O `|| !inicio || !fim` é redundante em runtime, mas estreita o tipo para as
+  // telas seguintes (Date | null -> Date).
+  if (status === "undefined" || !inicio || !fim) {
     return (
       <ClosedScreen
-        titulo="Votação não iniciada"
-        mensagem="O período de votação para este local ainda não começou."
-        inicio={workplace.dataInicioVotacao}
-        fim={workplace.dataFimVotacao}
+        titulo="Votação ainda não agendada"
+        mensagem="A votação para este local ainda não foi agendada. Aguarde a visita da diretoria do SINDSERM."
+        inicio={null}
+        fim={null}
         logoPleito={logos.pleito}
       />
     );
   }
 
-  if (agora > workplace.dataFimVotacao) {
+  if (status === "upcoming") {
+    return (
+      <ClosedScreen
+        titulo="Votação não iniciada"
+        mensagem="O período de votação para este local ainda não começou."
+        inicio={inicio}
+        fim={fim}
+        logoPleito={logos.pleito}
+      />
+    );
+  }
+
+  if (status === "closed") {
     return (
       <ClosedScreen
         titulo="Votação encerrada"
         mensagem="O período de votação para este local já foi encerrado."
-        inicio={workplace.dataInicioVotacao}
-        fim={workplace.dataFimVotacao}
+        inicio={inicio}
+        fim={fim}
         logoPleito={logos.pleito}
       />
     );
@@ -122,8 +147,8 @@ export default async function VotacaoPage({ params }: PageProps) {
       <ClosedScreen
         titulo="Votação indisponível"
         mensagem="Ainda não há candidatos cadastrados para este local."
-        inicio={workplace.dataInicioVotacao}
-        fim={workplace.dataFimVotacao}
+        inicio={inicio}
+        fim={fim}
         logoPleito={logos.pleito}
       />
     );
@@ -163,7 +188,7 @@ export default async function VotacaoPage({ params }: PageProps) {
             <div className="flex flex-wrap items-center gap-2 pt-3">
               <Badge variant="secondary">Zona: {workplace.zona}</Badge>
               <Badge variant="outline">
-                Votação aberta até {formatDateTime(workplace.dataFimVotacao)}
+                Votação aberta até {formatDateTime(fim)}
               </Badge>
             </div>
           </CardHeader>

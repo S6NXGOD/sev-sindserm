@@ -5,6 +5,7 @@ import {
   ArrowDownWideNarrow,
   ArrowUpWideNarrow,
   Building2,
+  CalendarClock,
   CheckCircle2,
   Clock,
   Crown,
@@ -172,14 +173,25 @@ export default async function DashboardPage({
         />
       </div>
 
-      {/* KPIs secundários (Candidatos vive agora no card "Representação da Base"). */}
-      <div className="grid grid-cols-3 gap-3 sm:gap-4">
+      {/* KPIs secundários (Candidatos vive agora no card "Representação da Base").
+          Os 4 status são mutuamente exclusivos e somam o total de Locais:
+          Aguardando Visita (sem data) + Não iniciadas (agendadas) + Ativas +
+          Encerradas. "Aguardando Visita" NÃO é contado em "Não iniciadas". */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         <Kpi label="Locais" value={d.kpis.locais} icon={Building2} />
+        <Kpi
+          label="Aguardando Visita"
+          value={d.kpis.naoDefinidas}
+          icon={CalendarClock}
+          tone="default"
+          hint="sem data — diretoria ainda não agendou"
+        />
         <Kpi
           label="Não iniciadas"
           value={d.kpis.naoIniciadas}
           icon={Clock}
           tone="amber"
+          hint="já agendadas, abrem no futuro"
         />
         <Kpi
           label="Encerradas"

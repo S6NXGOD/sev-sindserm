@@ -1,9 +1,11 @@
 import type { Prisma, Zona } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime } from "@/lib/format";
+import { votingStatus, type VotingStatus } from "@/lib/voting-status";
 import { apurarEleitos, calcularVagas } from "@/lib/vagas";
 
-export type ApuracaoStatus = "upcoming" | "open" | "closed";
+/** Inclui "undefined" = local sem janela agendada (Aguardando Diretoria). */
+export type ApuracaoStatus = VotingStatus;
 
 export type ApuracaoCandidato = {
   nome: string;
@@ -42,7 +44,10 @@ export type ReportSummary = {
   totalVotos: number;
   abertas: number;
   encerradas: number;
+  /** Agendadas (início no futuro). NÃO inclui as sem data. */
   naoIniciadas: number;
+  /** Sem janela agendada (Aguardando Diretoria). */
+  naoDefinidas: number;
   porOrgao: { orgao: string; locais: number; votos: number }[];
   porZona: { zona: string; votos: number }[];
 };
@@ -56,12 +61,6 @@ export type ReportData = {
 // Máximo de candidatos (com votos) exibidos por local no relatório.
 const RANKING_CAP = 100;
 
-function statusOf(inicio: Date, fim: Date, now: Date): ApuracaoStatus {
-  if (now < inicio) return "upcoming";
-  if (now > fim) return "closed";
-  return "open";
-}
-
 function emptyReport(): ReportData {
   return {
     apuracoes: [],
@@ -71,6 +70,7 @@ function emptyReport(): ReportData {
       abertas: 0,
       encerradas: 0,
       naoIniciadas: 0,
+      naoDefinidas: 0,
       porOrgao: [],
       porZona: [],
     },
@@ -109,7 +109,7 @@ export async function getReportData(opts: {
 
   let scoped = workplaces.map((w) => ({
     ...w,
-    status: statusOf(w.dataInicioVotacao, w.dataFimVotacao, now),
+    status: votingStatus(w.dataInicioVotacao, w.dataFimVotacao, now),
   }));
   if (opts.somenteEncerradas) {
     scoped = scoped.filter((w) => w.status === "closed");
@@ -186,8 +186,11 @@ export async function getReportData(opts: {
       orgao: w.orgao,
       zona: w.zona,
       status: w.status,
-      inicioDisplay: formatDateTime(w.dataInicioVotacao),
-      fimDisplay: formatDateTime(w.dataFimVotacao),
+      // Sem janela agendada: "—" (não há data para exibir no relatório).
+      inicioDisplay: w.dataInicioVotacao
+        ? formatDateTime(w.dataInicioVotacao)
+        : "—",
+      fimDisplay: w.dataFimVotacao ? formatDateTime(w.dataFimVotacao) : "—",
       totalVotos,
       voteLimit: w.voteLimit,
       totalCandidatos,
@@ -207,13 +210,15 @@ export async function getReportData(opts: {
   let abertas = 0;
   let encerradas = 0;
   let naoIniciadas = 0;
+  let naoDefinidas = 0;
   let totalVotos = 0;
 
   for (const a of apuracoes) {
     totalVotos += a.totalVotos;
     if (a.status === "open") abertas++;
     else if (a.status === "closed") encerradas++;
-    else naoIniciadas++;
+    else if (a.status === "upcoming") naoIniciadas++;
+    else naoDefinidas++;
 
     const o = porOrgaoMap.get(a.orgao) ?? { locais: 0, votos: 0 };
     o.locais += 1;
@@ -228,6 +233,7 @@ export async function getReportData(opts: {
     abertas,
     encerradas,
     naoIniciadas,
+    naoDefinidas,
     porOrgao: [...porOrgaoMap.entries()]
       .map(([orgao, v]) => ({ orgao, ...v }))
       .sort((a, b) => b.votos - a.votos),

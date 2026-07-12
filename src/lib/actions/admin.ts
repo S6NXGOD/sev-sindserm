@@ -6,6 +6,7 @@ import { Prisma, Zona } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ORGAOS, ZONAS } from "@/lib/constants";
 import { isValidSlug, searchScore, searchTokens, slugify } from "@/lib/slug";
+import { VOTING_STATUS_ASCII, votingStatus } from "@/lib/voting-status";
 import { formatDateTime } from "@/lib/format";
 import { buildVoterWhere, type VoterFiltros } from "@/lib/voter-filters";
 import { calcularVagas } from "@/lib/vagas";
@@ -47,8 +48,6 @@ export async function createWorkplace(
   const zona = String(formData.get("zona") ?? "").trim();
   const orgao = String(formData.get("orgao") ?? "").trim();
   const slugInput = String(formData.get("slug") ?? "").trim();
-  const inicioRaw = String(formData.get("dataInicioVotacao") ?? "");
-  const fimRaw = String(formData.get("dataFimVotacao") ?? "");
   const voteLimit = parseVoteLimit(formData.get("voteLimit"));
   // CONTEXTO OBRIGATÓRIO: o pleito (ano) vem ESTRITAMENTE do formulário (injetado
   // a partir do pleito selecionado na sidebar). NUNCA usar o ano vigente fixo —
@@ -90,21 +89,9 @@ export async function createWorkplace(
     };
   }
 
-  const dataInicioVotacao = parseLocalDateTime(inicioRaw);
-  const dataFimVotacao = parseLocalDateTime(fimRaw);
-
-  if (!dataInicioVotacao || !dataFimVotacao) {
-    return {
-      status: "error",
-      message: "Informe as datas de início e fim da votação.",
-    };
-  }
-  if (dataFimVotacao <= dataInicioVotacao) {
-    return {
-      status: "error",
-      message: "A data/hora de fim deve ser posterior à de início.",
-    };
-  }
+  // NOVA REGRA: o local NÃO herda mais as datas do pleito. Ele NASCE SEM JANELA
+  // (dataInicio/dataFim = null => status "Não definida"), e a diretoria agenda a
+  // votação depois, na tela do local (updateWorkplaceSchedule), ao visitá-lo.
 
   // Candidatos (OPCIONAL): lista de nomes enviada pelo formulário como JSON.
   // Vazia/ausente => cria só o local. O cadastro de candidatos é 100% opcional.
@@ -146,8 +133,9 @@ export async function createWorkplace(
             linkToken: slug,
             // Usa ESTRITAMENTE o pleito recebido do contexto da sidebar.
             anoEleicao,
-            dataInicioVotacao,
-            dataFimVotacao,
+            // Sem janela: "Aguardando Diretoria" até o agendamento manual.
+            dataInicioVotacao: null,
+            dataFimVotacao: null,
             voteLimit,
           },
         });
@@ -405,9 +393,13 @@ export async function encerrarVotacao(formData: FormData): Promise<void> {
   if (!workplace) return;
 
   // Define o fim 1s no passado para garantir status "encerrada".
+  // Local sem janela agendada (datas null): usa o próprio `fim` como início, para
+  // que o encerramento manual funcione mesmo em local "Não definido".
   const fim = new Date(Date.now() - 1000);
   const inicio =
-    workplace.dataInicioVotacao < fim ? workplace.dataInicioVotacao : fim;
+    workplace.dataInicioVotacao && workplace.dataInicioVotacao < fim
+      ? workplace.dataInicioVotacao
+      : fim;
 
   await prisma.workplace.update({
     where: { id },
@@ -445,10 +437,12 @@ export async function reopenWorkplace(
     return { status: "error", message: "Local não encontrado." };
   }
 
-  // Mantém o início original; se o início ainda for futuro, antecipa para agora.
+  // Mantém o início original; se não houver início (null) ou ele ainda for
+  // futuro, antecipa para agora — a votação passa a aceitar votos já.
+  const agora = new Date();
   const novoInicio =
-    workplace.dataInicioVotacao > new Date()
-      ? new Date()
+    !workplace.dataInicioVotacao || workplace.dataInicioVotacao > agora
+      ? agora
       : workplace.dataInicioVotacao;
 
   try {
@@ -670,10 +664,9 @@ const CSV_ESC = (campo: string) => `"${String(campo).replace(/"/g, '""')}"`;
 const toCsv = (rows: string[][]) =>
   `﻿${rows.map((r) => r.map(CSV_ESC).join(";")).join("\r\n")}`;
 
-function statusPt(inicio: Date, fim: Date, now: Date): string {
-  if (now < inicio) return "Nao iniciada";
-  if (now > fim) return "Encerrada";
-  return "Em andamento";
+/** Rótulo ASCII do status (CSV/PDF). Inclui "Nao definida" (datas null). */
+function statusPt(inicio: Date | null, fim: Date | null, now: Date): string {
+  return VOTING_STATUS_ASCII[votingStatus(inicio, fim, now)];
 }
 
 export type LocaisReportOpts = {
@@ -715,15 +708,10 @@ export async function exportLocaisReport(
     },
   });
   if (opts.status) {
-    locais = locais.filter((l) => {
-      const s =
-        l.dataInicioVotacao > now
-          ? "upcoming"
-          : l.dataFimVotacao < now
-            ? "closed"
-            : "open";
-      return s === opts.status;
-    });
+    locais = locais.filter(
+      (l) =>
+        votingStatus(l.dataInicioVotacao, l.dataFimVotacao, now) === opts.status,
+    );
   }
   const ids = locais.map((l) => l.id);
 
@@ -873,15 +861,10 @@ export async function getLocaisReportData(
     },
   });
   if (opts.status) {
-    locais = locais.filter((l) => {
-      const s =
-        l.dataInicioVotacao > now
-          ? "upcoming"
-          : l.dataFimVotacao < now
-            ? "closed"
-            : "open";
-      return s === opts.status;
-    });
+    locais = locais.filter(
+      (l) =>
+        votingStatus(l.dataInicioVotacao, l.dataFimVotacao, now) === opts.status,
+    );
   }
   const ids = locais.map((l) => l.id);
 
@@ -1023,7 +1006,7 @@ export async function exportEleitosCsv(opts: {
     },
   });
   const fechados = locais.filter(
-    (l) => l.dataInicioVotacao <= now && l.dataFimVotacao < now,
+    (l) => votingStatus(l.dataInicioVotacao, l.dataFimVotacao, now) === "closed",
   );
   if (fechados.length === 0) return toCsv([header]);
   const ids = fechados.map((l) => l.id);

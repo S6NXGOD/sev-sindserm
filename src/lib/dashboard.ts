@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calcularVagas } from "@/lib/vagas";
+import { votingStatus, type VotingStatus } from "@/lib/voting-status";
 
 export type RankItem = { rotulo: string; votos: number };
 export type StatusFatia = { status: string; valor: number };
@@ -36,7 +37,10 @@ export type DashboardData = {
     locais: number;
     abertas: number;
     encerradas: number;
+    /** Agendadas: início no FUTURO (já tem data, ainda não abriu). */
     naoIniciadas: number;
+    /** Aguardando Diretoria: SEM datas (null) — ainda não foi agendada. */
+    naoDefinidas: number;
     votos: number;
     candidatos: number;
     /** Soma das vagas de TODOS os locais (regra de progressão por candidatos). */
@@ -109,7 +113,8 @@ export type PresentationLocal = {
   id: string;
   nome: string;
   zona: string;
-  status: "upcoming" | "open" | "closed";
+  /** "undefined" = local ainda sem janela agendada (Aguardando Diretoria). */
+  status: VotingStatus;
   totalCandidatos: number;
   vagas: number;
   totalVotos: number;
@@ -152,6 +157,7 @@ export async function getDashboardData(
     abertas,
     encerradas,
     naoIniciadas,
+    naoDefinidas,
     votosUltimaHora,
     votosPorLocal,
     ritmoRows,
@@ -164,6 +170,8 @@ export async function getDashboardData(
     prisma.workplace.count({ where: { anoEleicao } }),
     prisma.vote.count({ where: { anoEleicao } }),
     prisma.candidate.count({ where: { workplace: { anoEleicao } } }),
+    // ATIVAS (votando agora). Datas null nunca casam com lte/gte no SQL,
+    // então locais "Não definidos" ficam naturalmente de fora — como deve ser.
     prisma.workplace.count({
       where: {
         anoEleicao,
@@ -171,11 +179,18 @@ export async function getDashboardData(
         dataFimVotacao: { gte: now },
       },
     }),
+    // ENCERRADAS: fim no passado.
     prisma.workplace.count({
       where: { anoEleicao, dataFimVotacao: { lt: now } },
     }),
+    // NÃO INICIADAS (agendadas): início no FUTURO. Só entram locais que JÁ têm
+    // data — os sem data caem em "naoDefinidas", nunca aqui.
     prisma.workplace.count({
       where: { anoEleicao, dataInicioVotacao: { gt: now } },
+    }),
+    // NÃO DEFINIDAS (Aguardando Diretoria): sem janela agendada.
+    prisma.workplace.count({
+      where: { anoEleicao, dataInicioVotacao: null },
     }),
     // Votos/Hora: comparecimentos (Voter) nos últimos 60 min — Vote não tem
     // timestamp (sigilo), então usamos Voter.createdAt (relação 1:1 com o voto).
@@ -310,14 +325,17 @@ export async function getDashboardData(
       abertas,
       encerradas,
       naoIniciadas,
+      naoDefinidas,
       votos: totalVotos,
       candidatos: totalCandidatos,
       vagas: vagasTotais,
       vagasPreenchidas,
       votosUltimaHora,
     },
+    // As 4 fatias somam o total de locais (categorias mutuamente exclusivas).
     statusPie: [
-      { status: "Aguardando Início", valor: naoIniciadas },
+      { status: "Aguardando Diretoria", valor: naoDefinidas },
+      { status: "Agendadas", valor: naoIniciadas },
       { status: "Em Andamento", valor: abertas },
       { status: "Encerrados", valor: encerradas },
     ],
@@ -329,17 +347,19 @@ export async function getDashboardData(
       semCandidatos,
       // Limita a exibição (escala: pode haver centenas de locais lotados).
       lotados: lotados.slice(0, 50),
-      encerrandoEm24h: encerrandoEm24h.map((w) => ({
-        id: w.id,
-        nome: w.nome,
-        fim: w.dataFimVotacao,
-      })),
+      // O `where` já exige dataFimVotacao entre agora e +24h (null nunca casa);
+      // o filtro abaixo só estreita o tipo (Date | null -> Date).
+      encerrandoEm24h: encerrandoEm24h.flatMap((w) =>
+        w.dataFimVotacao
+          ? [{ id: w.id, nome: w.nome, fim: w.dataFimVotacao }]
+          : [],
+      ),
     },
     geradoEm: new Intl.DateTimeFormat("pt-BR", {
       timeStyle: "medium",
       timeZone: TZ,
     }).format(now),
-    proximoEncerramento: proximoFim?.dataFimVotacao.toISOString() ?? null,
+    proximoEncerramento: proximoFim?.dataFimVotacao?.toISOString() ?? null,
   };
 }
 
@@ -621,12 +641,7 @@ export async function getPresentationData(
       const totalCandidatos = candMap.get(w.id) ?? 0;
       const vagas = calcularVagas(totalCandidatos);
       const votedCount = votedMap.get(w.id) ?? 0;
-      const status =
-        now < w.dataInicioVotacao
-          ? "upcoming"
-          : now > w.dataFimVotacao
-            ? "closed"
-            : "open";
+      const status = votingStatus(w.dataInicioVotacao, w.dataFimVotacao, now);
       const top = (topMap.get(w.id) ?? []).sort((a, b) => b.votos - a.votos);
       return {
         id: w.id,
@@ -691,9 +706,13 @@ export async function getMuralEleitos(
 
   // Locais encerrados (filtro em JS — o Prisma trata Date/timestamp de forma
   // consistente; comparar data em $queryRaw cru sofre com fuso), dos mais
-  // recentes para os mais antigos (recência do ticker).
+  // recentes para os mais antigos (recência do ticker). Locais sem janela
+  // agendada (datas null) nunca são "encerrados".
   const fechados = locais
-    .filter((l) => l.dataInicioVotacao <= now && l.dataFimVotacao < now)
+    .filter(
+      (l): l is (typeof locais)[number] & { dataFimVotacao: Date } =>
+        votingStatus(l.dataInicioVotacao, l.dataFimVotacao, now) === "closed",
+    )
     .sort((a, b) => b.dataFimVotacao.getTime() - a.dataFimVotacao.getTime());
 
   // Top candidatos por local, restrito aos locais ENCERRADOS (por IDs, não por
