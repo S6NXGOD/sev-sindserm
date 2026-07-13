@@ -21,10 +21,17 @@ const EM_BREVE_MS = 24 * 60 * 60 * 1000;
  * Componente ÚNICO, usado na Dashboard (admin, com link para o local) e no
  * Portal da Transparência (público, sem link). Server component puro.
  *
- * Mobile-first: uma coluna no celular, duas no desktop. Nomes longos (o padrão
- * aqui, ex.: "GERÊNCIA DE REGULAÇÃO, CONTROLE E AVALIAÇÃO AMBULATORIAL") são
- * truncados com `min-w-0` + `truncate`, e o selo de contagem é `shrink-0` —
- * assim a linha nunca estoura nem empurra o layout.
+ * ANTI-OVERFLOW (o motivo de cada classe — nomes/órgãos aqui são LONGOS, ex.:
+ * "GERÊNCIA DE REGULAÇÃO, CONTROLE E AVALIAÇÃO AMBULATORIAL"):
+ *  - `min-w-0` em TODO elo que é flex/grid item. Grid e flex items nascem com
+ *    `min-width: auto`, que impede o encolhimento abaixo do conteúdo mínimo.
+ *    Como o `truncate` aplica `white-space: nowrap`, o "conteúdo mínimo" vira a
+ *    frase inteira — e a trilha do grid estoura a largura da tela. Basta UM elo
+ *    sem `min-w-0` para a corrente de truncate quebrar e a página ganhar scroll
+ *    horizontal. Por isso o `<li>` (grid item) TAMBÉM leva `min-w-0`.
+ *  - O card é um BLOCO (não uma linha flex): a data e o selo ficam numa linha
+ *    própria embaixo, então o selo nunca disputa largura com o nome. Num celular
+ *    de 360px isso é a diferença entre respirar e espremer.
  */
 export function ProximasAberturas({
   itens,
@@ -47,16 +54,16 @@ export function ProximasAberturas({
 
   return (
     <section className="rounded-xl border bg-card shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b p-4">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 border-b p-4">
+        <div className="min-w-0 flex-1">
           <h2 className="flex items-center gap-2 text-base font-bold">
             <CalendarClock className="h-5 w-5 shrink-0 text-sky-600" />
-            <span className="truncate">{titulo}</span>
+            <span className="min-w-0 truncate">{titulo}</span>
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">{descricao}</p>
         </div>
         {total > 0 && (
-          <Badge variant="secondary" className="shrink-0">
+          <Badge variant="secondary" className="shrink-0 whitespace-nowrap">
             {total} agendada{total === 1 ? "" : "s"}
           </Badge>
         )}
@@ -73,44 +80,49 @@ export function ProximasAberturas({
             {itens.map((l) => {
               const inicio = new Date(l.inicio);
               const emBreve = inicio.getTime() - agora.getTime() <= EM_BREVE_MS;
-              const nome = hrefBase ? (
-                <Link
-                  href={`${hrefBase}/${l.id}`}
-                  className="block truncate font-semibold leading-tight hover:underline"
-                >
-                  {l.nome}
-                </Link>
-              ) : (
-                <p className="truncate font-semibold leading-tight">{l.nome}</p>
-              );
 
               return (
                 <li
                   key={l.id}
-                  className={`flex items-center gap-3 rounded-lg border p-3 ${
+                  className={`min-w-0 rounded-lg border p-3 ${
                     emBreve ? "border-amber-300 bg-amber-50" : "bg-background"
                   }`}
                 >
-                  {/* min-w-0 é o que permite o truncate funcionar dentro do flex */}
-                  <div className="min-w-0 flex-1">
-                    {nome}
-                    <p className="truncate text-xs text-muted-foreground">
-                      {l.orgao} · Zona {l.zona}
+                  {/* Nome — sempre em linha própria, truncado. */}
+                  {hrefBase ? (
+                    <Link
+                      href={`${hrefBase}/${l.id}`}
+                      className="block truncate text-sm font-semibold leading-tight hover:underline"
+                    >
+                      {l.nome}
+                    </Link>
+                  ) : (
+                    <p className="truncate text-sm font-semibold leading-tight">
+                      {l.nome}
                     </p>
-                    <p className="mt-1 truncate text-xs text-muted-foreground">
-                      Abre em {formatDateTime(inicio)}
-                    </p>
+                  )}
+
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {l.orgao} · Zona {l.zona}
+                  </p>
+
+                  {/* Data à esquerda, contagem à direita — linha própria, então
+                      o selo não espreme o nome nem estoura a largura. */}
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-xs text-muted-foreground">
+                      {formatDateTime(inicio)}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={`shrink-0 whitespace-nowrap ${
+                        emBreve
+                          ? "border-amber-400 bg-amber-100 text-amber-800"
+                          : "border-sky-300 bg-sky-50 text-sky-700"
+                      }`}
+                    >
+                      {tempoAte(inicio, agora)}
+                    </Badge>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={`shrink-0 whitespace-nowrap ${
-                      emBreve
-                        ? "border-amber-400 bg-amber-100 text-amber-800"
-                        : "border-sky-300 bg-sky-50 text-sky-700"
-                    }`}
-                  >
-                    {tempoAte(inicio, agora)}
-                  </Badge>
                 </li>
               );
             })}
