@@ -2,6 +2,10 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calcularVagas } from "@/lib/vagas";
 import { votingStatus, type VotingStatus } from "@/lib/voting-status";
+import type { ProximaAbertura } from "@/components/proximas-aberturas";
+
+/** Quantas "próximas aberturas" listar (as demais ficam só na contagem). */
+const PROXIMAS_CAP = 6;
 
 export type RankItem = { rotulo: string; votos: number };
 export type StatusFatia = { status: string; valor: number };
@@ -50,6 +54,8 @@ export type DashboardData = {
     votosUltimaHora: number;
   };
   statusPie: StatusFatia[];
+  /** Locais com votação AGENDADA, os que abrem primeiro (limitado p/ render). */
+  proximasAberturas: ProximaAbertura[];
   ritmoHoje: RitmoPonto[];
   zonasAtivas: RankItem[];
   top3: LocalAdesao[];
@@ -166,6 +172,7 @@ export async function getDashboardData(
     locaisComLimite,
     encerrandoEm24h,
     proximoFim,
+    proximasRaw,
   ] = await Promise.all([
     prisma.workplace.count({ where: { anoEleicao } }),
     prisma.vote.count({ where: { anoEleicao } }),
@@ -243,7 +250,36 @@ export async function getDashboardData(
       orderBy: { dataFimVotacao: "asc" },
       select: { dataFimVotacao: true },
     }),
+    // PRÓXIMAS ABERTURAS: agendadas (início no futuro), as que abrem primeiro.
+    // Locais sem data (null) nunca casam com `gt` — ficam de fora, como deve ser.
+    prisma.workplace.findMany({
+      where: { anoEleicao, dataInicioVotacao: { gt: now } },
+      orderBy: { dataInicioVotacao: "asc" },
+      take: PROXIMAS_CAP,
+      select: {
+        id: true,
+        nome: true,
+        zona: true,
+        orgao: true,
+        dataInicioVotacao: true,
+      },
+    }),
   ]);
+
+  // O `where` garante dataInicioVotacao não-nula; o flatMap só estreita o tipo.
+  const proximasAberturas: ProximaAbertura[] = proximasRaw.flatMap((w) =>
+    w.dataInicioVotacao
+      ? [
+          {
+            id: w.id,
+            nome: w.nome,
+            zona: w.zona,
+            orgao: w.orgao,
+            inicio: w.dataInicioVotacao.toISOString(),
+          },
+        ]
+      : [],
+  );
 
   const countByLocal = new Map(
     votosPorLocal.map((g) => [g.workplaceId, g._count.workplaceId]),
@@ -339,6 +375,7 @@ export async function getDashboardData(
       { status: "Em Andamento", valor: abertas },
       { status: "Encerrados", valor: encerradas },
     ],
+    proximasAberturas,
     ritmoHoje,
     zonasAtivas,
     top3,

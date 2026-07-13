@@ -4,6 +4,7 @@ import {
   getTransparenciaData,
 } from "@/lib/transparencia";
 import { StatusPieChart } from "@/components/admin/status-pie-chart";
+import { ProximasAberturas } from "@/components/proximas-aberturas";
 import { PleitoSelector } from "@/components/transparencia/pleito-selector";
 import { FiltrosBar } from "@/components/transparencia/filtros-bar";
 import { BuscaUrna } from "@/components/transparencia/busca-urna";
@@ -157,6 +158,15 @@ export default async function TransparenciaPage({
             <StatusPieChart data={data.statusPie} />
           </div>
         </div>
+
+        {/* Próximas aberturas: o filiado vê quais urnas vão abrir e quando. */}
+        <ProximasAberturas
+          itens={data.proximasAberturas}
+          total={data.kpis.agendadas}
+          titulo="Próximas votações"
+          descricao="Locais com votação já agendada — veja quando a sua urna abre."
+          vazioTexto="Nenhuma votação agendada no momento. Acompanhe por aqui."
+        />
 
         {/* Filtros */}
         <div className="rounded-xl border bg-card p-4 shadow-sm">

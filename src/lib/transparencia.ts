@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calcularVagas } from "@/lib/vagas";
 import { votingStatus, type VotingStatus } from "@/lib/voting-status";
+import type { ProximaAbertura } from "@/components/proximas-aberturas";
 import {
   resolvePleitoLogo,
   resolveSindsermLogo,
@@ -94,16 +95,32 @@ export type TransparenciaData = {
     vagas: number;
     abertas: number;
     encerradas: number;
+    /** Agendadas (vão abrir) — alimenta o card "Próximas aberturas". */
+    agendadas: number;
   };
   statusPie: { status: string; valor: number }[];
+  /** Locais agendados que abrem primeiro (limitado para render). */
+  proximasAberturas: ProximaAbertura[];
   orgaos: string[];
   locais: TransparenciaLocal[];
 };
 
+/** Quantas "próximas aberturas" listar (as demais ficam só na contagem). */
+const PROXIMAS_CAP = 6;
+
 const EMPTY: TransparenciaData = {
   pleito: null,
-  kpis: { locais: 0, votos: 0, eleitos: 0, vagas: 0, abertas: 0, encerradas: 0 },
+  kpis: {
+    locais: 0,
+    votos: 0,
+    eleitos: 0,
+    vagas: 0,
+    abertas: 0,
+    encerradas: 0,
+    agendadas: 0,
+  },
   statusPie: [],
+  proximasAberturas: [],
   orgaos: [],
   locais: [],
 };
@@ -178,6 +195,23 @@ export async function getTransparenciaData(
     else naoDefinidas += 1;
   }
 
+  // PRÓXIMAS ABERTURAS: agendadas, ordenadas pela que abre primeiro. Derivado do
+  // conjunto já carregado (sem consulta extra ao banco).
+  const proximasAberturas: ProximaAbertura[] = todos
+    .filter(
+      (l): l is TransparenciaLocal & { dataInicio: string } =>
+        l.status === "upcoming" && l.dataInicio !== null,
+    )
+    .sort((a, b) => a.dataInicio.localeCompare(b.dataInicio))
+    .slice(0, PROXIMAS_CAP)
+    .map((l) => ({
+      id: l.id,
+      nome: l.nome,
+      zona: l.zona,
+      orgao: l.orgao,
+      inicio: l.dataInicio,
+    }));
+
   const orgaos = [...new Set(todos.map((l) => l.orgao))].sort((a, b) =>
     a.localeCompare(b),
   );
@@ -209,13 +243,22 @@ export async function getTransparenciaData(
       logoPleito: resolvePleitoLogo(election.logoPleitoUrl),
       emailOficial: election.emailOficial?.trim() || null,
     },
-    kpis: { locais: todos.length, votos, eleitos, vagas, abertas, encerradas },
+    kpis: {
+      locais: todos.length,
+      votos,
+      eleitos,
+      vagas,
+      abertas,
+      encerradas,
+      agendadas: naoIniciadas,
+    },
     statusPie: [
       { status: "Aguardando Diretoria", valor: naoDefinidas },
       { status: "Agendadas", valor: naoIniciadas },
       { status: "Em Andamento", valor: abertas },
       { status: "Encerradas", valor: encerradas },
     ],
+    proximasAberturas,
     orgaos,
     locais,
   };

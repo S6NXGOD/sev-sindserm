@@ -38,6 +38,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ProximasAberturas } from "@/components/proximas-aberturas";
 import { AutoRefresh } from "@/components/admin/auto-refresh";
 import { LowTurnoutLocations } from "@/components/admin/low-turnout-locations";
 import { RitmoCard } from "@/components/admin/ritmo-card";
@@ -200,6 +201,16 @@ export default async function DashboardPage({
           tone="red"
         />
       </div>
+
+      {/* Próximas aberturas: as votações já agendadas que vão abrir. Fica logo
+          abaixo do KPI "Não iniciadas" — é o detalhe acionável daquele número. */}
+      <ProximasAberturas
+        itens={d.proximasAberturas}
+        total={d.kpis.naoIniciadas}
+        hrefBase="/admin/locais"
+        descricao="Locais já agendados pela diretoria, ordenados por quem abre primeiro."
+        vazioTexto="Nenhuma votação agendada. Agende a janela na página de cada local."
+      />
 
       {/* Representação da Base: Candidatos vs Vagas vs Vagas preenchidas. */}
       <Card>

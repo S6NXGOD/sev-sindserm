@@ -10,6 +10,28 @@ export function formatDateTime(date: Date | string): string {
 }
 
 /**
+ * Contagem regressiva curta até uma data futura: "em 12 min", "em 5 h",
+ * "em 3 dias". Usada nos cards de "Próximas aberturas". Calculada no servidor
+ * (as telas são force-dynamic + auto-refresh), então não há risco de divergir
+ * entre servidor e cliente na hidratação.
+ */
+export function tempoAte(date: Date | string, now: Date = new Date()): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  const ms = d.getTime() - now.getTime();
+  if (ms <= 0) return "agora";
+
+  const min = Math.floor(ms / 60_000);
+  if (min < 1) return "em instantes";
+  if (min < 60) return `em ${min} min`;
+
+  const horas = Math.floor(min / 60);
+  if (horas < 24) return `em ${horas} h`;
+
+  const dias = Math.floor(horas / 24);
+  return `em ${dias} ${dias === 1 ? "dia" : "dias"}`;
+}
+
+/**
  * Converte uma Date para o formato de <input type="datetime-local">
  * (YYYY-MM-DDTHH:mm) no fuso de BRASÍLIA (America/Sao_Paulo) — consistente com o
  * parse (que interpreta o input como UTC-3) e com a exibição (formatDateTime).
