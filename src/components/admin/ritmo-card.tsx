@@ -63,6 +63,7 @@ export function RitmoCard({
   const rangeRef = useRef<RitmoRange>("hoje");
   rangeRef.current = range;
 
+  // Busca COM indicador de "Carregando" (troca de intervalo ou botão Aplicar).
   function load(r: RitmoRange, a?: string, b?: string) {
     startTransition(async () => {
       const res = await fetchRitmoSeries(ano, r, a, b);
@@ -70,15 +71,29 @@ export function RitmoCard({
     });
   }
 
-  // Mantém vivo conforme o dashboard atualiza (router.refresh muda `inicial`):
-  // "hoje" usa direto a série do servidor; demais intervalos (exceto custom)
-  // re-buscam. "custom" fica congelado até o usuário aplicar de novo.
+  // "Hoje" acompanha a série que o servidor manda (via router.refresh do
+  // dashboard) — sem nova consulta. Os OUTROS intervalos NÃO re-buscam aqui:
+  // uma Server Action já re-renderiza a rota (novo `inicial`), então re-buscar
+  // neste efeito criava um LOOP INFINITO (load → action → re-render → `inicial`
+  // muda → load → …). A atualização ao vivo deles vem do timer abaixo.
   useEffect(() => {
-    const r = rangeRef.current;
-    if (r === "hoje") setData(inicial);
-    else if (r !== "custom") load(r);
+    if (rangeRef.current === "hoje") setData(inicial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inicial]);
+
+  // Mantém 1h/12h/7d/mês/ontem vivos com um timer PRÓPRIO e SILENCIOSO
+  // (não pisca o spinner e é desacoplado de `inicial`, então não há loop).
+  // "hoje" já é vivo via `inicial`; "custom" fica congelado até aplicar de novo.
+  useEffect(() => {
+    if (range === "hoje" || range === "custom") return;
+    const id = setInterval(async () => {
+      const r = rangeRef.current;
+      const res = await fetchRitmoSeries(ano, r);
+      if (rangeRef.current === r) setData(res);
+    }, 45000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, ano]);
 
   function onRange(v: string) {
     const r = v as RitmoRange;
