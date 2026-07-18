@@ -11,6 +11,7 @@ import {
   LogOut,
   Plus,
   Settings,
+  Trophy,
   Users,
   Vote,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/admin/locais", label: "Locais de Trabalho", icon: Building2 },
+  { href: "/admin/encerradas", label: "Encerradas & Eleitos", icon: Trophy },
   { href: "/admin/votantes", label: "Votantes", icon: Users },
   { href: "/admin/relatorios", label: "Relatórios", icon: FileText },
   { href: "/admin/pleitos", label: "Pleitos", icon: Vote },

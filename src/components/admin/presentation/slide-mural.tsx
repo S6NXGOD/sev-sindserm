@@ -2,6 +2,7 @@
 
 import { Award, Trophy } from "lucide-react";
 import type { MuralData } from "@/lib/dashboard";
+import { AutoScrollColumn } from "@/components/admin/presentation/auto-scroll-column";
 
 const CARDS_MAX = 12; // até aqui: cards grandes; acima: letreiro de créditos.
 
@@ -14,31 +15,37 @@ function TitularBadge() {
   );
 }
 
-/** Layout de CARDS GRANDES — até 12 eleitos (alta visibilidade). */
+/**
+ * Layout de CARDS GRANDES — até 12 eleitos (alta visibilidade). Se os cards não
+ * couberem na tela do telão, a coluna ROLA sozinha (AutoScrollColumn) para
+ * revelar todos — antes ficavam cortados e fixos.
+ */
 function CardsGrandes({ mural }: { mural: MuralData }) {
   return (
-    <div className="grid h-full content-start gap-5 sm:grid-cols-2 xl:grid-cols-3">
-      {mural.eleitos.map((e, i) => (
-        <div
-          key={`${e.nome}-${i}`}
-          className="flex flex-col gap-3 rounded-2xl border-2 border-emerald-400/60 bg-gradient-to-b from-emerald-950/40 to-white/5 p-6 ring-1 ring-emerald-400/20"
-        >
-          <TitularBadge />
-          <p className="text-3xl font-black leading-tight xl:text-4xl">
-            {e.nome}
-          </p>
-          <div className="mt-auto">
-            <p className="truncate text-base font-semibold text-slate-300">
-              {e.local}
+    <AutoScrollColumn className="h-full">
+      <div className="grid content-start gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {mural.eleitos.map((e, i) => (
+          <div
+            key={`${e.nome}-${i}`}
+            className="flex flex-col gap-3 rounded-2xl border-2 border-emerald-400/60 bg-gradient-to-b from-emerald-950/40 to-white/5 p-6 ring-1 ring-emerald-400/20"
+          >
+            <TitularBadge />
+            <p className="text-3xl font-black leading-tight xl:text-4xl">
+              {e.nome}
             </p>
-            <p className="truncate text-sm text-slate-400">{e.orgao}</p>
-            <p className="mt-1 text-2xl font-extrabold text-emerald-300 tabular-nums">
-              {e.votos} {e.votos === 1 ? "voto" : "votos"}
-            </p>
+            <div className="mt-auto">
+              <p className="truncate text-base font-semibold text-slate-300">
+                {e.local}
+              </p>
+              <p className="truncate text-sm text-slate-400">{e.orgao}</p>
+              <p className="mt-1 text-2xl font-extrabold text-emerald-300 tabular-nums">
+                {e.votos} {e.votos === 1 ? "voto" : "votos"}
+              </p>
+            </div>
           </div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+    </AutoScrollColumn>
   );
 }
 
