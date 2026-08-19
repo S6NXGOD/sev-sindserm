@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Printer } from "lucide-react";
-import { ORGAOS } from "@/lib/constants";
+import { ORGAOS, ZONAS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
@@ -22,6 +22,7 @@ const ORGAO_OPTIONS = ORGAOS.map((o) => ({ value: o, label: o }));
 const TIPOS = [
   { value: "geral", label: "Geral (todos os locais)" },
   { value: "orgao", label: "Por órgão" },
+  { value: "zona", label: "Por zona" },
   { value: "local", label: "Por local de trabalho" },
   { value: "encerradas", label: "Votações encerradas" },
 ];
@@ -39,6 +40,7 @@ export function ReportControls({
 
   const tipo = searchParams.get("tipo") ?? "geral";
   const orgao = searchParams.get("orgao") ?? "";
+  const zona = searchParams.get("zona") ?? "";
   const localId = searchParams.get("localId") ?? "";
 
   const [localLabel, setLocalLabel] = useState(selectedLocalNome);
@@ -82,6 +84,28 @@ export function ReportControls({
             searchPlaceholder="Buscar órgão..."
             clearLabel="Todos os órgãos"
           />
+        </div>
+      )}
+
+      {tipo === "zona" && (
+        <div className="space-y-1.5 lg:w-56">
+          <Label className="text-xs">Zona</Label>
+          <Select
+            value={zona || ALL}
+            onValueChange={(v) => go({ tipo: "zona", zona: v })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Todas as zonas" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Todas as zonas</SelectItem>
+              {ZONAS.map((z) => (
+                <SelectItem key={z} value={z}>
+                  {z}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       )}
 

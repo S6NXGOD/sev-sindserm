@@ -147,12 +147,15 @@ export function WorkplacesFilterBar({
           value={sort}
           onValueChange={(v) => pushWith({ sort: v === "recentes" ? "" : v })}
         >
-          <SelectTrigger className="col-span-2 h-11 lg:h-10 lg:w-44">
+          <SelectTrigger className="col-span-2 h-11 lg:h-10 lg:w-52">
             <SelectValue placeholder="Ordenar" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="recentes">Mais recentes</SelectItem>
-            <SelectItem value="antigos">Mais antigos</SelectItem>
+            <SelectItem value="fim_desc">Encerramento recente</SelectItem>
+            <SelectItem value="inicio_desc">Abertura recente</SelectItem>
+            <SelectItem value="votos">Mais votados</SelectItem>
+            <SelectItem value="recentes">Cadastro recente</SelectItem>
+            <SelectItem value="antigos">Cadastro antigo</SelectItem>
             <SelectItem value="nome">Nome (A–Z)</SelectItem>
           </SelectContent>
         </Select>

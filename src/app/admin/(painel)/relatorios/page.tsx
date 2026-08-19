@@ -35,6 +35,15 @@ type SearchParams = {
   ano?: string;
 };
 
+const ZONA_VALUES = new Set([
+  "SUL",
+  "LESTE",
+  "SUDESTE",
+  "NORTE",
+  "CENTRO",
+  "RURAL",
+]);
+
 
 export default async function RelatoriosPage({
   searchParams,
@@ -49,6 +58,7 @@ export default async function RelatoriosPage({
   const opts: {
     anoEleicao: number;
     orgao?: string;
+    zona?: string;
     localId?: string;
     somenteEncerradas?: boolean;
   } = { anoEleicao: ano };
@@ -62,6 +72,14 @@ export default async function RelatoriosPage({
       filtroDescricao = `Órgão: ${searchParams.orgao}`;
     } else {
       filtroDescricao = "Todos os órgãos";
+    }
+  } else if (tipo === "zona") {
+    tituloRelatorio = "Relatório por Zona";
+    if (searchParams.zona && ZONA_VALUES.has(searchParams.zona)) {
+      opts.zona = searchParams.zona;
+      filtroDescricao = `Zona: ${searchParams.zona}`;
+    } else {
+      filtroDescricao = "Todas as zonas";
     }
   } else if (tipo === "local") {
     tituloRelatorio = "Relatório por Local de Trabalho";
@@ -261,7 +279,17 @@ export default async function RelatoriosPage({
                 </CardContent>
               </Card>
             ) : (
-              <ApuracoesList apuracoes={data.apuracoes} />
+              <ApuracoesList
+                apuracoes={data.apuracoes}
+                orgaos={[...new Set(data.apuracoes.map((a) => a.orgao))].sort(
+                  (x, y) => x.localeCompare(y),
+                )}
+                zonas={[...new Set(data.apuracoes.map((a) => a.zona))].sort(
+                  (x, y) => x.localeCompare(y),
+                )}
+                defaultSort={tipo === "encerradas" ? "fim_desc" : "orgao_asc"}
+                showControls
+              />
             )}
           </div>
         </>

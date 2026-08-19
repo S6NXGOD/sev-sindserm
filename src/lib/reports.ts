@@ -22,6 +22,9 @@ export type Apuracao = {
   status: ApuracaoStatus;
   inicioDisplay: string;
   fimDisplay: string;
+  /** Timestamps (ms) para ORDENAR por ciclo de vida; null = sem janela. */
+  inicioSort: number | null;
+  fimSort: number | null;
   totalVotos: number;
   voteLimit: number | null;
   totalCandidatos: number;
@@ -191,6 +194,8 @@ export async function getReportData(opts: {
         ? formatDateTime(w.dataInicioVotacao)
         : "—",
       fimDisplay: w.dataFimVotacao ? formatDateTime(w.dataFimVotacao) : "—",
+      inicioSort: w.dataInicioVotacao?.getTime() ?? null,
+      fimSort: w.dataFimVotacao?.getTime() ?? null,
       totalVotos,
       voteLimit: w.voteLimit,
       totalCandidatos,

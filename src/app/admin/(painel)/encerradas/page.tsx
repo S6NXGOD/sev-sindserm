@@ -77,6 +77,14 @@ export default async function EncerradasPage({
   );
   const totalVotos = data.apuracoes.reduce((s, a) => s + a.totalVotos, 0);
 
+  // Opções de filtro derivadas do que REALMENTE existe entre as encerradas.
+  const orgaos = [...new Set(data.apuracoes.map((a) => a.orgao))].sort((x, y) =>
+    x.localeCompare(y),
+  );
+  const zonas = [...new Set(data.apuracoes.map((a) => a.zona))].sort((x, y) =>
+    x.localeCompare(y),
+  );
+
   return (
     <div className="space-y-6">
       <div>
@@ -142,7 +150,13 @@ export default async function EncerradasPage({
           </CardContent>
         </Card>
       ) : (
-        <ApuracoesList apuracoes={data.apuracoes} />
+        <ApuracoesList
+          apuracoes={data.apuracoes}
+          orgaos={orgaos}
+          zonas={zonas}
+          defaultSort="fim_desc"
+          showControls
+        />
       )}
     </div>
   );

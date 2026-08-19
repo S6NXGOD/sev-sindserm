@@ -127,11 +127,26 @@ export default async function TransparenciaPage({
       </header>
 
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{pleito.titulo}</h1>
-          <p className="text-sm text-muted-foreground">
-            Triênio {pleito.trienio} · Dados públicos e auditáveis · sem login.
-          </p>
+        {/* Identidade do pleito SELECIONADO: logo em destaque + título. */}
+        <div className="flex items-center gap-4">
+          {pleito.logoPleito && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={pleito.logoPleito}
+              alt={`Logo ${pleito.titulo}`}
+              className="h-16 w-16 shrink-0 rounded-xl border bg-white object-contain p-1 shadow-sm sm:h-20 sm:w-20"
+            />
+          )}
+          <div className="min-w-0">
+            <h1 className="truncate text-2xl font-bold tracking-tight">
+              {pleito.titulo}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Triênio {pleito.trienio}
+              {pleito.isEspecial ? " · Especial" : ""} · Dados públicos e
+              auditáveis · sem login.
+            </p>
+          </div>
         </div>
 
         {/* Central de Links: o filiado acha sua urna e vai votar. */}

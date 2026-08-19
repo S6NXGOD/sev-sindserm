@@ -47,13 +47,27 @@ type SearchParams = {
   ano?: string;
 };
 
-/** Ordenação da listagem. Padrão: recém-criados no topo (createdAt desc). */
+/**
+ * Ordenação da listagem por CICLO DE VIDA da votação (não só cadastro):
+ * datas nulas (sem janela) vão para o fim nas ordenações por data.
+ */
 function buildOrderBy(
   sort?: string,
 ): Prisma.WorkplaceOrderByWithRelationInput {
-  if (sort === "nome") return { nome: "asc" };
-  if (sort === "antigos") return { createdAt: "asc" };
-  return { createdAt: "desc" };
+  switch (sort) {
+    case "nome":
+      return { nome: "asc" };
+    case "antigos":
+      return { createdAt: "asc" };
+    case "fim_desc": // encerramento mais recente primeiro
+      return { dataFimVotacao: { sort: "desc", nulls: "last" } };
+    case "inicio_desc": // abertura mais recente primeiro
+      return { dataInicioVotacao: { sort: "desc", nulls: "last" } };
+    case "votos": // mais votados primeiro
+      return { votes: { _count: "desc" } };
+    default: // "recentes" = recém-CADASTRADOS no topo
+      return { createdAt: "desc" };
+  }
 }
 
 // A busca textual (`q`) NÃO entra aqui: é feita em memória (por tokens, acento/

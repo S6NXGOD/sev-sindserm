@@ -231,6 +231,30 @@ export async function getTransparenciaData(
     return true;
   });
 
+  // ORDEM POR CICLO DE VIDA (o filiado vê "as eleições rolando" primeiro):
+  // 1º as EM ANDAMENTO (mais votantes no topo), 2º as ENCERRADAS recentes,
+  // 3º as que vão abrir (mais próximas), 4º as ainda sem agenda (nome). Antes
+  // era só alfabético — as centenas de "aguardando" afogavam o que interessa.
+  const RANK: Record<LocalStatus, number> = {
+    open: 0,
+    closed: 1,
+    upcoming: 2,
+    undefined: 3,
+  };
+  locais.sort((a, b) => {
+    if (RANK[a.status] !== RANK[b.status]) return RANK[a.status] - RANK[b.status];
+    switch (a.status) {
+      case "open":
+        return b.totalVotantes - a.totalVotantes || a.nome.localeCompare(b.nome);
+      case "closed": // encerrou mais recentemente primeiro
+        return (b.dataFim ?? "").localeCompare(a.dataFim ?? "");
+      case "upcoming": // abre mais cedo primeiro
+        return (a.dataInicio ?? "").localeCompare(b.dataInicio ?? "");
+      default:
+        return a.nome.localeCompare(b.nome);
+    }
+  });
+
   return {
     pleito: {
       id: election.id,

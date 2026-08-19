@@ -1,12 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronDown, Filter, Search, X } from "lucide-react";
 import type { Apuracao } from "@/lib/reports";
 import { searchScore, searchTokens } from "@/lib/slug";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Combobox } from "@/components/ui/combobox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -34,6 +43,42 @@ const STATUS_VARIANT: Record<
 };
 const MAX_ELEITOS_NOMES = 8;
 
+export type ApuracaoSort =
+  | "fim_desc"
+  | "fim_asc"
+  | "votos_desc"
+  | "nome_asc"
+  | "orgao_asc";
+
+const SORTS: { value: ApuracaoSort; label: string }[] = [
+  { value: "fim_desc", label: "Encerramento (recente → antigo)" },
+  { value: "fim_asc", label: "Encerramento (antigo → recente)" },
+  { value: "votos_desc", label: "Mais votos" },
+  { value: "nome_asc", label: "Nome (A–Z)" },
+  { value: "orgao_asc", label: "Órgão (A–Z)" },
+];
+
+const ALL = "all";
+const MENOS_INF = Number.NEGATIVE_INFINITY;
+const MAIS_INF = Number.POSITIVE_INFINITY;
+
+function comparar(sort: ApuracaoSort) {
+  return (a: Apuracao, b: Apuracao) => {
+    switch (sort) {
+      case "fim_desc":
+        return (b.fimSort ?? MENOS_INF) - (a.fimSort ?? MENOS_INF);
+      case "fim_asc":
+        return (a.fimSort ?? MAIS_INF) - (b.fimSort ?? MAIS_INF);
+      case "votos_desc":
+        return b.totalVotos - a.totalVotos || a.nome.localeCompare(b.nome);
+      case "nome_asc":
+        return a.nome.localeCompare(b.nome);
+      case "orgao_asc":
+        return a.orgao.localeCompare(b.orgao) || a.nome.localeCompare(b.nome);
+    }
+  };
+}
+
 /**
  * Card de apuração de UM local com o ranking COLAPSÁVEL. Na tela o ranking fica
  * recolhido por padrão (lista compacta); na IMPRESSÃO ele é sempre exibido
@@ -52,20 +97,22 @@ function ApuracaoCard({ a }: { a: Apuracao }) {
     <Card className="break-inside-avoid">
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
+          <div className="min-w-0">
             <CardTitle className="text-base">{a.nome}</CardTitle>
-            <p className="text-xs text-muted-foreground">
+            <p className="truncate text-xs text-muted-foreground">
               {a.orgao} · Zona {a.zona}
             </p>
           </div>
-          <Badge variant={STATUS_VARIANT[a.status]}>
+          <Badge variant={STATUS_VARIANT[a.status]} className="shrink-0">
             {STATUS_LABEL[a.status]}
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground">
           Janela: {a.inicioDisplay} até {a.fimDisplay} · {a.totalCandidatos}{" "}
           candidato(s) · {a.vagas} {a.vagas === 1 ? "vaga" : "vagas"} ·{" "}
-          {a.totalVotos} {a.totalVotos === 1 ? "voto" : "votos"}
+          <strong className="text-foreground">
+            {a.totalVotos} {a.totalVotos === 1 ? "voto" : "votos"}
+          </strong>
           {a.voteLimit ? ` (limite ${a.voteLimit})` : ""}
         </p>
         {semVotos ? (
@@ -162,36 +209,139 @@ function ApuracaoCard({ a }: { a: Apuracao }) {
 }
 
 /**
- * Lista de apurações por local, com filtro por texto (nome/órgão/zona). Os
- * cards que não casam com o filtro ficam ocultos na TELA, mas continuam visíveis
- * na IMPRESSÃO (`print:block`) — o relatório impresso é sempre completo.
+ * Lista de apurações por local. Filtra por TEXTO (nome/órgão/zona) e,
+ * opcionalmente, por ÓRGÃO e ZONA (dropdowns), e ORDENA por ciclo de vida
+ * (encerramento recente por padrão na Encerradas). Os cards ocultos por filtro
+ * seguem visíveis na IMPRESSÃO (`print:block`) — o relatório impresso é completo.
  */
-export function ApuracoesList({ apuracoes }: { apuracoes: Apuracao[] }) {
+export function ApuracoesList({
+  apuracoes,
+  orgaos,
+  zonas,
+  defaultSort = "orgao_asc",
+  showControls = false,
+}: {
+  apuracoes: Apuracao[];
+  /** Se informado, mostra o filtro de órgão (derivado das apurações). */
+  orgaos?: string[];
+  /** Se informado, mostra o filtro de zona. */
+  zonas?: string[];
+  defaultSort?: ApuracaoSort;
+  /** Mostra a barra de ordenação/filtros (Encerradas). */
+  showControls?: boolean;
+}) {
   const [q, setQ] = useState("");
+  const [orgao, setOrgao] = useState("");
+  const [zona, setZona] = useState("");
+  const [sort, setSort] = useState<ApuracaoSort>(defaultSort);
+
   const tokens = searchTokens(q);
   const casa = (a: Apuracao) =>
-    tokens.length === 0 ||
-    searchScore(`${a.nome} ${a.orgao} ${a.zona}`, tokens) > 0;
-  const qtd = tokens.length ? apuracoes.filter(casa).length : apuracoes.length;
+    (tokens.length === 0 ||
+      searchScore(`${a.nome} ${a.orgao} ${a.zona}`, tokens) > 0) &&
+    (orgao === "" || a.orgao === orgao) &&
+    (zona === "" || a.zona === zona);
+
+  // Ordena TODAS (o filtro só decide o que fica visível na tela).
+  const ordenadas = useMemo(
+    () => [...apuracoes].sort(comparar(sort)),
+    [apuracoes, sort],
+  );
+
+  const visiveis = ordenadas.filter(casa).length;
+  const temFiltro = q.trim() !== "" || orgao !== "" || zona !== "";
 
   return (
     <div className="space-y-3">
-      <div className="relative print:hidden">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Filtrar local por nome, órgão ou zona..."
-          className="pl-9"
-        />
-      </div>
-      {tokens.length > 0 && (
-        <p className="text-xs text-muted-foreground print:hidden">
-          {qtd} de {apuracoes.length} locais
+      <div className="flex flex-col gap-2 print:hidden">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Filtrar local por nome, órgão ou zona..."
+            className="h-11 pl-9"
+          />
+        </div>
+
+        {showControls && (
+          <div className="grid grid-cols-2 gap-2 lg:flex lg:flex-wrap lg:items-center">
+            <div className="col-span-2 flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground lg:col-span-1">
+              <Filter className="h-3.5 w-3.5" />
+              Ordenar / filtrar
+            </div>
+            <Select value={sort} onValueChange={(v) => setSort(v as ApuracaoSort)}>
+              <SelectTrigger className="col-span-2 h-10 lg:w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORTS.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {orgaos && orgaos.length > 0 && (
+              <div className="col-span-2 lg:w-56">
+                <Combobox
+                  value={orgao}
+                  onChange={setOrgao}
+                  options={orgaos.map((o) => ({ value: o, label: o }))}
+                  placeholder="Todos os órgãos"
+                  searchPlaceholder="Buscar órgão..."
+                  clearLabel="Todos os órgãos"
+                />
+              </div>
+            )}
+
+            {zonas && zonas.length > 0 && (
+              <Select
+                value={zona || ALL}
+                onValueChange={(v) => setZona(v === ALL ? "" : v)}
+              >
+                <SelectTrigger className="h-10 lg:w-40">
+                  <SelectValue placeholder="Zona" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>Todas as zonas</SelectItem>
+                  {zonas.map((z) => (
+                    <SelectItem key={z} value={z}>
+                      {z}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {temFiltro && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="col-span-2 lg:w-auto"
+                onClick={() => {
+                  setQ("");
+                  setOrgao("");
+                  setZona("");
+                }}
+              >
+                <X className="mr-1 h-4 w-4" />
+                Limpar
+              </Button>
+            )}
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground">
+          {temFiltro
+            ? `${visiveis} de ${apuracoes.length} locais`
+            : `${apuracoes.length} local(is)`}
         </p>
-      )}
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2 print:grid-cols-1">
-        {apuracoes.map((a) => (
+        {ordenadas.map((a) => (
           <div key={a.id} className={cn(!casa(a) && "hidden print:block")}>
             <ApuracaoCard a={a} />
           </div>
