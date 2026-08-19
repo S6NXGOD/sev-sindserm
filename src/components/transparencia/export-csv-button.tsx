@@ -1,20 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Loader2 } from "lucide-react";
+import { FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { fetchEleitosCsv } from "@/lib/actions/transparencia";
+import { fetchEleitosCsv, fetchEleitosRows } from "@/lib/actions/transparencia";
+import { downloadRelatorioGeralPdf, type PdfPleito } from "@/lib/transparencia-pdf";
 import { Button } from "@/components/ui/button";
 
 /**
- * Baixa o relatório geral do pleito (CSV consolidado com todos os eleitos).
- * Gera no servidor (Server Action) e dispara o download no cliente via Blob.
+ * Baixa o relatório geral do pleito (todos os eleitos titulares dos locais
+ * encerrados) em CSV ou PDF. Ambos geram no servidor/cliente e disparam o
+ * download via Blob. Layout com wrap — nunca "quebra" em telas estreitas.
  */
-export function ExportCsvButton({ electionId }: { electionId: string }) {
-  const [loading, setLoading] = useState(false);
+export function ExportButtons({
+  electionId,
+  pleito,
+}: {
+  electionId: string;
+  pleito: PdfPleito;
+}) {
+  const [loading, setLoading] = useState<"csv" | "pdf" | null>(null);
 
-  async function baixar() {
-    setLoading(true);
+  async function baixarCsv() {
+    setLoading("csv");
     try {
       const res = await fetchEleitosCsv(electionId);
       if (!res || res.csv.trim().split("\n").length <= 1) {
@@ -29,20 +37,59 @@ export function ExportCsvButton({ electionId }: { electionId: string }) {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast.error("Não foi possível gerar o relatório.");
+      toast.error("Não foi possível gerar o CSV.");
     } finally {
-      setLoading(false);
+      setLoading(null);
+    }
+  }
+
+  async function baixarPdf() {
+    setLoading("pdf");
+    try {
+      const data = await fetchEleitosRows(electionId);
+      if (!data || data.rows.length === 0) {
+        toast.info("Ainda não há eleitos consolidados neste pleito.");
+        return;
+      }
+      await downloadRelatorioGeralPdf(data, pleito);
+    } catch {
+      toast.error("Não foi possível gerar o PDF.");
+    } finally {
+      setLoading(null);
     }
   }
 
   return (
-    <Button onClick={baixar} disabled={loading} variant="secondary">
-      {loading ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-      ) : (
-        <Download className="mr-2 h-4 w-4" />
-      )}
-      Baixar Relatório Geral (CSV)
-    </Button>
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="mr-1 text-xs font-medium text-muted-foreground">
+        Relatório Geral:
+      </span>
+      <Button
+        onClick={baixarCsv}
+        disabled={loading !== null}
+        variant="secondary"
+        size="sm"
+      >
+        {loading === "csv" ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <FileSpreadsheet className="mr-2 h-4 w-4" />
+        )}
+        CSV
+      </Button>
+      <Button
+        onClick={baixarPdf}
+        disabled={loading !== null}
+        variant="secondary"
+        size="sm"
+      >
+        {loading === "pdf" ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <FileText className="mr-2 h-4 w-4" />
+        )}
+        PDF
+      </Button>
+    </div>
   );
 }

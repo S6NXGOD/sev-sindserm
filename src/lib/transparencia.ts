@@ -452,10 +452,21 @@ export async function getResultadoLocal(
 const CSV_CAP = 20000;
 
 /** CSV consolidado: todos os eleitos (locais encerrados) do pleito. */
-export async function getEleitosCsv(electionId: string): Promise<{
-  filename: string;
-  csv: string;
-} | null> {
+export type EleitoRow = {
+  local: string;
+  orgao: string;
+  zona: string;
+  eleito: string;
+  votos: number;
+};
+
+/**
+ * Linhas ESTRUTURADAS do relatório geral de eleitos (locais ENCERRADOS, apenas
+ * titulares por vaga). Base única para o CSV e para o PDF do Portal.
+ */
+export async function getEleitosRows(
+  electionId: string,
+): Promise<{ ano: number; rows: EleitoRow[] } | null> {
   const election = await prisma.election.findUnique({
     where: { id: electionId },
     select: { ano: true, duracaoMandato: true },
@@ -519,7 +530,7 @@ export async function getEleitosCsv(electionId: string): Promise<{
     byLocal.set(r.wid, arr);
   }
 
-  const linhas: string[][] = [];
+  const rows: EleitoRow[] = [];
   const metaById = new Map(fechados.map((l) => [l.id, l]));
   for (const l of fechados.sort((a, b) => a.nome.localeCompare(b.nome))) {
     const vagas = calcularVagas(candMap.get(l.id) ?? 0);
@@ -530,25 +541,38 @@ export async function getEleitosCsv(electionId: string): Promise<{
       .slice(0, eleitosCount);
     const meta = metaById.get(l.id)!;
     for (const c of top) {
-      if (linhas.length >= CSV_CAP) break;
-      linhas.push([
-        meta.nome,
-        meta.orgao,
-        meta.zona,
-        c.nome,
-        String(c.votos),
-      ]);
+      if (rows.length >= CSV_CAP) break;
+      rows.push({
+        local: meta.nome,
+        orgao: meta.orgao,
+        zona: meta.zona,
+        eleito: c.nome,
+        votos: c.votos,
+      });
     }
   }
 
+  return { ano, rows };
+}
+
+export async function getEleitosCsv(electionId: string): Promise<{
+  filename: string;
+  csv: string;
+} | null> {
+  const data = await getEleitosRows(electionId);
+  if (!data) return null;
+
   const header = ["Local", "Orgao", "Zona", "Eleito", "Votos"];
   const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
-  const corpo = [header, ...linhas]
+  const corpo = [
+    header,
+    ...data.rows.map((r) => [r.local, r.orgao, r.zona, r.eleito, String(r.votos)]),
+  ]
     .map((linha) => linha.map(esc).join(";"))
     .join("\r\n");
 
   return {
-    filename: `eleitos-pleito-${ano}.csv`,
+    filename: `eleitos-pleito-${data.ano}.csv`,
     // BOM para o Excel reconhecer UTF-8.
     csv: `﻿${corpo}`,
   };

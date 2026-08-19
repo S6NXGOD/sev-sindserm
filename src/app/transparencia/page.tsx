@@ -9,7 +9,7 @@ import { PleitoSelector } from "@/components/transparencia/pleito-selector";
 import { FiltrosBar } from "@/components/transparencia/filtros-bar";
 import { BuscaUrnaFloat } from "@/components/transparencia/busca-urna-float";
 import { LocaisGrid } from "@/components/transparencia/locais-grid";
-import { ExportCsvButton } from "@/components/transparencia/export-csv-button";
+import { ExportButtons } from "@/components/transparencia/export-csv-button";
 import { NovoResultadoSom } from "@/components/transparencia/novo-resultado-som";
 
 export const dynamic = "force-dynamic";
@@ -38,12 +38,13 @@ function Kpi({
       <div className={`shrink-0 rounded-lg p-2.5 ${cls}`}>
         <Icon className="h-5 w-5" />
       </div>
-      {/* min-w-0 evita que labels longos estourem a célula no grid de 6 colunas. */}
+      {/* min-w-0 evita que o número longo estoure; o rótulo pode quebrar em 2
+          linhas (sem truncar) para não cortar "Locais de votação" etc. */}
       <div className="min-w-0">
         <p className="text-2xl font-bold leading-none">
           {value.toLocaleString("pt-BR")}
         </p>
-        <p className="truncate text-xs text-muted-foreground">{label}</p>
+        <p className="mt-1 text-xs leading-tight text-muted-foreground">{label}</p>
       </div>
     </div>
   );
@@ -147,7 +148,7 @@ export default async function TransparenciaPage({
             <div className="min-w-0 flex-1">
               <PleitoSelector pleitos={pleitos} selected={pleitoId} />
             </div>
-            <ExportCsvButton electionId={pleitoId} />
+            <ExportButtons electionId={pleitoId} pleito={pdfPleito} />
           </div>
         </div>
 

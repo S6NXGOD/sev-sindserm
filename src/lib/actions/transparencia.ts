@@ -4,7 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { searchScore, searchTokens } from "@/lib/slug";
 import {
   getEleitosCsv,
+  getEleitosRows,
   getResultadoLocal,
+  type EleitoRow,
   type ResultadoLocal,
 } from "@/lib/transparencia";
 
@@ -77,4 +79,13 @@ export async function fetchEleitosCsv(
   const id = String(electionId ?? "").trim();
   if (!id) return null;
   return getEleitosCsv(id);
+}
+
+/** Dados estruturados dos eleitos (para gerar o PDF geral no cliente). */
+export async function fetchEleitosRows(
+  electionId: string,
+): Promise<{ ano: number; rows: EleitoRow[] } | null> {
+  const id = String(electionId ?? "").trim();
+  if (!id) return null;
+  return getEleitosRows(id);
 }

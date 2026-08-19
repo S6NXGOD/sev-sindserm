@@ -1,4 +1,4 @@
-import type { ResultadoLocal } from "@/lib/transparencia";
+import type { EleitoRow, ResultadoLocal } from "@/lib/transparencia";
 
 async function fetchPngDataUrl(url: string): Promise<string | null> {
   try {
@@ -169,4 +169,137 @@ export async function downloadResultadoPdf(
   doc.save(
     `eleitos-${resultado.nome.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}.pdf`,
   );
+}
+
+/**
+ * Gera (no cliente) o PDF do RELATÓRIO GERAL do pleito: todos os eleitos
+ * (titulares) dos locais ENCERRADOS, agrupados por local, com cabeçalho oficial.
+ * Mesmos dados do CSV — versão pronta para imprimir/arquivar.
+ */
+export async function downloadRelatorioGeralPdf(
+  data: { ano: number; rows: EleitoRow[] },
+  pleito: PdfPleito,
+) {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const marginX = 48;
+  const bottom = pageHeight - 48;
+
+  const [sindsermData, pleitoData] = await Promise.all([
+    fetchPngDataUrl(pleito.logoSindserm),
+    pleito.logoPleito ? fetchPngDataUrl(pleito.logoPleito) : null,
+  ]);
+  const drawLogo = (
+    dataUrl: string,
+    side: "left" | "right",
+    maxW: number,
+    maxH: number,
+  ) => {
+    try {
+      const props = doc.getImageProperties(dataUrl);
+      const scale = Math.min(maxW / props.width, maxH / props.height);
+      const w = props.width * scale;
+      const h = props.height * scale;
+      const x = side === "left" ? marginX : pageWidth - marginX - w;
+      doc.addImage(dataUrl, x, 38 + (maxH - h) / 2, w, h);
+    } catch {
+      /* ignora imagem inválida (ex.: SVG) */
+    }
+  };
+  if (sindsermData) drawLogo(sindsermData, "left", 140, 44);
+  if (pleitoData) drawLogo(pleitoData, "right", 50, 50);
+
+  const centerX = pageWidth / 2;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("SEV SINDSERM", centerX, 56, { align: "center" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.5);
+  doc.text("Portal da Transparência · Relatório Geral de Eleitos", centerX, 70, { align: "center" });
+  doc.text(doc.splitTextToSize(pleito.titulo, pageWidth - marginX * 2), centerX, 84, { align: "center" });
+
+  let y = 108;
+  doc.setDrawColor(210);
+  doc.line(marginX, y, pageWidth - marginX, y);
+  y += 22;
+
+  // Agrupa por local preservando a ordem (rows já vêm ordenadas por nome).
+  const grupos: { local: string; orgao: string; zona: string; eleitos: EleitoRow[] }[] = [];
+  for (const r of data.rows) {
+    let g = grupos.find((x) => x.local === r.local);
+    if (!g) {
+      g = { local: r.local, orgao: r.orgao, zona: r.zona, eleitos: [] };
+      grupos.push(g);
+    }
+    g.eleitos.push(r);
+  }
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(90);
+  doc.text(
+    `${data.rows.length} eleito(s) em ${grupos.length} local(is) encerrado(s).`,
+    marginX,
+    y,
+  );
+  doc.setTextColor(20);
+  y += 22;
+
+  const ensureSpace = (need: number) => {
+    if (y + need > bottom) {
+      doc.addPage();
+      y = 56;
+    }
+  };
+
+  if (grupos.length === 0) {
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(11);
+    doc.setTextColor(120);
+    doc.text("Ainda não há eleitos consolidados neste pleito.", marginX, y);
+  }
+
+  for (const g of grupos) {
+    ensureSpace(46);
+    // Cabeçalho do local.
+    doc.setFillColor(16, 122, 76);
+    doc.roundedRect(marginX, y - 12, pageWidth - marginX * 2, 22, 4, 4, "F");
+    doc.setTextColor(255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text(
+      doc.splitTextToSize(g.local, pageWidth - marginX * 2 - 90)[0],
+      marginX + 10,
+      y + 3,
+    );
+    doc.text(`${g.eleitos.length} eleito(s)`, pageWidth - marginX - 10, y + 3, {
+      align: "right",
+    });
+    doc.setTextColor(120);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    y += 22;
+    doc.text(`${g.orgao} · Zona ${g.zona}`, marginX + 4, y);
+    doc.setTextColor(20);
+    y += 16;
+
+    doc.setFontSize(10.5);
+    g.eleitos.forEach((c, i) => {
+      ensureSpace(16);
+      doc.setFont("helvetica", "normal");
+      doc.text(
+        doc.splitTextToSize(`${i + 1}. ${c.eleito}`, pageWidth - marginX * 2 - 80)[0],
+        marginX + 4,
+        y,
+      );
+      doc.setFont("helvetica", "bold");
+      doc.text(`${c.votos} voto(s)`, pageWidth - marginX - 4, y, { align: "right" });
+      y += 15;
+    });
+    y += 12;
+  }
+
+  doc.save(`relatorio-geral-eleitos-pleito-${data.ano}.pdf`);
 }
