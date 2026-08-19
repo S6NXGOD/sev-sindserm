@@ -33,6 +33,9 @@ export type VagaVaziaItem = {
   zona: string;
   vagas: number;
   vagasVazias: number;
+  /** Encerrou com NENHUM eleito (caso mais grave — destaque em vermelho). */
+  semEleito: boolean;
+  totalVotos: number;
 };
 
 function PendingButton({
@@ -52,10 +55,23 @@ function PendingButton({
 function LocalInfo({ item }: { item: VagaVaziaItem }) {
   return (
     <div className="min-w-0">
-      <p className="font-semibold leading-tight">{item.nome}</p>
+      <p className="flex flex-wrap items-center gap-2 font-semibold leading-tight">
+        <span>{item.nome}</span>
+        {item.semEleito && (
+          <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+            Nenhum eleito
+          </span>
+        )}
+      </p>
       <p className="text-xs text-muted-foreground">
-        {item.orgao} · Zona {item.zona} · {item.vagasVazias} de {item.vagas}{" "}
-        {item.vagas === 1 ? "vaga" : "vagas"} sem eleito
+        {item.orgao} · Zona {item.zona} ·{" "}
+        {item.semEleito
+          ? `${item.totalVotos} voto(s) — 0 de ${item.vagas} ${
+              item.vagas === 1 ? "vaga preenchida" : "vagas preenchidas"
+            }`
+          : `${item.vagasVazias} de ${item.vagas} ${
+              item.vagas === 1 ? "vaga" : "vagas"
+            } sem eleito`}
       </p>
     </div>
   );
@@ -154,8 +170,16 @@ export function VagasVaziasPanel({
   const [verAceitas, setVerAceitas] = useState(false);
   if (pendentes.length === 0 && aceitas.length === 0) return null;
 
+  // Os SEM NENHUM eleito (mais graves) vêm primeiro na lista de decisão.
+  const pendentesOrdenados = [...pendentes].sort(
+    (a, b) => Number(b.semEleito) - Number(a.semEleito),
+  );
+
   return (
-    <section className="rounded-xl border-2 border-amber-300 bg-amber-50 shadow-sm">
+    <section
+      id="vagas-sem-eleito"
+      className="scroll-mt-20 rounded-xl border-2 border-amber-300 bg-amber-50 shadow-sm"
+    >
       <div className="flex flex-wrap items-center gap-2 border-b border-amber-200 p-4">
         <Scale className="h-5 w-5 shrink-0 text-amber-600" />
         <h2 className="text-base font-bold text-amber-900">Vagas sem eleito</h2>
@@ -174,7 +198,7 @@ export function VagasVaziasPanel({
             cada um, decida:
           </p>
           <ul className="divide-y divide-amber-200">
-            {pendentes.map((item) => (
+            {pendentesOrdenados.map((item) => (
               <li key={item.id} className="p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <LocalInfo item={item} />

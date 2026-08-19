@@ -218,15 +218,31 @@ function ScheduleForm({ data }: { data: ManagerData }) {
     initialActionState,
   );
   useToastState(state);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // ALERTA: abrir/agendar votação SEM candidatos deixa a urna abrir mostrando
+  // "sem candidatos" (vexatório). Avisa antes e pede confirmação explícita.
+  const semCandidatos = data.totalCandidatos === 0;
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form ref={formRef} action={formAction} className="space-y-3">
       <input type="hidden" name="id" value={data.id} />
       {data.status === "undefined" && (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           Este local <strong>ainda não foi agendado</strong>. Preencha o início e o
           fim abaixo para abrir a urna — enquanto isso, o link público exibe um
           aviso e não aceita votos.
+        </p>
+      )}
+      {semCandidatos && (
+        <p className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-600" />
+          <span>
+            Este local <strong>não tem candidatos cadastrados</strong>. Se você
+            abrir a votação assim, a urna vai exibir <em>&ldquo;sem
+            candidatos&rdquo;</em> e ninguém poderá votar. O ideal é cadastrar os
+            candidatos antes de agendar.
+          </span>
         </p>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -253,9 +269,52 @@ function ScheduleForm({ data }: { data: ManagerData }) {
           />
         </div>
       </div>
-      <PendingButton type="submit" size="sm" variant="secondary">
-        Salvar horário
-      </PendingButton>
+
+      {semCandidatos ? (
+        // Sem candidatos: intercepta o salvar com uma confirmação explícita.
+        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <DialogTrigger asChild>
+            <Button type="button" size="sm" variant="secondary">
+              Salvar horário
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Agendar sem candidatos?</DialogTitle>
+              <DialogDescription>
+                <strong>{data.nome}</strong> não tem nenhum candidato cadastrado.
+                Se você agendar assim, a urna abrirá mostrando{" "}
+                <em>&ldquo;sem candidatos&rdquo;</em> e não receberá votos. O
+                recomendado é cadastrar os candidatos antes. Deseja agendar mesmo
+                assim?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setConfirmOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => {
+                  setConfirmOpen(false);
+                  formRef.current?.requestSubmit();
+                }}
+              >
+                Agendar mesmo assim
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <PendingButton type="submit" size="sm" variant="secondary">
+          Salvar horário
+        </PendingButton>
+      )}
     </form>
   );
 }

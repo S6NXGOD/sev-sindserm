@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  AlertTriangle,
   Award,
   Building2,
   CheckCircle2,
@@ -101,6 +102,9 @@ export default async function EncerradasPage({
     zona: a.zona,
     vagas: a.vagas,
     vagasVazias: a.vagasVazias,
+    // Encerrou com NENHUM eleito (caso mais grave — destaque/alerta).
+    semEleito: a.eleitos.length === 0,
+    totalVotos: a.totalVotos,
   });
   const vagaVaziaPendentes = data.apuracoes
     .filter((a) => a.vagasVazias > 0 && !a.vagasVaziasAceitas)
@@ -108,6 +112,8 @@ export default async function EncerradasPage({
   const vagaVaziaAceitas = data.apuracoes
     .filter((a) => a.vagasVazias > 0 && a.vagasVaziasAceitas)
     .map(toVagaItem);
+  // Encerrados SEM NENHUM eleito ainda pendentes de decisão (para o botão fácil).
+  const semEleitoCount = vagaVaziaPendentes.filter((i) => i.semEleito).length;
 
   // Opções de filtro derivadas do que REALMENTE existe entre as encerradas.
   const orgaos = [...new Set(data.apuracoes.map((a) => a.orgao))].sort((x, y) =>
@@ -156,6 +162,33 @@ export default async function EncerradasPage({
           tone="amber"
         />
       </div>
+
+      {/* BOTÃO FÁCIL: encerrados sem NENHUM eleito (só aparece se houver).
+          Leva direto ao painel de decisão, com esses casos destacados no topo. */}
+      {semEleitoCount > 0 && (
+        <a
+          href="#vagas-sem-eleito"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-rose-300 bg-rose-50 p-4 shadow-sm transition hover:bg-rose-100"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600" />
+            <div className="min-w-0">
+              <p className="font-bold text-rose-900">
+                {semEleitoCount}{" "}
+                {semEleitoCount === 1
+                  ? "local encerrado sem nenhum eleito"
+                  : "locais encerrados sem nenhum eleito"}
+              </p>
+              <p className="text-xs text-rose-700">
+                Abriram e fecharam sem eleger ninguém. Toque para revisar e agir.
+              </p>
+            </div>
+          </div>
+          <span className="shrink-0 text-sm font-semibold text-rose-700">
+            Ver e agir →
+          </span>
+        </a>
+      )}
 
       {/* EMPATES — no topo, para resolver rápido (só aparece se houver). */}
       <EmpatesPanel empates={empates} />
