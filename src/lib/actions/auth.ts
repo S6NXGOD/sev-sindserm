@@ -1,6 +1,6 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   SESSION_COOKIE,
@@ -22,6 +22,51 @@ const COOKIE_OPTS = {
   maxAge: SESSION_MAX_AGE_SECONDS,
 };
 
+/* -------------------------------------------------------------------------- */
+/*  Anti brute-force do login (memória, por instância). FAIL-OPEN: qualquer    */
+/*  imprevisto libera o login — nunca trava um admin legítimo por engano. A    */
+/*  chave é usuário+IP: as falhas de um usuário não bloqueiam outro no mesmo   */
+/*  IP (ex.: mesma rede da diretoria).                                          */
+/* -------------------------------------------------------------------------- */
+const FAIL_LIMIT = 8; // tentativas erradas antes do bloqueio temporário
+const FAIL_WINDOW_MS = 15 * 60 * 1000; // janela de contagem / bloqueio
+const tentativas = new Map<string, { count: number; first: number }>();
+
+function ipDaRequisicao(): string {
+  try {
+    const fwd = headers().get("x-forwarded-for");
+    return fwd?.split(",")[0]?.trim() || "desconhecido";
+  } catch {
+    return "desconhecido";
+  }
+}
+
+function loginBloqueado(key: string): boolean {
+  const e = tentativas.get(key);
+  if (!e) return false;
+  if (Date.now() - e.first > FAIL_WINDOW_MS) {
+    tentativas.delete(key);
+    return false;
+  }
+  return e.count >= FAIL_LIMIT;
+}
+
+function registrarFalhaLogin(key: string): void {
+  const now = Date.now();
+  const e = tentativas.get(key);
+  if (!e || now - e.first > FAIL_WINDOW_MS) {
+    tentativas.set(key, { count: 1, first: now });
+  } else {
+    e.count += 1;
+  }
+  // Trava de crescimento do mapa (proteção de memória).
+  if (tentativas.size > 10000) tentativas.clear();
+}
+
+function limparFalhasLogin(key: string): void {
+  tentativas.delete(key);
+}
+
 /**
  * Login por USUÁRIO + SENHA. Cada pessoa tem seu login; a sessão carrega a
  * identidade (para auditoria e permissões). Mensagem genérica em falha de
@@ -41,12 +86,25 @@ export async function login(
     return { status: "error", message: "Informe o usuário e a senha." };
   }
 
+  // Anti brute-force: bloqueia temporariamente após muitas tentativas erradas.
+  const throttleKey = `${username}:${ipDaRequisicao()}`;
+  if (loginBloqueado(throttleKey)) {
+    await registrarAuditoria("LOGIN_BLOQUEADO", { alvo: username, user: null });
+    return {
+      status: "error",
+      message:
+        "Muitas tentativas de login. Aguarde alguns minutos e tente novamente.",
+    };
+  }
+
   const user = await prisma.user.findUnique({ where: { username } });
   const senhaOk = user
     ? await verifyPassword(password, user.passwordHash)
     : false;
 
   if (!user || !senhaOk) {
+    registrarFalhaLogin(throttleKey);
+    await registrarAuditoria("LOGIN_FALHOU", { alvo: username, user: null });
     return { status: "error", message: "Usuário ou senha incorretos." };
   }
   if (!user.ativo) {
@@ -55,6 +113,9 @@ export async function login(
       message: "Seu acesso está desativado. Fale com o administrador.",
     };
   }
+
+  // Sucesso: zera o contador de falhas desta chave.
+  limparFalhasLogin(throttleKey);
 
   const token = await createSessionToken(user.id, user.sessionVersion);
   cookies().set(SESSION_COOKIE, token, COOKIE_OPTS);

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -27,6 +28,15 @@ function listar(nomes: string[]): string {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/** Comparação de segredo em tempo constante (evita timing side-channel). */
+function segredoConfere(recebido: string | null): boolean {
+  const esperado = process.env.CRON_SECRET;
+  if (!esperado || !recebido) return false;
+  const a = Buffer.from(recebido);
+  const b = Buffer.from(esperado);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 /**
  * CRON de notificações por TEMPO. Chamado periodicamente (a cada ~10-15 min).
  * Protegido por CRON_SECRET (header `x-cron-secret` ou ?secret=). Envia:
@@ -41,7 +51,7 @@ async function handler(req: NextRequest) {
   const secret =
     req.headers.get("x-cron-secret") ??
     new URL(req.url).searchParams.get("secret");
-  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+  if (!segredoConfere(secret)) {
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
   if (!pushHabilitado()) {

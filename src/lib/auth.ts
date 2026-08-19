@@ -23,8 +23,23 @@ export const SESSION_COOKIE = "admin_session";
 // deslizante), então o usuário nunca é deslogado por tempo de token/inatividade.
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 365 * 10; // ~10 anos
 
+// Segredo de assinatura da sessão. FAIL-CLOSED em produção: sem um SESSION_SECRET
+// próprio, tokens seriam forjáveis por quem conhecesse o default do código — por
+// isso, em produção, a ausência (ou uso do default) INTERROMPE a operação em vez
+// de aceitar sessões inseguras. Em dev/local, permite rodar sem configurar.
+const INSECURE_DEFAULT = "dev-insecure-secret-change-me";
+
 function getSecret(): string {
-  return process.env.SESSION_SECRET ?? "dev-insecure-secret-change-me";
+  const s = process.env.SESSION_SECRET;
+  if (!s || s === INSECURE_DEFAULT) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "SESSION_SECRET ausente ou inseguro em produção. Configure a variável de ambiente com um valor secreto e estável.",
+      );
+    }
+    return INSECURE_DEFAULT;
+  }
+  return s;
 }
 
 const encoder = new TextEncoder();

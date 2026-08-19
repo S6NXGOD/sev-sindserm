@@ -25,6 +25,8 @@ export type AuditRow = {
 /** Rótulo legível da ação (fallback: o próprio código). */
 const ACAO_LABEL: Record<string, string> = {
   LOGIN: "Entrou no sistema",
+  LOGIN_FALHOU: "Tentativa de login falhou",
+  LOGIN_BLOQUEADO: "Login bloqueado (muitas tentativas)",
   LOGOUT: "Saiu do sistema",
   TROCOU_SENHA: "Trocou a própria senha",
   CRIOU_USUARIO: "Criou usuário",
@@ -58,9 +60,17 @@ const ACAO_LABEL: Record<string, string> = {
 
 /** Cor por família de ação. */
 function acaoTone(acao: string): string {
-  if (acao.startsWith("EXCLUIU") || acao === "DESLOGOU_TODOS")
+  if (
+    acao.startsWith("EXCLUIU") ||
+    acao === "DESLOGOU_TODOS" ||
+    acao === "LOGIN_BLOQUEADO"
+  )
     return "border-rose-300 bg-rose-50 text-rose-700";
-  if (acao === "ENCERROU" || acao === "DESATIVOU_USUARIO")
+  if (
+    acao === "ENCERROU" ||
+    acao === "DESATIVOU_USUARIO" ||
+    acao === "LOGIN_FALHOU"
+  )
     return "border-amber-300 bg-amber-50 text-amber-700";
   if (acao === "LOGIN" || acao === "AGENDOU_VOTACAO" || acao.startsWith("CRIOU"))
     return "border-emerald-300 bg-emerald-50 text-emerald-700";
@@ -77,9 +87,15 @@ const FILTROS = [
 
 function categoria(acao: string): string {
   if (
-    ["LOGIN", "LOGOUT", "TROCOU_SENHA", "DESLOGOU_TODOS", "EDITOU_PERFIL"].includes(
-      acao,
-    )
+    [
+      "LOGIN",
+      "LOGIN_FALHOU",
+      "LOGIN_BLOQUEADO",
+      "LOGOUT",
+      "TROCOU_SENHA",
+      "DESLOGOU_TODOS",
+      "EDITOU_PERFIL",
+    ].includes(acao)
   )
     return "auth";
   if (acao.endsWith("_USUARIO") || acao === "RESETOU_SENHA") return "usuarios";
