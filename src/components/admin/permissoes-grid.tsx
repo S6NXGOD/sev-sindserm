@@ -11,9 +11,11 @@ import {
 } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
-// Módulos só-de-leitura mostram 2 botões; editáveis mostram os 3.
-const NIVEIS_LEITURA: Nivel[] = ["NONE", "VIEW"];
-const NIVEIS_EDICAO: Nivel[] = ["NONE", "VIEW", "EDIT"];
+// Todos os módulos mostram os 3 níveis (igual ao mockup). Em módulos sem ações
+// de edição, "Visualizar e editar" tem o mesmo efeito de "Só visualizar" — mas
+// manter os 3 evita que um valor "EDIT" (vindo da migração de papéis) apareça
+// como "nada selecionado".
+const NIVEIS: Nivel[] = ["NONE", "VIEW", "EDIT"];
 
 const NIVEL_TXT: Record<Nivel, string> = {
   NONE: "Sem acesso",
@@ -108,7 +110,7 @@ export function PermissoesGrid({
             {grupo.nome}
           </p>
           {grupo.itens.map((mod) => {
-            const niveis = mod.editavel ? NIVEIS_EDICAO : NIVEIS_LEITURA;
+            const niveis = NIVEIS;
             return (
               <div
                 key={mod.key}
