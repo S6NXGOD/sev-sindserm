@@ -101,23 +101,29 @@ export default async function LocalDetailPage({
       }),
     ]);
 
-  // Nomes apenas dos candidatos que receberam votos (conjunto limitado).
+  // Nomes + status de renúncia dos candidatos que receberam votos.
   const idsComVotos = grupos.map((g) => g.candidateId);
   const nomes = idsComVotos.length
     ? await prisma.candidate.findMany({
         where: { id: { in: idsComVotos } },
-        select: { id: true, nome: true },
+        select: { id: true, nome: true, renunciou: true, renunciaMotivo: true },
       })
     : [];
-  const nomeById = new Map(nomes.map((c) => [c.id, c.nome]));
+  const metaById = new Map(nomes.map((c) => [c.id, c]));
 
-  const ranked = grupos.map((g) => ({
-    id: g.candidateId,
-    nome: nomeById.get(g.candidateId) ?? "—",
-    votos: g._count.candidateId,
-  }));
+  const ranked = grupos.map((g) => {
+    const m = metaById.get(g.candidateId);
+    return {
+      id: g.candidateId,
+      nome: m?.nome ?? "—",
+      votos: g._count.candidateId,
+      renunciou: m?.renunciou ?? false,
+      renunciaMotivo: m?.renunciaMotivo ?? null,
+    };
+  });
 
   // Apuração de eleitos: nº de vagas vem do total real de candidatos.
+  // Candidatos que renunciaram são pulados e o suplente é promovido.
   const resultado = apurarEleitos(ranked, vagas);
 
   const ranking = ranked.slice(0, RANKING_SIZE).map((c) => ({
@@ -125,6 +131,8 @@ export default async function LocalDetailPage({
     nome: c.nome,
     votos: c.votos,
     pct: totalVotes > 0 ? Math.round((c.votos / totalVotes) * 100) : 0,
+    renunciou: c.renunciou,
+    renunciaMotivo: c.renunciaMotivo,
   }));
 
   const data: ManagerData = {
@@ -152,6 +160,14 @@ export default async function LocalDetailPage({
     vagasEmDisputa: resultado.vagasEmDisputa,
     temEmpate: resultado.temEmpate,
     eleitosIds: resultado.eleitos.map((c) => c.id),
+    // Quem não assume a vaga (renúncia/desistência/desempate) + vagas vazias.
+    renunciantes: resultado.renunciantes.map((c) => ({
+      id: c.id,
+      nome: c.nome,
+      votos: c.votos,
+      motivo: c.renunciaMotivo,
+    })),
+    vagasVazias: resultado.vagasVazias,
     ranking,
 
     candidates: candidatesPage.map((c) => ({

@@ -252,6 +252,30 @@ export function LocalCard({
                 </div>
               )}
 
+              {resultado.renunciantes.length > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-bold text-slate-500">
+                    Não assumiram a vaga
+                  </p>
+                  <ul className="space-y-1.5">
+                    {resultado.renunciantes.map((c, i) => (
+                      <li
+                        key={`${c.nome}-${i}`}
+                        className="flex items-center justify-between gap-2 rounded-md border bg-slate-50 px-3 py-2 text-sm text-muted-foreground"
+                      >
+                        <span className="truncate line-through">{c.nome}</span>
+                        <span className="shrink-0 tabular-nums">
+                          {c.votos} {c.votos === 1 ? "voto" : "votos"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    A vaga foi promovida ao próximo suplente.
+                  </p>
+                </div>
+              )}
+
               {resultado.semVotos > 0 && (
                 <p className="text-xs text-muted-foreground">
                   + {resultado.semVotos} candidato(s) sem votos.

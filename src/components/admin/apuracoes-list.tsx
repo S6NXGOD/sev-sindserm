@@ -133,6 +133,21 @@ function ApuracaoCard({ a }: { a: Apuracao }) {
                 {empatadosMostrados.join(", ")} — necessário desempate.
               </p>
             )}
+            {a.renunciantes.length > 0 && (
+              <p className="text-xs text-slate-500">
+                Não assumiram (suplente promovido):{" "}
+                {a.renunciantes
+                  .map((r) => `${r.nome}${r.motivo ? ` (${r.motivo})` : ""}`)
+                  .join(", ")}
+                .
+              </p>
+            )}
+            {a.vagasVazias > 0 && (
+              <p className="text-xs text-amber-600">
+                {a.vagasVazias} {a.vagasVazias === 1 ? "vaga" : "vagas"} sem
+                preenchimento.
+              </p>
+            )}
           </div>
         )}
       </CardHeader>
@@ -173,8 +188,17 @@ function ApuracaoCard({ a }: { a: Apuracao }) {
                   <TableRow key={`${a.id}-${i}`}>
                     <TableCell className={c.eleito ? "font-semibold" : undefined}>
                       <span className="inline-flex items-center gap-2">
-                        {i + 1}. {c.nome}
-                        {c.eleito ? (
+                        <span className={c.renunciou ? "line-through text-muted-foreground" : undefined}>
+                          {i + 1}. {c.nome}
+                        </span>
+                        {c.renunciou ? (
+                          <Badge
+                            variant="outline"
+                            className="border-slate-300 text-slate-500"
+                          >
+                            Não assumiu
+                          </Badge>
+                        ) : c.eleito ? (
                           <Badge variant="success">Eleito</Badge>
                         ) : (
                           <Badge

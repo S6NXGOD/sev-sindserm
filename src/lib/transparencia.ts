@@ -349,6 +349,8 @@ export type ResultadoLocal = {
   totalVotantes: number;
   eleitos: CandidatoResultado[];
   suplentes: CandidatoResultado[];
+  /** Candidatos que NÃO assumiram a vaga (renúncia/desistência/desempate). */
+  renunciantes: CandidatoResultado[];
   /** Candidatos sem nenhum voto (não listados, apenas contados). */
   semVotos: number;
 };
@@ -388,21 +390,32 @@ export async function getResultadoLocal(
   const nomes = ids.length
     ? await prisma.candidate.findMany({
         where: { id: { in: ids } },
-        select: { id: true, nome: true },
+        select: { id: true, nome: true, renunciou: true },
       })
     : [];
-  const nomeById = new Map(nomes.map((c) => [c.id, c.nome]));
+  const metaById = new Map(nomes.map((c) => [c.id, c]));
 
-  const ranked: CandidatoResultado[] = grupos
+  const ranked = grupos
     .map((g) => ({
-      nome: nomeById.get(g.candidateId) ?? "—",
+      nome: metaById.get(g.candidateId)?.nome ?? "—",
       votos: g._count.candidateId,
+      renunciou: metaById.get(g.candidateId)?.renunciou ?? false,
     }))
     .sort((a, b) => b.votos - a.votos || a.nome.localeCompare(b.nome));
 
-  const assentos = Math.min(vagas, ranked.length);
-  const eleitos = ranked.slice(0, assentos);
-  const suplentes = ranked.slice(assentos);
+  // Renúncia: quem não assume sai da fila de eleitos/suplentes e é listado à
+  // parte; a vaga passa automaticamente ao próximo elegível.
+  const elegiveis = ranked.filter((c) => !c.renunciou);
+  const renunciantes: CandidatoResultado[] = ranked
+    .filter((c) => c.renunciou)
+    .map((c) => ({ nome: c.nome, votos: c.votos }));
+  const assentos = Math.min(vagas, elegiveis.length);
+  const eleitos: CandidatoResultado[] = elegiveis
+    .slice(0, assentos)
+    .map((c) => ({ nome: c.nome, votos: c.votos }));
+  const suplentes: CandidatoResultado[] = elegiveis
+    .slice(assentos)
+    .map((c) => ({ nome: c.nome, votos: c.votos }));
   const semVotos = Math.max(0, totalCandidatos - ranked.length);
 
   return {
@@ -418,6 +431,7 @@ export async function getResultadoLocal(
     totalVotantes: wp._count.voters,
     eleitos,
     suplentes,
+    renunciantes,
     semVotos,
   };
 }

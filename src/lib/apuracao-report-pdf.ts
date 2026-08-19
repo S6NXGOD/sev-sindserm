@@ -245,6 +245,23 @@ export async function downloadApuracaoReportPdf(
       y += 11;
     }
 
+    // Não assumiram a vaga (suplente promovido).
+    if (a.renunciantes.length > 0) {
+      doc.setFontSize(7.5);
+      doc.setTextColor(120);
+      const texto =
+        "Não assumiram (suplente promovido): " +
+        a.renunciantes
+          .map((r) => `${r.nome}${r.motivo ? ` (${r.motivo})` : ""}`)
+          .join(", ");
+      for (const ln of doc.splitTextToSize(texto, contentW - 12) as string[]) {
+        ensureSpace(10);
+        doc.text(ln, marginX + 6, y);
+        y += 10;
+      }
+      doc.setTextColor(20);
+    }
+
     // Ranking (top N).
     const rank = a.ranking.slice(0, RANKING_PDF_CAP);
     if (rank.length > 0) {

@@ -12,6 +12,8 @@ export type ApuracaoCandidato = {
   votos: number;
   pct: number;
   eleito: boolean;
+  /** Não assume a vaga (renúncia/desistência/desempate). */
+  renunciou: boolean;
 };
 
 export type Apuracao = {
@@ -42,6 +44,10 @@ export type Apuracao = {
   empatadosVotos: number | null;
   vagasEmDisputa: number;
   temEmpate: boolean;
+  /** Candidatos que NÃO assumiram a vaga (suplente promovido). */
+  renunciantes: { nome: string; votos: number; motivo: string | null }[];
+  /** Vagas sem preenchimento (faltam suplentes com voto). */
+  vagasVazias: number;
 };
 
 export type ReportSummary = {
@@ -142,25 +148,35 @@ export async function getReportData(opts: {
   const nomes = votedIds.length
     ? await prisma.candidate.findMany({
         where: { id: { in: votedIds } },
-        select: { id: true, nome: true },
+        select: { id: true, nome: true, renunciou: true, renunciaMotivo: true },
       })
     : [];
-  const nomeById = new Map(nomes.map((c) => [c.id, c.nome]));
+  const metaById = new Map(nomes.map((c) => [c.id, c]));
   const candCountMap = new Map(
     candCounts.map((c) => [c.workplaceId, c._count.workplaceId]),
   );
 
-  // Votos por local (apenas candidatos com voto).
+  // Votos por local (apenas candidatos com voto). Carrega o status de renúncia
+  // para a apuração promover o suplente quando alguém não assume a vaga.
   const votadosByLocal = new Map<
     string,
-    { id: string; nome: string; votos: number }[]
+    {
+      id: string;
+      nome: string;
+      votos: number;
+      renunciou: boolean;
+      renunciaMotivo: string | null;
+    }[]
   >();
   for (const g of voteGroups) {
+    const m = metaById.get(g.candidateId);
     const arr = votadosByLocal.get(g.workplaceId) ?? [];
     arr.push({
       id: g.candidateId,
-      nome: nomeById.get(g.candidateId) ?? "—",
+      nome: m?.nome ?? "—",
       votos: g._count.candidateId,
+      renunciou: m?.renunciou ?? false,
+      renunciaMotivo: m?.renunciaMotivo ?? null,
     });
     votadosByLocal.set(g.workplaceId, arr);
   }
@@ -183,6 +199,7 @@ export async function getReportData(opts: {
         votos: c.votos,
         pct: totalVotos > 0 ? Math.round((c.votos / totalVotos) * 100) : 0,
         eleito: eleitosSet.has(c.id),
+        renunciou: c.renunciou,
       }));
 
     return {
@@ -209,6 +226,12 @@ export async function getReportData(opts: {
       empatadosVotos: resultado.empatados[0]?.votos ?? null,
       vagasEmDisputa: resultado.vagasEmDisputa,
       temEmpate: resultado.temEmpate,
+      renunciantes: resultado.renunciantes.map((c) => ({
+        nome: c.nome,
+        votos: c.votos,
+        motivo: c.renunciaMotivo,
+      })),
+      vagasVazias: resultado.vagasVazias,
     };
   });
 

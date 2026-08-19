@@ -21,6 +21,8 @@ import {
   RotateCcw,
   Search,
   Trash2,
+  Undo2,
+  UserX,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -30,6 +32,7 @@ import {
   deleteWorkplace,
   encerrarVotacao,
   reopenWorkplace,
+  setCandidateRenuncia,
   updateSlug,
   updateVoteLimit,
   updateWorkplaceSchedule,
@@ -43,6 +46,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -67,7 +77,21 @@ import { downloadLocalReportPdf } from "@/lib/local-report-pdf";
 export type ManagerCandidate = { id: string; nome: string; votes: number };
 export type ManagerVoter = { id: string; nome: string; horario: string };
 export type Apurado = { id: string; nome: string; votos: number };
-export type RankingItem = { id: string; nome: string; votos: number; pct: number };
+export type RankingItem = {
+  id: string;
+  nome: string;
+  votos: number;
+  pct: number;
+  /** Candidato NÃO assume a vaga (renúncia/desistência/desempate). */
+  renunciou: boolean;
+  renunciaMotivo: string | null;
+};
+export type Renunciante = {
+  id: string;
+  nome: string;
+  votos: number;
+  motivo: string | null;
+};
 
 export type ManagerData = {
   id: string;
@@ -95,6 +119,10 @@ export type ManagerData = {
   vagasEmDisputa: number;
   temEmpate: boolean;
   eleitosIds: string[];
+  /** Candidatos que não assumem a vaga (o suplente foi promovido). */
+  renunciantes: Renunciante[];
+  /** Vagas sem preenchimento (faltam suplentes com voto). */
+  vagasVazias: number;
   ranking: RankingItem[]; // top N para o gráfico de barras
 
   // Gestão de candidatos (paginada/buscável)
@@ -682,6 +710,106 @@ function DeleteWorkplaceButton({ data }: { data: ManagerData }) {
   );
 }
 
+const RENUNCIA_MOTIVOS = [
+  "Renúncia",
+  "Desistência",
+  "Desempate",
+  "Inelegibilidade",
+  "Outro",
+];
+
+/**
+ * Controle de "não assume a vaga" de UM candidato. Ao registrar (com motivo),
+ * a apuração promove o próximo suplente automaticamente. Também permite reverter.
+ */
+function RenunciaButton({ candidate }: { candidate: RankingItem }) {
+  const [state, formAction] = useFormState(
+    setCandidateRenuncia,
+    initialActionState,
+  );
+  const [open, setOpen] = useState(false);
+  const [motivo, setMotivo] = useState("Renúncia");
+
+  useEffect(() => {
+    if (state.status === "success") {
+      toast.success(state.message);
+      setOpen(false);
+    } else if (state.status === "error") {
+      toast.error(state.message);
+    }
+  }, [state]);
+
+  if (candidate.renunciou) {
+    return (
+      <form action={formAction}>
+        <input type="hidden" name="id" value={candidate.id} />
+        <input type="hidden" name="renunciou" value="false" />
+        <PendingButton
+          type="submit"
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-xs text-slate-600"
+        >
+          <Undo2 className="mr-1 h-3.5 w-3.5" />
+          Reverter
+        </PendingButton>
+      </form>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-xs text-amber-700 hover:bg-amber-50"
+        >
+          <UserX className="mr-1 h-3.5 w-3.5" />
+          Não assume
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Candidato não assume a vaga</DialogTitle>
+          <DialogDescription>
+            <strong>{candidate.nome}</strong> deixará de ocupar a vaga. O próximo
+            suplente (mais votado disponível) é promovido automaticamente. Os
+            votos continuam contados e visíveis.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1.5">
+          <Label>Motivo (registrado para a ata)</Label>
+          <Select value={motivo} onValueChange={setMotivo}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {RENUNCIA_MOTIVOS.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {m}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            Cancelar
+          </Button>
+          <form action={formAction}>
+            <input type="hidden" name="id" value={candidate.id} />
+            <input type="hidden" name="renunciou" value="true" />
+            <input type="hidden" name="motivo" value={motivo} />
+            <PendingButton type="submit">Confirmar</PendingButton>
+          </form>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function WorkplaceManager({ data }: { data: ManagerData }) {
   const [pdfLoading, setPdfLoading] = useState(false);
   async function baixarPdf() {
@@ -939,46 +1067,72 @@ export function WorkplaceManager({ data }: { data: ManagerData }) {
                 {data.ranking.map((c) => {
                   const eleito = eleitosIds.has(c.id);
                   const empatado = empatadosIds.has(c.id);
-                  const suplente = !eleito && !empatado && c.votos > 0;
+                  const suplente =
+                    !eleito && !empatado && !c.renunciou && c.votos > 0;
                   return (
                     <li key={c.id} className="space-y-1">
-                      <div className="flex justify-between gap-2 text-sm">
-                        <span className="flex items-center gap-2">
-                          {c.nome}
-                          {eleito && (
-                            <Badge
-                              variant={isClosed ? "success" : "secondary"}
-                              className="gap-1"
-                            >
-                              <Crown className="h-3 w-3" />
-                              {isClosed ? "Eleito" : "Eleito (parcial)"}
-                            </Badge>
-                          )}
-                          {empatado && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <span
+                          className={`flex flex-wrap items-center gap-2 ${
+                            c.renunciou ? "text-muted-foreground" : ""
+                          }`}
+                        >
+                          <span className={c.renunciou ? "line-through" : ""}>
+                            {c.nome}
+                          </span>
+                          {c.renunciou ? (
                             <Badge
                               variant="outline"
-                              className="border-amber-300 text-amber-700"
+                              className="border-slate-300 bg-slate-100 text-slate-600"
                             >
-                              Empate
+                              Não assumiu
+                              {c.renunciaMotivo ? ` · ${c.renunciaMotivo}` : ""}
                             </Badge>
-                          )}
-                          {suplente && (
-                            <Badge
-                              variant="outline"
-                              className="border-sky-300 text-sky-700"
-                            >
-                              Suplente
-                            </Badge>
+                          ) : (
+                            <>
+                              {eleito && (
+                                <Badge
+                                  variant={isClosed ? "success" : "secondary"}
+                                  className="gap-1"
+                                >
+                                  <Crown className="h-3 w-3" />
+                                  {isClosed ? "Eleito" : "Eleito (parcial)"}
+                                </Badge>
+                              )}
+                              {empatado && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-amber-300 text-amber-700"
+                                >
+                                  Empate
+                                </Badge>
+                              )}
+                              {suplente && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-sky-300 text-sky-700"
+                                >
+                                  Suplente
+                                </Badge>
+                              )}
+                            </>
                           )}
                         </span>
-                        <span className="font-medium">
-                          {c.votos} ({c.pct}%)
+                        <span className="flex items-center gap-2">
+                          <span className="font-medium">
+                            {c.votos} ({c.pct}%)
+                          </span>
+                          <RenunciaButton candidate={c} />
                         </span>
                       </div>
                       <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
                         <div
                           className={`h-full rounded-full transition-all ${
-                            eleito ? "bg-emerald-500" : "bg-primary"
+                            c.renunciou
+                              ? "bg-slate-300"
+                              : eleito
+                                ? "bg-emerald-500"
+                                : "bg-primary"
                           }`}
                           style={{ width: `${(c.votos / maxVotes) * 100}%` }}
                         />
@@ -987,6 +1141,35 @@ export function WorkplaceManager({ data }: { data: ManagerData }) {
                   );
                 })}
               </ul>
+
+              {(data.renunciantes.length > 0 || data.vagasVazias > 0) && (
+                <div className="mt-4 space-y-1.5 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                  {data.renunciantes.length > 0 && (
+                    <p>
+                      <strong className="text-slate-700">
+                        {data.renunciantes.length} não assumiu(iram) a vaga:
+                      </strong>{" "}
+                      {data.renunciantes
+                        .map(
+                          (r) => `${r.nome}${r.motivo ? ` (${r.motivo})` : ""}`,
+                        )
+                        .join(", ")}
+                      . O(s) suplente(s) foi(ram) promovido(s) automaticamente.
+                    </p>
+                  )}
+                  {data.vagasVazias > 0 && (
+                    <p className="text-amber-700">
+                      <strong>
+                        {data.vagasVazias}{" "}
+                        {data.vagasVazias === 1 ? "vaga" : "vagas"} sem
+                        preenchimento
+                      </strong>{" "}
+                      — não há suplentes com votos suficientes para promover.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {data.totalCandidatos > data.ranking.length && (
                 <p className="mt-3 text-xs text-muted-foreground">
                   Mostrando os {data.ranking.length} mais votados de{" "}

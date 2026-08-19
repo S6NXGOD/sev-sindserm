@@ -66,11 +66,11 @@ export function EmpatesPanel({ empates }: { empates: Apuracao[] }) {
             <div className="mt-3 flex items-start gap-2 rounded-md bg-slate-50 p-2.5 text-xs text-slate-600">
               <Scale className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
               <p>
-                <strong className="text-slate-700">Sugestão de desempate:</strong>{" "}
-                os empatados têm os mesmos votos — aplique o critério do estatuto
-                (ex.: maior tempo de serviço ou maior idade) ou faça sorteio em
-                assembleia e registre a ata. O sistema não possui esses dados para
-                decidir sozinho.
+                <strong className="text-slate-700">Como desempatar:</strong> os
+                empatados têm os mesmos votos — defina pelo critério do estatuto
+                (tempo de serviço/idade) ou sorteio em assembleia. Depois, abra o
+                local e marque quem <strong>não assume</strong> (motivo:
+                Desempate): o outro é promovido automaticamente. Registre a ata.
               </p>
             </div>
 

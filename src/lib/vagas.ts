@@ -40,6 +40,10 @@ export type ResultadoApuracao<T> = {
   vagasEmDisputa: number;
   /** true quando há empate na linha de corte (necessário desempate). */
   temEmpate: boolean;
+  /** Candidatos COM votos que NÃO assumem a vaga (renúncia/desistência/etc.). */
+  renunciantes: T[];
+  /** Vagas que ficaram VAZIAS por falta de elegíveis com voto suficientes. */
+  vagasVazias: number;
 };
 
 /**
@@ -47,11 +51,14 @@ export type ResultadoApuracao<T> = {
  * O nº de vagas é derivado do total de candidatos cadastrados (`candidatos.length`).
  *
  * - Só são elegíveis candidatos com pelo menos 1 voto.
- * - Em caso de empate na última vaga (mais candidatos do que vagas restantes
- *   com a mesma votação de corte), eles ficam em `empatados` e `temEmpate` é
- *   `true` — sinalizando que é necessário desempate.
+ * - Candidatos com `renunciou = true` NÃO assumem vaga: são PULADOS na
+ *   distribuição das cadeiras (a vaga passa automaticamente ao próximo suplente)
+ *   e devolvidos em `renunciantes`. Seus votos seguem contando para o ranking.
+ * - Em caso de empate na última vaga (mais ELEGÍVEIS na linha de corte do que
+ *   vagas restantes), eles ficam em `empatados` e `temEmpate` é `true`.
+ * - Se sobrarem vagas sem elegíveis suficientes, `vagasVazias` > 0.
  */
-export function apurarEleitos<T extends { votos: number }>(
+export function apurarEleitos<T extends { votos: number; renunciou?: boolean }>(
   candidatos: T[],
   vagasOverride?: number,
 ): ResultadoApuracao<T> {
@@ -66,22 +73,30 @@ export function apurarEleitos<T extends { votos: number }>(
     .filter((c) => c.votos > 0)
     .sort((a, b) => b.votos - a.votos);
 
-  if (vagas === 0 || comVotos.length === 0) {
+  // Quem NÃO assume a vaga (renúncia/desistência/desempate) sai da disputa por
+  // cadeira, mas continua no ranking (votos contados).
+  const renunciantes = comVotos.filter((c) => c.renunciou);
+  const elegiveis = comVotos.filter((c) => !c.renunciou);
+
+  if (vagas === 0 || elegiveis.length === 0) {
     return {
       vagas,
       eleitos: [],
       empatados: [],
       vagasEmDisputa: 0,
       temEmpate: false,
+      renunciantes,
+      vagasVazias: vagas,
     };
   }
 
-  // Não é possível eleger mais candidatos do que os que receberam votos.
-  const assentos = Math.min(vagas, comVotos.length);
-  const votosDeCorte = comVotos[assentos - 1].votos;
+  // Não é possível eleger mais candidatos do que os ELEGÍVEIS com voto.
+  const assentos = Math.min(vagas, elegiveis.length);
+  const vagasVazias = vagas - assentos;
+  const votosDeCorte = elegiveis[assentos - 1].votos;
 
-  const eleitos = comVotos.filter((c) => c.votos > votosDeCorte);
-  const naLinhaDeCorte = comVotos.filter((c) => c.votos === votosDeCorte);
+  const eleitos = elegiveis.filter((c) => c.votos > votosDeCorte);
+  const naLinhaDeCorte = elegiveis.filter((c) => c.votos === votosDeCorte);
   const vagasRestantes = assentos - eleitos.length;
 
   if (naLinhaDeCorte.length > vagasRestantes) {
@@ -91,14 +106,18 @@ export function apurarEleitos<T extends { votos: number }>(
       empatados: naLinhaDeCorte,
       vagasEmDisputa: vagasRestantes,
       temEmpate: true,
+      renunciantes,
+      vagasVazias,
     };
   }
 
   return {
     vagas,
-    eleitos: comVotos.slice(0, assentos),
+    eleitos: elegiveis.slice(0, assentos),
     empatados: [],
     vagasEmDisputa: 0,
     temEmpate: false,
+    renunciantes,
+    vagasVazias,
   };
 }

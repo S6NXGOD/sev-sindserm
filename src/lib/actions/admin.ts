@@ -601,6 +601,61 @@ export async function deleteCandidate(
   return { status: "success", message: "Candidato removido." };
 }
 
+/** Motivos válidos para um candidato NÃO assumir a vaga. */
+const RENUNCIA_MOTIVOS = new Set([
+  "Renúncia",
+  "Desistência",
+  "Desempate",
+  "Inelegibilidade",
+  "Outro",
+]);
+
+/**
+ * Registra (ou desfaz) que um candidato NÃO ASSUME A VAGA — renúncia,
+ * desistência, perda em desempate ou inelegibilidade. Ao marcar, a apuração
+ * promove automaticamente o próximo suplente (recalculada a cada leitura).
+ * Guarda o motivo para a ata/auditoria.
+ */
+export async function setCandidateRenuncia(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const id = String(formData.get("id") ?? "").trim();
+  const renunciou = String(formData.get("renunciou") ?? "") === "true";
+  const motivoRaw = String(formData.get("motivo") ?? "").trim();
+  const motivo = RENUNCIA_MOTIVOS.has(motivoRaw) ? motivoRaw : "Renúncia";
+
+  if (!id) return { status: "error", message: "Candidato inválido." };
+
+  const candidate = await prisma.candidate.findUnique({
+    where: { id },
+    select: { workplaceId: true, nome: true },
+  });
+  if (!candidate) {
+    return { status: "error", message: "Candidato não encontrado." };
+  }
+
+  await prisma.candidate.update({
+    where: { id },
+    data: {
+      renunciou,
+      renunciaMotivo: renunciou ? motivo : null,
+    },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/locais");
+  revalidatePath(`/admin/locais/${candidate.workplaceId}`);
+  revalidatePath("/admin/encerradas");
+  revalidatePath("/admin/relatorios");
+  return {
+    status: "success",
+    message: renunciou
+      ? `${candidate.nome} não assume a vaga (${motivo}). Suplente promovido.`
+      : `${candidate.nome} voltou à disputa da vaga.`,
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /*                       Exportação de votantes (CSV)                          */
 /* -------------------------------------------------------------------------- */

@@ -123,6 +123,14 @@ model Candidate {
   nome        String
   workplaceId String
 
+  // NÃO ASSUME A VAGA: quando true, a apuração PULA este candidato ao distribuir
+  // as vagas e promove automaticamente o próximo suplente. Guarda-chuva para
+  // renúncia, desistência, perda em desempate ou inelegibilidade — o motivo
+  // fica em `renunciaMotivo` (para auditoria/ata). Os votos continuam contados e
+  // exibidos (transparência), mas o candidato não ocupa vaga.
+  renunciou      Boolean @default(false)
+  renunciaMotivo String?
+
   workplace Workplace @relation(fields: [workplaceId], references: [id], onDelete: Cascade)
   votes     Vote[]
 
