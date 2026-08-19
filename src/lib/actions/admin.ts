@@ -13,6 +13,7 @@ import { notificarAdminsBg } from "@/lib/push";
 import { formatDateTime } from "@/lib/format";
 import { buildVoterWhere, type VoterFiltros } from "@/lib/voter-filters";
 import { calcularVagas } from "@/lib/vagas";
+import { apurarLocal } from "@/lib/apuracao";
 import { DEFAULT_LOGO } from "@/lib/logo-constants";
 import type { ActionState } from "@/lib/types";
 
@@ -362,6 +363,7 @@ export async function updateWorkplaceSchedule(
         dataFimVotacao,
         notifStartSent: false,
         notifCloseSent: false,
+        notifEndingSoonSent: false,
       },
       select: { nome: true },
     });
@@ -388,6 +390,18 @@ export async function updateWorkplaceSchedule(
     },
     { exceptUserId: g.user.id },
   );
+  // Alerta acionável: agendado SEM candidatos (evita o vexame na urna).
+  if (semCandidatos) {
+    notificarAdminsBg(
+      {
+        title: "📣 Agendado SEM candidatos",
+        body: `Atenção: "${wp.nome}" foi agendado, mas não tem candidatos cadastrados.`,
+        url: `/admin/locais/${id}`,
+        tag: `semcand-${id}`,
+      },
+      { exceptUserId: g.user.id },
+    );
+  }
   return semCandidatos
     ? {
         status: "warning",
@@ -476,13 +490,29 @@ export async function encerrarVotacao(formData: FormData): Promise<void> {
   revalidatePath("/admin/locais");
   revalidatePath(`/admin/locais/${id}`);
   await registrarAuditoria("ENCERROU", { alvo: workplace.nome, user: g.user });
-  notificarAdminsBg(
-    {
+
+  // Apura para avisar de forma ACIONÁVEL: empate (precisa desempate) ou vaga
+  // vazia (precisa suplementar) têm prioridade sobre o aviso comum.
+  const apur = await apurarLocal(id);
+  let notif;
+  if (apur.temEmpate) {
+    notif = {
+      title: "⚖️ Encerrou com EMPATE",
+      body: `"${workplace.nome}" foi encerrada por ${g.user.nome} e há EMPATE na linha de corte — precisa de desempate.`,
+    };
+  } else if (apur.vagasVazias > 0) {
+    notif = {
+      title: "🟠 Encerrou com vaga vazia",
+      body: `"${workplace.nome}" encerrou com ${apur.vagasVazias} vaga(s) sem eleito. Avalie suplementação.`,
+    };
+  } else {
+    notif = {
       title: "🔒 Votação encerrada",
       body: `${g.user.nome} encerrou "${workplace.nome}".`,
-      url: `/admin/locais/${id}`,
-      tag: `fim-${id}`,
-    },
+    };
+  }
+  notificarAdminsBg(
+    { ...notif, url: `/admin/locais/${id}`, tag: `fim-${id}` },
     { exceptUserId: g.user.id },
   );
 }
@@ -532,6 +562,7 @@ export async function reopenWorkplace(
         dataInicioVotacao: novoInicio,
         dataFimVotacao: novoFim,
         notifCloseSent: false,
+        notifEndingSoonSent: false,
       },
     });
   } catch (error) {

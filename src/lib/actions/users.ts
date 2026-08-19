@@ -10,6 +10,7 @@ import { SESSION_COOKIE } from "@/lib/auth";
 import { guard } from "@/lib/current-user";
 import { registrarAuditoria } from "@/lib/audit";
 import {
+  aplicarRegraSuperAdmin,
   isSuperAdmin,
   normalizarPermissoes,
   rotuloPerfil,
@@ -52,7 +53,11 @@ export async function createUser(
   const nome = String(formData.get("nome") ?? "").trim().slice(0, 80);
   const username = String(formData.get("username") ?? "").trim().toLowerCase();
   const senha = String(formData.get("senha") ?? "");
-  const permissoes = parsePermissoes(formData.get("permissoes"));
+  const superAdmin = String(formData.get("superAdmin") ?? "") === "true";
+  const permissoes = aplicarRegraSuperAdmin(
+    parsePermissoes(formData.get("permissoes")),
+    superAdmin,
+  );
 
   if (!nome) return { status: "error", message: "Informe o nome de exibição." };
   if (!USERNAME_RE.test(username)) {
@@ -102,7 +107,11 @@ export async function updateUser(
 
   const id = String(formData.get("id") ?? "").trim();
   const nome = String(formData.get("nome") ?? "").trim().slice(0, 80);
-  const permissoes = parsePermissoes(formData.get("permissoes"));
+  const superAdmin = String(formData.get("superAdmin") ?? "") === "true";
+  const permissoes = aplicarRegraSuperAdmin(
+    parsePermissoes(formData.get("permissoes")),
+    superAdmin,
+  );
   const foto = validarFoto(formData.get("fotoUrl"));
   if (!id) return { status: "error", message: "Usuário inválido." };
   if (!nome) return { status: "error", message: "Informe o nome de exibição." };

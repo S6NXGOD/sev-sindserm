@@ -111,6 +111,20 @@ export function isSuperAdmin(perms: Permissoes | null | undefined): boolean {
   return pode(perms, "usuarios", "EDIT");
 }
 
+/**
+ * Aplica a REGRA do Administrador Geral:
+ *  - Se `superAdmin` → acesso TOTAL (não existe admin geral com menos que tudo).
+ *  - Senão → ninguém mais tem acesso ao módulo `usuarios` (forçado a NONE).
+ * É o ponto único que garante o invariante, no servidor.
+ */
+export function aplicarRegraSuperAdmin(
+  perms: Permissoes,
+  superAdmin: boolean,
+): Permissoes {
+  if (superAdmin) return presetPermissoes("TOTAL");
+  return { ...perms, usuarios: "NONE" };
+}
+
 /** Href do 1º módulo que o usuário pode ao menos ver (a "home" dele), ou null. */
 export function primeiroModuloHref(perms: Permissoes): string | null {
   for (const m of MODULOS_KEYS) {

@@ -11,6 +11,7 @@ import {
   Plus,
   Power,
   Shield,
+  ShieldCheck,
   Trash2,
   UserPlus,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/actions/users";
 import { initialActionState } from "@/lib/types";
 import {
+  isSuperAdmin,
   presetPermissoes,
   rotuloPerfil,
   type Permissoes,
@@ -35,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -76,9 +79,61 @@ function PendingButton({
   );
 }
 
+/**
+ * Campos de acesso: switch "Administrador Geral" (acesso total, esconde a grade)
+ * OU a grade de permissões por módulo (sem o módulo "usuarios", que é definido
+ * exclusivamente por ser ou não Administrador Geral). Emite os inputs ocultos.
+ */
+function AcessoFields({
+  superAdmin,
+  setSuperAdmin,
+  permissoes,
+  setPermissoes,
+}: {
+  superAdmin: boolean;
+  setSuperAdmin: (v: boolean) => void;
+  permissoes: Permissoes;
+  setPermissoes: (p: Permissoes) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <input type="hidden" name="superAdmin" value={superAdmin ? "true" : "false"} />
+      <input type="hidden" name="permissoes" value={JSON.stringify(permissoes)} />
+
+      <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50/50 p-3">
+        <div>
+          <p className="flex items-center gap-1.5 text-sm font-semibold">
+            <ShieldCheck className="h-4 w-4 text-rose-600" />
+            Administrador Geral
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Acesso total ao sistema, incluindo a gestão de usuários.
+          </p>
+        </div>
+        <Switch checked={superAdmin} onCheckedChange={setSuperAdmin} />
+      </label>
+
+      {superAdmin ? (
+        <p className="rounded-md bg-slate-50 p-3 text-xs text-muted-foreground">
+          Este usuário terá acesso a <strong>tudo</strong>. Não é possível um
+          Administrador Geral com permissões reduzidas — por isso a grade fica
+          desativada.
+        </p>
+      ) : (
+        <PermissoesGrid
+          value={permissoes}
+          onChange={setPermissoes}
+          ocultar={["usuarios"]}
+        />
+      )}
+    </div>
+  );
+}
+
 function NovoUsuarioDialog() {
   const [state, formAction] = useFormState(createUser, initialActionState);
   const [open, setOpen] = useState(false);
+  const [superAdmin, setSuperAdmin] = useState(false);
   const [permissoes, setPermissoes] = useState<Permissoes>(
     presetPermissoes("OPERADOR"),
   );
@@ -87,6 +142,7 @@ function NovoUsuarioDialog() {
     if (state.status === "success") {
       toast.success(state.message);
       setOpen(false);
+      setSuperAdmin(false);
       setPermissoes(presetPermissoes("OPERADOR"));
     } else if (state.status === "error") {
       toast.error(state.message);
@@ -109,11 +165,6 @@ function NovoUsuarioDialog() {
           </DialogDescription>
         </DialogHeader>
         <form action={formAction} className="space-y-4">
-          <input
-            type="hidden"
-            name="permissoes"
-            value={JSON.stringify(permissoes)}
-          />
           <div className="space-y-1.5">
             <Label htmlFor="nu-nome">Nome de exibição</Label>
             <Input id="nu-nome" name="nome" placeholder="Ex.: Maria Diretora" required />
@@ -147,7 +198,12 @@ function NovoUsuarioDialog() {
             troca a senha.
           </p>
 
-          <PermissoesGrid value={permissoes} onChange={setPermissoes} />
+          <AcessoFields
+            superAdmin={superAdmin}
+            setSuperAdmin={setSuperAdmin}
+            permissoes={permissoes}
+            setPermissoes={setPermissoes}
+          />
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
@@ -169,6 +225,7 @@ function EditarUsuarioDialog({ user }: { user: UserRow }) {
   const [open, setOpen] = useState(false);
   const [nome, setNome] = useState(user.nome);
   const [foto, setFoto] = useState<string | null>(user.fotoUrl);
+  const [superAdmin, setSuperAdmin] = useState(isSuperAdmin(user.permissoes));
   const [permissoes, setPermissoes] = useState<Permissoes>(user.permissoes);
 
   useEffect(() => {
@@ -185,6 +242,7 @@ function EditarUsuarioDialog({ user }: { user: UserRow }) {
     if (open) {
       setNome(user.nome);
       setFoto(user.fotoUrl);
+      setSuperAdmin(isSuperAdmin(user.permissoes));
       setPermissoes(user.permissoes);
     }
   }, [open, user]);
@@ -203,11 +261,6 @@ function EditarUsuarioDialog({ user }: { user: UserRow }) {
         </DialogHeader>
         <form action={formAction} className="space-y-4">
           <input type="hidden" name="id" value={user.id} />
-          <input
-            type="hidden"
-            name="permissoes"
-            value={JSON.stringify(permissoes)}
-          />
           <input type="hidden" name="fotoUrl" value={foto ?? ""} />
 
           <PhotoInput nome={nome} value={foto} onChange={setFoto} />
@@ -223,7 +276,12 @@ function EditarUsuarioDialog({ user }: { user: UserRow }) {
             />
           </div>
 
-          <PermissoesGrid value={permissoes} onChange={setPermissoes} />
+          <AcessoFields
+            superAdmin={superAdmin}
+            setSuperAdmin={setSuperAdmin}
+            permissoes={permissoes}
+            setPermissoes={setPermissoes}
+          />
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

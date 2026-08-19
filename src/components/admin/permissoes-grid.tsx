@@ -55,9 +55,12 @@ function BotaoNivel({
 export function PermissoesGrid({
   value,
   onChange,
+  ocultar = [],
 }: {
   value: Permissoes;
   onChange: (p: Permissoes) => void;
+  /** Módulos a esconder (ex.: "usuarios", controlado pelo switch de admin geral). */
+  ocultar?: Modulo[];
 }) {
   function setModulo(m: Modulo, n: Nivel) {
     onChange({ ...value, [m]: n });
@@ -66,6 +69,7 @@ export function PermissoesGrid({
   // Agrupa os módulos por "grupo" preservando a ordem de MODULOS.
   const grupos: { nome: string; itens: typeof MODULOS }[] = [];
   for (const mod of MODULOS) {
+    if (ocultar.includes(mod.key)) continue;
     const g = grupos.find((x) => x.nome === mod.grupo);
     if (g) g.itens.push(mod);
     else grupos.push({ nome: mod.grupo, itens: [mod] });

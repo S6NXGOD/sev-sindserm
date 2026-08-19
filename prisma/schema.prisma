@@ -196,6 +196,8 @@ model Workplace {
   // reagendar (nova janela) / reabrir.
   notifStartSent Boolean @default(false)
   notifCloseSent Boolean @default(false)
+  // Aviso "encerrando em breve" (janela de ~2h antes do fim). Reset ao reagendar/reabrir.
+  notifEndingSoonSent Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
