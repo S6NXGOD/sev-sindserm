@@ -497,44 +497,52 @@ export function UsersManager({
             return (
               <li
                 key={u.id}
-                className={`flex flex-wrap items-center gap-3 p-4 ${
+                className={`flex flex-col gap-3 p-4 sm:flex-row sm:items-center ${
                   u.ativo ? "" : "bg-slate-50 opacity-70"
                 }`}
               >
-                <Avatar nome={u.nome} fotoUrl={u.fotoUrl} size={40} />
-                <div className="min-w-0 flex-1">
-                  <p className="flex flex-wrap items-center gap-2 font-semibold">
-                    <span className="truncate">{u.nome}</span>
-                    {u.id === currentUserId && (
-                      <Badge variant="secondary" className="text-[10px]">
-                        você
-                      </Badge>
-                    )}
-                    {!u.ativo && (
-                      <Badge variant="outline" className="text-[10px] text-slate-500">
-                        inativo
-                      </Badge>
-                    )}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    @{u.username} · desde {u.createdAt}
-                  </p>
+                {/* Identidade: no mobile ocupa a linha inteira (nome não é
+                    espremido). No desktop, fica à esquerda com flex-1. */}
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <Avatar nome={u.nome} fotoUrl={u.fotoUrl} size={40} />
+                  <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-2 font-semibold">
+                      <span className="truncate">{u.nome}</span>
+                      {u.id === currentUserId && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          você
+                        </Badge>
+                      )}
+                      {!u.ativo && (
+                        <Badge variant="outline" className="text-[10px] text-slate-500">
+                          inativo
+                        </Badge>
+                      )}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      @{u.username} · desde {u.createdAt}
+                    </p>
+                  </div>
                 </div>
-                <Badge variant="outline" className={`shrink-0 ${badgeCor(rotulo)}`}>
-                  <Shield className="mr-1 h-3 w-3" />
-                  {rotulo}
-                </Badge>
-                <div className="flex shrink-0 items-center">
-                  <EditarUsuarioDialog user={u} />
-                  <ResetSenhaDialog user={u} />
-                  {/* Ativar/desativar e excluir NÃO se aplicam ao próprio usuário
-                      (você não pode se desativar/excluir — trava também no servidor). */}
-                  {u.id !== currentUserId && (
-                    <>
-                      <AtivarToggle user={u} />
-                      <ExcluirDialog user={u} />
-                    </>
-                  )}
+                {/* Perfil + ações: linha própria no mobile (perfil à esquerda,
+                    ações à direita); no desktop, tudo à direita. */}
+                <div className="flex items-center justify-between gap-2 sm:justify-end">
+                  <Badge variant="outline" className={`shrink-0 ${badgeCor(rotulo)}`}>
+                    <Shield className="mr-1 h-3 w-3" />
+                    {rotulo}
+                  </Badge>
+                  <div className="flex shrink-0 items-center">
+                    <EditarUsuarioDialog user={u} />
+                    <ResetSenhaDialog user={u} />
+                    {/* Ativar/desativar e excluir NÃO se aplicam ao próprio usuário
+                        (você não pode se desativar/excluir — trava no servidor). */}
+                    {u.id !== currentUserId && (
+                      <>
+                        <AtivarToggle user={u} />
+                        <ExcluirDialog user={u} />
+                      </>
+                    )}
+                  </div>
                 </div>
               </li>
             );

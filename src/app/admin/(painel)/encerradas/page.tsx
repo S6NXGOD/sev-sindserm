@@ -54,7 +54,9 @@ function Kpi({
           <p className="text-2xl font-bold leading-none">
             {value.toLocaleString("pt-BR")}
           </p>
-          <p className="truncate text-xs text-muted-foreground">{label}</p>
+          <p className="mt-1 text-xs leading-tight text-muted-foreground">
+            {label}
+          </p>
         </div>
       </CardContent>
     </Card>

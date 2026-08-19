@@ -81,7 +81,7 @@ function Kpi({
           <p className="text-2xl font-bold leading-none">
             {value.toLocaleString("pt-BR")}
           </p>
-          <p className="truncate text-xs text-muted-foreground">{label}</p>
+          <p className="text-xs leading-tight text-muted-foreground">{label}</p>
           {hint && (
             <p className="text-[11px] leading-tight text-muted-foreground">
               {hint}

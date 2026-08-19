@@ -28,9 +28,12 @@ export function EmpatesPanel({ empates }: { empates: Apuracao[] }) {
         </Badge>
       </div>
 
-      <div className="grid gap-3 p-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 p-3 lg:grid-cols-2">
         {empates.map((a) => (
-          <div key={a.id} className="rounded-lg border border-amber-200 bg-white p-4">
+          <div
+            key={a.id}
+            className="min-w-0 overflow-hidden rounded-lg border border-amber-200 bg-white p-4"
+          >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="truncate font-semibold">{a.nome}</p>
@@ -38,7 +41,7 @@ export function EmpatesPanel({ empates }: { empates: Apuracao[] }) {
                   {a.orgao} · Zona {a.zona}
                 </p>
               </div>
-              <Badge className="shrink-0 bg-amber-600 hover:bg-amber-600">
+              <Badge className="shrink-0 bg-amber-600 text-center hover:bg-amber-600">
                 {a.vagasEmDisputa} {a.vagasEmDisputa === 1 ? "vaga" : "vagas"} em
                 disputa
               </Badge>
@@ -55,7 +58,7 @@ export function EmpatesPanel({ empates }: { empates: Apuracao[] }) {
               {a.empatados.map((nome) => (
                 <li
                   key={nome}
-                  className="rounded-full border border-amber-300 bg-amber-100/70 px-2.5 py-0.5 text-xs font-medium text-amber-900"
+                  className="max-w-full break-words rounded-full border border-amber-300 bg-amber-100/70 px-2.5 py-0.5 text-xs font-medium text-amber-900"
                 >
                   {nome}
                 </li>
