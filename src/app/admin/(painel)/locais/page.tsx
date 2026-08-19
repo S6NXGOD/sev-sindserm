@@ -71,6 +71,43 @@ function buildOrderBy(
   }
 }
 
+// Sorts por CICLO DE VIDA ("Abertura recente" / "Encerramento recente"). O
+// orderBy simples do banco (data desc) colocava os locais AGENDADOS PARA O
+// FUTURO no topo — mas algo que ainda vai abrir/encerrar não é "recente". Aqui
+// ordenamos por semântica: 1º os que JÁ aconteceram (passado, mais recente
+// primeiro); depois os FUTUROS (mais próximos primeiro); por fim os SEM data.
+type LifecycleSort = "inicio_desc" | "fim_desc";
+
+function isLifecycleSort(sort?: string): sort is LifecycleSort {
+  return sort === "inicio_desc" || sort === "fim_desc";
+}
+
+function ordenarPorCiclo<
+  T extends {
+    dataInicioVotacao: Date | null;
+    dataFimVotacao: Date | null;
+    createdAt: Date;
+  },
+>(list: T[], sort: LifecycleSort, now: Date): T[] {
+  const nowMs = now.getTime();
+  const dataDe = (w: T) =>
+    (sort === "fim_desc" ? w.dataFimVotacao : w.dataInicioVotacao)?.getTime() ??
+    null;
+  // 0 = já aconteceu (passado), 1 = agendado (futuro), 2 = sem data.
+  const cat = (d: number | null) => (d === null ? 2 : d <= nowMs ? 0 : 1);
+
+  return [...list].sort((a, b) => {
+    const da = dataDe(a);
+    const db = dataDe(b);
+    const ca = cat(da);
+    const cb = cat(db);
+    if (ca !== cb) return ca - cb;
+    if (ca === 2) return b.createdAt.getTime() - a.createdAt.getTime(); // sem data: cadastro recente
+    if (ca === 0) return (db as number) - (da as number); // passado: mais recente primeiro
+    return (da as number) - (db as number); // futuro: mais próximo primeiro
+  });
+}
+
 // A busca textual (`q`) NÃO entra aqui: é feita em memória (por tokens, acento/
 // caixa/ordem-insensível) no componente, pois o `contains` do Postgres é
 // sensível a acento e só casa substring contígua. Aqui ficam só os filtros
@@ -157,6 +194,7 @@ export default async function LocaisPage({
   const tokens = searchTokens(searchParams.q ?? "");
 
   const total = await prisma.workplace.count({ where: { anoEleicao: ano } });
+  const now = new Date();
 
   let filtered: number;
   let workplaces: Prisma.WorkplaceGetPayload<{ include: typeof include }>[];
@@ -177,6 +215,13 @@ export default async function LocaisPage({
     workplaces = ranked
       .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
       .map((x) => x.w);
+  } else if (isLifecycleSort(searchParams.sort)) {
+    // Sorts por ciclo de vida: ordena em memória com a semântica correta
+    // (universo pequeno por pleito). Passado recente > futuro próximo > sem data.
+    const all = await prisma.workplace.findMany({ where, include });
+    const sorted = ordenarPorCiclo(all, searchParams.sort, now);
+    filtered = sorted.length;
+    workplaces = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   } else {
     // Sem busca textual: paginação direta no banco (rápida).
     filtered = await prisma.workplace.count({ where });
