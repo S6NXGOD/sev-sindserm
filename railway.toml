@@ -22,6 +22,6 @@ buildCommand = "npm run build"
 #    Prisma (ex.: EACCES ao spawnar o binário no Railway) DERRUBE o app inteiro.
 # 2) cria o admin (idempotente) — também tolerante a falha.
 # 3) sobe o servidor Next na porta fornecida pela Railway (env PORT).
-startCommand = "(npm run db:deploy || true) && (npm run db:seed || true) && npm run start"
+startCommand = "npm run db:deploy || true && (npm run db:seed || true) && npm run start"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
