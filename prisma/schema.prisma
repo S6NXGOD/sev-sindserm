@@ -65,9 +65,29 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  auditLogs AuditLog[]
+  auditLogs         AuditLog[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
+}
+
+/// Assinatura de PUSH (Web Push) de UM dispositivo/navegador de um usuário do
+/// painel. Um usuário pode ter várias (celular, desktop). `endpoint` é único —
+/// o mesmo navegador reusa/atualiza a sua. Removida quando o push expira (410).
+model PushSubscription {
+  id        String  @id @default(cuid())
+  userId    String
+  endpoint  String  @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 /// Registro de AUDITORIA das ações do painel (quem, o quê, quando). O nome do
@@ -160,6 +180,12 @@ model Workplace {
   dataFimVotacao    DateTime?
   // Limite de votos do local. null = ilimitado.
   voteLimit         Int?
+
+  // Controle de NOTIFICAÇÕES por tempo (evita re-notificar a cada tick do cron):
+  // marcado quando o push de "vai começar" / "encerrou" ja foi enviado. Reset ao
+  // reagendar (nova janela) / reabrir.
+  notifStartSent Boolean @default(false)
+  notifCloseSent Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -1,4 +1,4 @@
-import { Settings, ImageIcon, LogIn, ShieldCheck } from "lucide-react";
+import { Bell, Settings, ImageIcon, LogIn, ShieldCheck } from "lucide-react";
 import {
   getCurrentElectionYear,
   getElectionLogos,
@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { LogoUploadForm } from "@/components/admin/logo-upload-form";
 import { LoginLogoManager } from "@/components/admin/login-logo-manager";
 import { ChangePasswordForm } from "@/components/admin/change-password-form";
+import { NotificationsToggle } from "@/components/pwa/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +126,22 @@ export default async function ConfiguracoesPage({
         </CardHeader>
         <CardContent>
           <ChangePasswordForm />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Bell className="h-5 w-5" />
+            Notificações
+          </CardTitle>
+          <CardDescription>
+            Receba avisos de votações agendadas, prestes a começar e encerradas.
+            É por dispositivo — ative em cada aparelho.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <NotificationsToggle />
         </CardContent>
       </Card>
     </div>

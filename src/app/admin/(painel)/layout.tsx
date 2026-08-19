@@ -6,6 +6,7 @@ import {
 import { requireUser } from "@/lib/current-user";
 import { Sidebar } from "@/components/admin/sidebar";
 import { MobileNav } from "@/components/admin/mobile-nav";
+import { NotificationsPrompt } from "@/components/pwa/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,11 @@ export default async function PainelLayout({
           selectedYear={anoSelecionado}
           user={user}
         />
-        <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">{children}</div>
+        <div className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6 lg:p-8">
+          {/* Prompt de notificações (aparece no 1º acesso; some ao ativar/dispensar). */}
+          <NotificationsPrompt />
+          {children}
+        </div>
       </main>
     </div>
   );

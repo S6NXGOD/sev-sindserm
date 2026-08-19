@@ -9,6 +9,7 @@ import { isValidSlug, searchScore, searchTokens, slugify } from "@/lib/slug";
 import { VOTING_STATUS_ASCII, votingStatus } from "@/lib/voting-status";
 import { guard } from "@/lib/current-user";
 import { registrarAuditoria } from "@/lib/audit";
+import { notificarAdminsBg } from "@/lib/push";
 import { formatDateTime } from "@/lib/format";
 import { buildVoterWhere, type VoterFiltros } from "@/lib/voter-filters";
 import { calcularVagas } from "@/lib/vagas";
@@ -352,7 +353,14 @@ export async function updateWorkplaceSchedule(
   try {
     wp = await prisma.workplace.update({
       where: { id },
-      data: { dataInicioVotacao, dataFimVotacao },
+      // Nova janela → reseta os controles de notificação por tempo (o cron
+      // volta a avisar "vai começar"/"encerrou" para as novas datas).
+      data: {
+        dataInicioVotacao,
+        dataFimVotacao,
+        notifStartSent: false,
+        notifCloseSent: false,
+      },
       select: { nome: true },
     });
   } catch (error) {
@@ -368,6 +376,16 @@ export async function updateWorkplaceSchedule(
     detalhe: `${formatDateTime(dataInicioVotacao)} até ${formatDateTime(dataFimVotacao)}`,
     user: g.user,
   });
+  // Notifica a diretoria (menos quem agendou) — inclui QUEM agendou.
+  notificarAdminsBg(
+    {
+      title: "🗓️ Votação agendada",
+      body: `${g.user.nome} agendou "${wp.nome}" para ${formatDateTime(dataInicioVotacao)}.`,
+      url: `/admin/locais/${id}`,
+      tag: `agenda-${id}`,
+    },
+    { exceptUserId: g.user.id },
+  );
   return semCandidatos
     ? {
         status: "warning",
@@ -447,13 +465,24 @@ export async function encerrarVotacao(formData: FormData): Promise<void> {
 
   await prisma.workplace.update({
     where: { id },
-    data: { dataInicioVotacao: inicio, dataFimVotacao: fim },
+    // notifCloseSent=true: encerramento MANUAL já notifica aqui; o cron não
+    // deve re-notificar este local como "encerrado automaticamente".
+    data: { dataInicioVotacao: inicio, dataFimVotacao: fim, notifCloseSent: true },
   });
 
   revalidatePath("/admin");
   revalidatePath("/admin/locais");
   revalidatePath(`/admin/locais/${id}`);
   await registrarAuditoria("ENCERROU", { alvo: workplace.nome, user: g.user });
+  notificarAdminsBg(
+    {
+      title: "🔒 Votação encerrada",
+      body: `${g.user.nome} encerrou "${workplace.nome}".`,
+      url: `/admin/locais/${id}`,
+      tag: `fim-${id}`,
+    },
+    { exceptUserId: g.user.id },
+  );
 }
 
 /** Reabre uma votação encerrada definindo um novo horário de término futuro. */
@@ -496,7 +525,12 @@ export async function reopenWorkplace(
   try {
     await prisma.workplace.update({
       where: { id },
-      data: { dataInicioVotacao: novoInicio, dataFimVotacao: novoFim },
+      // Reaberta → o cron volta a poder notificar o próximo encerramento.
+      data: {
+        dataInicioVotacao: novoInicio,
+        dataFimVotacao: novoFim,
+        notifCloseSent: false,
+      },
     });
   } catch (error) {
     console.error("Erro ao reabrir votação:", error);
@@ -511,6 +545,15 @@ export async function reopenWorkplace(
     detalhe: `novo término ${formatDateTime(novoFim)}`,
     user: g.user,
   });
+  notificarAdminsBg(
+    {
+      title: "🔓 Votação reaberta",
+      body: `${g.user.nome} reabriu "${workplace.nome}" até ${formatDateTime(novoFim)}.`,
+      url: `/admin/locais/${id}`,
+      tag: `fim-${id}`,
+    },
+    { exceptUserId: g.user.id },
+  );
   return { status: "success", message: "Votação reaberta com sucesso." };
 }
 
@@ -719,6 +762,17 @@ export async function setCandidateRenuncia(
     detalhe: renunciou ? motivo : undefined,
     user: g.user,
   });
+  notificarAdminsBg(
+    {
+      title: renunciou ? "⚖️ Não assume a vaga" : "↩️ Renúncia revertida",
+      body: renunciou
+        ? `${g.user.nome} registrou que ${candidate.nome} não assume a vaga (${motivo}). Suplente promovido.`
+        : `${g.user.nome} reverteu: ${candidate.nome} voltou à disputa.`,
+      url: `/admin/locais/${candidate.workplaceId}`,
+      tag: `renuncia-${id}`,
+    },
+    { exceptUserId: g.user.id },
+  );
   return {
     status: "success",
     message: renunciou
