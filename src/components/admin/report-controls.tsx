@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Printer } from "lucide-react";
 import { ORGAOS, ZONAS } from "@/lib/constants";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import { WorkplaceCombobox } from "@/components/admin/workplace-combobox";
@@ -126,12 +124,6 @@ export function ReportControls({
         </div>
       )}
 
-      <div className="lg:ml-auto">
-        <Button type="button" onClick={() => window.print()}>
-          <Printer className="mr-2 h-4 w-4" />
-          Imprimir / Salvar PDF
-        </Button>
-      </div>
     </div>
   );
 }

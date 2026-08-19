@@ -7,7 +7,7 @@ import { ProximasAberturas } from "@/components/proximas-aberturas";
 import { ParticipacaoPanel } from "@/components/transparencia/participacao-panel";
 import { PleitoSelector } from "@/components/transparencia/pleito-selector";
 import { FiltrosBar } from "@/components/transparencia/filtros-bar";
-import { BuscaUrna } from "@/components/transparencia/busca-urna";
+import { BuscaUrnaFloat } from "@/components/transparencia/busca-urna-float";
 import { LocaisGrid } from "@/components/transparencia/locais-grid";
 import { ExportCsvButton } from "@/components/transparencia/export-csv-button";
 import { NovoResultadoSom } from "@/components/transparencia/novo-resultado-som";
@@ -127,35 +127,27 @@ export default async function TransparenciaPage({
       </header>
 
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
-        {/* Identidade do pleito SELECIONADO: logo em destaque + título. */}
-        <div className="flex items-center gap-4">
-          {pleito.logoPleito && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={pleito.logoPleito}
-              alt={`Logo ${pleito.titulo}`}
-              className="h-16 w-16 shrink-0 rounded-xl border bg-white object-contain p-1 shadow-sm sm:h-20 sm:w-20"
-            />
-          )}
-          <div className="min-w-0">
-            <h1 className="truncate text-2xl font-bold tracking-tight">
-              {pleito.titulo}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Triênio {pleito.trienio}
-              {pleito.isEspecial ? " · Especial" : ""} · Dados públicos e
-              auditáveis · sem login.
-            </p>
-          </div>
+        {/* Título do pleito selecionado (a logo já aparece no cabeçalho — evita
+            redundância). */}
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            {pleito.titulo}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Triênio {pleito.trienio}
+            {pleito.isEspecial ? " · Especial" : ""} · Dados públicos e
+            auditáveis · sem login.
+          </p>
         </div>
 
-        {/* Central de Links: o filiado acha sua urna e vai votar. */}
-        <BuscaUrna electionId={pleitoId} />
-
-        {/* Toolbar: seletor de pleito + relatório geral */}
-        <div className="flex flex-wrap items-end justify-between gap-3 rounded-xl border bg-card p-4 shadow-sm">
-          <PleitoSelector pleitos={pleitos} selected={pleitoId} />
-          <ExportCsvButton electionId={pleitoId} />
+        {/* Seletor de eleição em DESTAQUE — a primeira decisão do filiado. */}
+        <div className="rounded-2xl border-2 border-primary/20 bg-primary/5 p-4 shadow-sm sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <PleitoSelector pleitos={pleitos} selected={pleitoId} />
+            </div>
+            <ExportCsvButton electionId={pleitoId} />
+          </div>
         </div>
 
         {/* KPIs (linha cheia, responsiva) */}
@@ -208,6 +200,10 @@ export default async function TransparenciaPage({
           )}
         </footer>
       </div>
+
+      {/* Widget flutuante "Não sabe onde vota?" — ajuda o filiado a achar a urna
+          sem ocupar um bloco fixo na página. */}
+      <BuscaUrnaFloat electionId={pleitoId} />
 
       {/* "Ao vivo": auto-refresh + som de sucesso a cada novo resultado. */}
       <NovoResultadoSom encerradas={data.kpis.encerradas} autoRefreshMs={45000} />

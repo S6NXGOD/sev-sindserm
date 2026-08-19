@@ -38,6 +38,8 @@ export type Apuracao = {
   eleitos: string[];
   /** Nomes empatados na linha de corte (disputando vaga restante). */
   empatados: string[];
+  /** Votos de CADA empatado (todos têm o mesmo total). null se não há empate. */
+  empatadosVotos: number | null;
   vagasEmDisputa: number;
   temEmpate: boolean;
 };
@@ -204,6 +206,7 @@ export async function getReportData(opts: {
       votadosCount: votados.length,
       eleitos: resultado.eleitos.map((c) => c.nome),
       empatados: resultado.empatados.map((c) => c.nome),
+      empatadosVotos: resultado.empatados[0]?.votos ?? null,
       vagasEmDisputa: resultado.vagasEmDisputa,
       temEmpate: resultado.temEmpate,
     };

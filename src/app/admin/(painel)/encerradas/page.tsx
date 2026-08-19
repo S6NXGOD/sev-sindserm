@@ -4,18 +4,23 @@ import {
   Building2,
   CheckCircle2,
   ExternalLink,
-  Printer,
+  Scale,
   Vote,
 } from "lucide-react";
+import { prisma } from "@/lib/prisma";
 import { getReportData } from "@/lib/reports";
 import {
   getCurrentElectionYear,
+  getElectionLogos,
   getSelectedElectionYear,
   requirePleito,
+  tituloInstitucional,
 } from "@/lib/election";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ApuracoesList } from "@/components/admin/apuracoes-list";
+import { ApuracaoPdfButton } from "@/components/admin/apuracao-pdf-button";
+import { EmpatesPanel } from "@/components/admin/empates-panel";
 import { ExportEleitosButton } from "@/components/admin/export-eleitos-button";
 
 export const dynamic = "force-dynamic";
@@ -30,12 +35,13 @@ function Kpi({
   label: string;
   value: number;
   icon: React.ComponentType<{ className?: string }>;
-  tone?: "default" | "green" | "blue";
+  tone?: "default" | "green" | "blue" | "amber";
 }) {
   const cls = {
     default: "bg-slate-100 text-slate-700",
     green: "bg-emerald-50 text-emerald-600",
     blue: "bg-sky-50 text-sky-600",
+    amber: "bg-amber-50 text-amber-600",
   }[tone];
   return (
     <Card>
@@ -55,10 +61,9 @@ function Kpi({
 }
 
 /**
- * ÁREA RÁPIDA — Encerradas & Eleitos. Um só lugar para ver as votações
- * CONCLUÍDAS, os eleitos de cada local e ir direto aos relatórios/exportações.
- * Reaproveita getReportData({ somenteEncerradas }) e a ApuracoesList (busca +
- * cards de apuração já prontos).
+ * ÁREA RÁPIDA — Encerradas & Eleitos. Um só lugar para NAVEGAR as votações
+ * concluídas, ver os eleitos, os EMPATES a resolver e baixar o documento.
+ * Reaproveita getReportData({ somenteEncerradas }) e a ApuracoesList.
  */
 export default async function EncerradasPage({
   searchParams,
@@ -69,13 +74,19 @@ export default async function EncerradasPage({
   const ano = getSelectedElectionYear(searchParams.ano);
   const anoVigente = getCurrentElectionYear();
 
-  const data = await getReportData({ anoEleicao: ano, somenteEncerradas: true });
+  const [data, logos, pleito] = await Promise.all([
+    getReportData({ anoEleicao: ano, somenteEncerradas: true }),
+    getElectionLogos(ano),
+    prisma.election.findFirst({
+      where: { ano },
+      orderBy: [{ isEleicaoEspecial: "asc" }, { createdAt: "asc" }],
+      select: { titulo: true, duracaoMandato: true },
+    }),
+  ]);
 
-  const totalEleitos = data.apuracoes.reduce(
-    (s, a) => s + a.eleitos.length,
-    0,
-  );
+  const totalEleitos = data.apuracoes.reduce((s, a) => s + a.eleitos.length, 0);
   const totalVotos = data.apuracoes.reduce((s, a) => s + a.totalVotos, 0);
+  const empates = data.apuracoes.filter((a) => a.temEmpate);
 
   // Opções de filtro derivadas do que REALMENTE existe entre as encerradas.
   const orgaos = [...new Set(data.apuracoes.map((a) => a.orgao))].sort((x, y) =>
@@ -85,6 +96,15 @@ export default async function EncerradasPage({
     x.localeCompare(y),
   );
 
+  const pdfHeader = {
+    logoSindserm: logos.sindserm,
+    logoPleito: logos.pleito,
+    tituloPleito: tituloInstitucional(pleito?.titulo, ano, pleito?.duracaoMandato ?? 3),
+    subtitulo: "Relatório de Votações Encerradas",
+    filtro: "Apenas votações encerradas",
+    geradoEm: data.geradoEmDisplay,
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -93,13 +113,13 @@ export default async function EncerradasPage({
         </h1>
         <p className="text-sm text-muted-foreground">
           Votações concluídas da eleição {ano}
-          {ano !== anoVigente ? " (histórico — auditoria)" : ""} — eleitos por
-          local e atalhos para os relatórios.
+          {ano !== anoVigente ? " (histórico — auditoria)" : ""} — eleitos,
+          empates a resolver e o documento oficial.
         </p>
       </div>
 
-      {/* KPIs: 3 colunas já no mobile (números curtos). */}
-      <div className="grid grid-cols-3 gap-3 sm:gap-4">
+      {/* KPIs. "Empates" salta em âmbar quando há resultado travado. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         <Kpi
           label="Locais encerrados"
           value={data.apuracoes.length}
@@ -108,17 +128,23 @@ export default async function EncerradasPage({
         />
         <Kpi label="Eleitos" value={totalEleitos} icon={Award} tone="blue" />
         <Kpi label="Votos apurados" value={totalVotos} icon={Vote} />
+        <Kpi
+          label="Empates a resolver"
+          value={empates.length}
+          icon={Scale}
+          tone="amber"
+        />
       </div>
 
-      {/* Ações rápidas — empilham no mobile, viram linha no desktop. */}
+      {/* EMPATES — no topo, para resolver rápido (só aparece se houver). */}
+      <EmpatesPanel empates={empates} />
+
+      {/* Ações rápidas — o PDF agora é gerado direto aqui (jsPDF). */}
       <Card>
         <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:flex-wrap sm:items-center">
-          <Button asChild className="w-full sm:w-auto">
-            <Link href="/admin/relatorios?tipo=encerradas">
-              <Printer className="mr-2 h-4 w-4" />
-              Relatório completo (imprimir / PDF)
-            </Link>
-          </Button>
+          {data.apuracoes.length > 0 && (
+            <ApuracaoPdfButton data={data} header={pdfHeader} />
+          )}
           <ExportEleitosButton ano={ano} />
           <Button asChild variant="outline" className="w-full sm:w-auto">
             <Link href="/admin/locais?status=closed">
@@ -135,7 +161,7 @@ export default async function EncerradasPage({
         </CardContent>
       </Card>
 
-      {/* Lista de apurações encerradas (busca + cards com eleitos/ranking). */}
+      {/* Lista de apurações encerradas (busca + ordenação + cards). */}
       {data.apuracoes.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">

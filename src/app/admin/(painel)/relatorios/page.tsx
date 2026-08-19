@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { FileText, ListChecks } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getReportData } from "@/lib/reports";
 import {
@@ -7,6 +9,7 @@ import {
   requirePleito,
   tituloInstitucional,
 } from "@/lib/election";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -24,7 +27,6 @@ import {
 import { ReportControls } from "@/components/admin/report-controls";
 import { ExportEleitosButton } from "@/components/admin/export-eleitos-button";
 import { ApuracaoPdfButton } from "@/components/admin/apuracao-pdf-button";
-import { ApuracoesList } from "@/components/admin/apuracoes-list";
 
 export const dynamic = "force-dynamic";
 
@@ -133,7 +135,7 @@ export default async function RelatoriosPage({
           <p className="text-sm text-muted-foreground">
             Apuração da eleição {ano}
             {ano !== anoVigente ? " (histórico — auditoria)" : ""}. Escolha o
-            critério e gere o documento (PDF/CSV) ou imprima.
+            critério e gere o documento oficial (PDF ou CSV).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -281,31 +283,44 @@ export default async function RelatoriosPage({
             </Card>
           )}
 
-          {/* Apurações por local */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold print:hidden">
-              Apuração por local ({data.apuracoes.length})
-            </h2>
-            {data.apuracoes.length === 0 ? (
-              <Card>
-                <CardContent className="py-10 text-center text-muted-foreground">
-                  Nenhum local encontrado para este relatório.
-                </CardContent>
-              </Card>
-            ) : (
-              <ApuracoesList
-                apuracoes={data.apuracoes}
-                orgaos={[...new Set(data.apuracoes.map((a) => a.orgao))].sort(
-                  (x, y) => x.localeCompare(y),
-                )}
-                zonas={[...new Set(data.apuracoes.map((a) => a.zona))].sort(
-                  (x, y) => x.localeCompare(y),
-                )}
-                defaultSort={tipo === "encerradas" ? "fim_desc" : "orgao_asc"}
-                showControls
-              />
-            )}
-          </div>
+          {/* O documento (PDF) contém a apuração local a local; a tela NÃO
+              despeja a lista inteira (era a "rolagem sem fim"). Para NAVEGAR
+              os resultados, o lugar certo é "Encerradas & Eleitos". */}
+          {data.apuracoes.length === 0 ? (
+            <Card>
+              <CardContent className="py-10 text-center text-muted-foreground">
+                Nenhum local encontrado para este critério.
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <FileText className="mt-0.5 h-6 w-6 shrink-0 text-primary" />
+                  <div>
+                    <p className="font-medium">
+                      Documento pronto: {data.apuracoes.length} local(is) neste
+                      critério.
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Gere o <strong>PDF</strong> (apuração completa, com eleitos e
+                      ranking por local) ou a planilha <strong>CSV</strong> de
+                      eleitos nos botões acima.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <ApuracaoPdfButton data={data} header={pdfHeader} />
+                  <Button asChild variant="outline">
+                    <Link href="/admin/encerradas">
+                      <ListChecks className="mr-2 h-4 w-4" />
+                      Navegar local a local
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>

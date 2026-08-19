@@ -32,14 +32,14 @@ export function PleitoSelector({
   }
 
   return (
-    <div className="space-y-1">
-      <Label className="flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground">
-        <Vote className="h-3.5 w-3.5" />
-        Eleição / Pleito
-        {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+    <div className="space-y-1.5">
+      <Label className="flex items-center gap-1.5 text-sm font-bold text-primary">
+        <Vote className="h-4 w-4" />
+        Escolha a eleição que deseja acompanhar
+        {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
       </Label>
       <Select value={selected} onValueChange={trocar}>
-        <SelectTrigger className="h-11 w-full text-base sm:w-[420px]">
+        <SelectTrigger className="h-12 w-full bg-white text-base font-medium shadow-sm">
           <SelectValue placeholder="Selecione um pleito" />
         </SelectTrigger>
         <SelectContent>
@@ -51,6 +51,9 @@ export function PleitoSelector({
           ))}
         </SelectContent>
       </Select>
+      <p className="text-xs text-muted-foreground">
+        Troque aqui para ver os dados de outra eleição/pleito.
+      </p>
     </div>
   );
 }
