@@ -351,8 +351,11 @@ export type ResultadoLocal = {
   totalVotantes: number;
   eleitos: CandidatoResultado[];
   suplentes: CandidatoResultado[];
-  /** Candidatos que NÃO assumiram a vaga (renúncia/desistência/desempate). */
-  renunciantes: CandidatoResultado[];
+  /**
+   * Candidatos que NÃO assumiram a vaga (renúncia/desistência/desempate), com o
+   * MOTIVO — transparência pública da decisão tomada no pleito.
+   */
+  renunciantes: { nome: string; votos: number; motivo: string | null }[];
   /** Candidatos sem nenhum voto (não listados, apenas contados). */
   semVotos: number;
 };
@@ -392,25 +395,29 @@ export async function getResultadoLocal(
   const nomes = ids.length
     ? await prisma.candidate.findMany({
         where: { id: { in: ids } },
-        select: { id: true, nome: true, renunciou: true },
+        select: { id: true, nome: true, renunciou: true, renunciaMotivo: true },
       })
     : [];
   const metaById = new Map(nomes.map((c) => [c.id, c]));
 
   const ranked = grupos
-    .map((g) => ({
-      nome: metaById.get(g.candidateId)?.nome ?? "—",
-      votos: g._count.candidateId,
-      renunciou: metaById.get(g.candidateId)?.renunciou ?? false,
-    }))
+    .map((g) => {
+      const m = metaById.get(g.candidateId);
+      return {
+        nome: m?.nome ?? "—",
+        votos: g._count.candidateId,
+        renunciou: m?.renunciou ?? false,
+        motivo: m?.renunciaMotivo ?? null,
+      };
+    })
     .sort((a, b) => b.votos - a.votos || a.nome.localeCompare(b.nome));
 
   // Renúncia: quem não assume sai da fila de eleitos/suplentes e é listado à
-  // parte; a vaga passa automaticamente ao próximo elegível.
+  // parte (com o motivo); a vaga passa automaticamente ao próximo elegível.
   const elegiveis = ranked.filter((c) => !c.renunciou);
-  const renunciantes: CandidatoResultado[] = ranked
+  const renunciantes = ranked
     .filter((c) => c.renunciou)
-    .map((c) => ({ nome: c.nome, votos: c.votos }));
+    .map((c) => ({ nome: c.nome, votos: c.votos, motivo: c.motivo }));
   const assentos = Math.min(vagas, elegiveis.length);
   const eleitos: CandidatoResultado[] = elegiveis
     .slice(0, assentos)

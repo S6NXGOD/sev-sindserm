@@ -293,23 +293,57 @@ function ResetSenhaDialog({ user }: { user: UserRow }) {
 
 function AtivarToggle({ user }: { user: UserRow }) {
   const [state, formAction] = useFormState(setUserAtivo, initialActionState);
+  const [open, setOpen] = useState(false);
   useEffect(() => {
-    if (state.status === "success") toast.success(state.message);
-    else if (state.status === "error") toast.error(state.message);
+    if (state.status === "success") {
+      toast.success(state.message);
+      setOpen(false);
+    } else if (state.status === "error") toast.error(state.message);
   }, [state]);
+
+  // Reativar é inofensivo → um clique. Desativar desloga a pessoa → confirma.
+  if (!user.ativo) {
+    return (
+      <form action={formAction}>
+        <input type="hidden" name="id" value={user.id} />
+        <input type="hidden" name="ativo" value="true" />
+        <PendingButton type="submit" variant="ghost" size="icon" title="Reativar">
+          <Power className="h-4 w-4 text-slate-400" />
+        </PendingButton>
+      </form>
+    );
+  }
+
   return (
-    <form action={formAction}>
-      <input type="hidden" name="id" value={user.id} />
-      <input type="hidden" name="ativo" value={user.ativo ? "false" : "true"} />
-      <PendingButton
-        type="submit"
-        variant="ghost"
-        size="icon"
-        title={user.ativo ? "Desativar" : "Reativar"}
-      >
-        <Power className={`h-4 w-4 ${user.ativo ? "text-emerald-600" : "text-slate-400"}`} />
-      </PendingButton>
-    </form>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button type="button" variant="ghost" size="icon" title="Desativar">
+          <Power className="h-4 w-4 text-emerald-600" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Desativar {user.nome}?</DialogTitle>
+          <DialogDescription>
+            @{user.username} perderá o acesso imediatamente (será deslogado) e não
+            conseguirá entrar até ser reativado. Os dados e o histórico dele
+            permanecem.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            Cancelar
+          </Button>
+          <form action={formAction}>
+            <input type="hidden" name="id" value={user.id} />
+            <input type="hidden" name="ativo" value="false" />
+            <PendingButton type="submit" variant="destructive">
+              Desativar
+            </PendingButton>
+          </form>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -436,8 +470,14 @@ export function UsersManager({
               <div className="flex shrink-0 items-center">
                 <EditarUsuarioDialog user={u} />
                 <ResetSenhaDialog user={u} />
-                <AtivarToggle user={u} />
-                {u.id !== currentUserId && <ExcluirDialog user={u} />}
+                {/* Ativar/desativar e excluir NÃO se aplicam ao próprio usuário
+                    (você não pode se desativar/excluir — trava também no servidor). */}
+                {u.id !== currentUserId && (
+                  <>
+                    <AtivarToggle user={u} />
+                    <ExcluirDialog user={u} />
+                  </>
+                )}
               </div>
             </li>
           ))}

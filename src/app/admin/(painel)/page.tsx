@@ -71,15 +71,21 @@ function Kpi({
   return (
     <Card>
       <CardContent className="flex items-center gap-3 p-4">
-        <div className={`rounded-lg p-2.5 ${toneClass}`}>
+        <div className={`shrink-0 rounded-lg p-2.5 ${toneClass}`}>
           <Icon className="h-5 w-5" />
         </div>
-        <div>
+        {/* min-w-0 é essencial: sem ele, um `hint` longo estoura a célula do
+            grid no mobile e provoca scroll horizontal (quebra o painel). */}
+        <div className="min-w-0">
           <p className="text-2xl font-bold leading-none">
             {value.toLocaleString("pt-BR")}
           </p>
-          <p className="text-xs text-muted-foreground">{label}</p>
-          {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+          <p className="truncate text-xs text-muted-foreground">{label}</p>
+          {hint && (
+            <p className="text-[11px] leading-tight text-muted-foreground">
+              {hint}
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>

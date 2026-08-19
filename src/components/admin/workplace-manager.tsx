@@ -357,7 +357,13 @@ function EncerrarVotacaoButton({ data }: { data: ManagerData }) {
 
 function ReopenForm({ data }: { data: ManagerData }) {
   const [state, formAction] = useFormState(reopenWorkplace, initialActionState);
+  const [open, setOpen] = useState(false);
+  const [novoFim, setNovoFim] = useState("");
   useToastState(state);
+
+  useEffect(() => {
+    if (state.status === "success") setOpen(false);
+  }, [state]);
 
   return (
     <div className="rounded-md border border-amber-200 bg-amber-50 p-4">
@@ -369,21 +375,53 @@ function ReopenForm({ data }: { data: ManagerData }) {
         Defina um novo horário de término no futuro. A votação voltará a aceitar
         votos imediatamente.
       </p>
-      <form
-        action={formAction}
-        className="flex flex-wrap items-end gap-2"
-      >
-        <input type="hidden" name="id" value={data.id} />
+      {/* Ação crítica (reabre uma votação encerrada): confirma antes de aplicar. */}
+      <div className="flex flex-wrap items-end gap-2">
         <div className="flex-1 space-y-1.5">
           <Label htmlFor="novoFim" className="text-xs">
             Novo término
           </Label>
-          <Input id="novoFim" name="novoFim" type="datetime-local" required />
+          <Input
+            id="novoFim"
+            type="datetime-local"
+            value={novoFim}
+            onChange={(e) => setNovoFim(e.target.value)}
+          />
         </div>
-        <PendingButton type="submit" size="sm">
-          Reabrir votação
-        </PendingButton>
-      </form>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button type="button" size="sm" disabled={!novoFim}>
+              Reabrir votação
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reabrir a votação de {data.nome}?</DialogTitle>
+              <DialogDescription>
+                A votação volta a <strong>aceitar votos imediatamente</strong>,
+                até o novo término. Isso <strong>altera a apuração</strong> e a
+                mudança fica visível na transparência pública.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <form action={formAction}>
+                <input type="hidden" name="id" value={data.id} />
+                <input type="hidden" name="novoFim" value={novoFim} />
+                <PendingButton type="submit">
+                  Reabrir votação
+                </PendingButton>
+              </form>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
 }
@@ -742,19 +780,43 @@ function RenunciaButton({ candidate }: { candidate: RankingItem }) {
 
   if (candidate.renunciou) {
     return (
-      <form action={formAction}>
-        <input type="hidden" name="id" value={candidate.id} />
-        <input type="hidden" name="renunciou" value="false" />
-        <PendingButton
-          type="submit"
-          size="sm"
-          variant="ghost"
-          className="h-7 px-2 text-xs text-slate-600"
-        >
-          <Undo2 className="mr-1 h-3.5 w-3.5" />
-          Reverter
-        </PendingButton>
-      </form>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs text-slate-600"
+          >
+            <Undo2 className="mr-1 h-3.5 w-3.5" />
+            Reverter
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reverter: candidato volta à disputa</DialogTitle>
+            <DialogDescription>
+              <strong>{candidate.nome}</strong> volta a concorrer à vaga. A
+              apuração é recalculada — quem havia sido promovido pode deixar de
+              ser eleito. Esta mudança aparece na transparência pública.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <form action={formAction}>
+              <input type="hidden" name="id" value={candidate.id} />
+              <input type="hidden" name="renunciou" value="false" />
+              <PendingButton type="submit">Reverter</PendingButton>
+            </form>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     );
   }
 
@@ -777,7 +839,9 @@ function RenunciaButton({ candidate }: { candidate: RankingItem }) {
           <DialogDescription>
             <strong>{candidate.nome}</strong> deixará de ocupar a vaga. O próximo
             suplente (mais votado disponível) é promovido automaticamente. Os
-            votos continuam contados e visíveis.
+            votos continuam contados e visíveis. A decisão fica registrada na
+            <strong> auditoria</strong> e é comunicada na{" "}
+            <strong>transparência pública</strong> (com o motivo).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5">

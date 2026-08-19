@@ -261,12 +261,21 @@ export function LocalCard({
                     {resultado.renunciantes.map((c, i) => (
                       <li
                         key={`${c.nome}-${i}`}
-                        className="flex items-center justify-between gap-2 rounded-md border bg-slate-50 px-3 py-2 text-sm text-muted-foreground"
+                        className="rounded-md border bg-slate-50 px-3 py-2 text-sm"
                       >
-                        <span className="truncate line-through">{c.nome}</span>
-                        <span className="shrink-0 tabular-nums">
-                          {c.votos} {c.votos === 1 ? "voto" : "votos"}
-                        </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate text-muted-foreground line-through">
+                            {c.nome}
+                          </span>
+                          <span className="shrink-0 tabular-nums text-muted-foreground">
+                            {c.votos} {c.votos === 1 ? "voto" : "votos"}
+                          </span>
+                        </div>
+                        {c.motivo && (
+                          <span className="mt-1 inline-block rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                            {c.motivo}
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ul>

@@ -35,14 +35,15 @@ function Kpi({
   }[tone];
   return (
     <div className="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-sm">
-      <div className={`rounded-lg p-2.5 ${cls}`}>
+      <div className={`shrink-0 rounded-lg p-2.5 ${cls}`}>
         <Icon className="h-5 w-5" />
       </div>
-      <div>
+      {/* min-w-0 evita que labels longos estourem a célula no grid de 6 colunas. */}
+      <div className="min-w-0">
         <p className="text-2xl font-bold leading-none">
           {value.toLocaleString("pt-BR")}
         </p>
-        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="truncate text-xs text-muted-foreground">{label}</p>
       </div>
     </div>
   );
