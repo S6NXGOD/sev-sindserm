@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, ImageIcon, AlertTriangle } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_LOGO, trienioLabel } from "@/lib/election";
+import { requireModule } from "@/lib/current-user";
 import { listGalleryImages } from "@/lib/system-settings";
 import {
   Card,
@@ -35,6 +36,7 @@ export default async function EditarPleitoPage({
 }: {
   params: { id: string };
 }) {
+  await requireModule("pleitos", "EDIT");
   const election = await prisma.election.findUnique({
     where: { id: params.id },
   });

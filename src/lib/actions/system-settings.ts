@@ -4,9 +4,16 @@ import { writeFile, mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { guard, guardAny } from "@/lib/current-user";
 import { SYSTEM_SETTINGS_ID } from "@/lib/system-settings";
 import { UPLOADS_PREFIX } from "@/lib/logo-constants";
 import type { ActionState } from "@/lib/types";
+
+// A galeria de mídia é usada tanto em Configurações quanto na criação de Pleitos.
+const GALERIA_CHECKS: Array<["configuracoes" | "pleitos", "EDIT"]> = [
+  ["configuracoes", "EDIT"],
+  ["pleitos", "EDIT"],
+];
 
 const ALLOWED = new Map<string, string>([
   ["image/png", "png"],
@@ -49,6 +56,9 @@ export async function uploadGalleryImage(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const g = await guardAny(GALERIA_CHECKS);
+  if ("error" in g) return { status: "error", message: g.error };
+
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return { status: "error", message: "Selecione uma imagem." };
@@ -87,6 +97,9 @@ export async function uploadGalleryImage(
  * login) — assim o sistema nunca passa a exibir uma imagem quebrada.
  */
 export async function deleteGalleryImage(url: string): Promise<ActionState> {
+  const g = await guardAny(GALERIA_CHECKS);
+  if ("error" in g) return { status: "error", message: g.error };
+
   if (typeof url !== "string" || !url.startsWith(UPLOADS_PREFIX)) {
     return { status: "error", message: "Imagem inválida." };
   }
@@ -151,6 +164,9 @@ export async function setLoginLogo(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const g = await guard("configuracoes", "EDIT");
+  if ("error" in g) return { status: "error", message: g.error };
+
   const raw = String(formData.get("loginLogoUrl") ?? "").trim();
   const url = raw === "" ? null : raw;
 

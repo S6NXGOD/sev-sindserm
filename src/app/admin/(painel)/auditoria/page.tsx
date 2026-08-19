@@ -1,6 +1,6 @@
 import { ScrollText } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { requireCapability } from "@/lib/current-user";
+import { requireModule } from "@/lib/current-user";
 import { formatDateTime } from "@/lib/format";
 import {
   AuditoriaList,
@@ -13,7 +13,7 @@ const LIMITE = 500; // últimos N registros (o suficiente para consulta rápida)
 
 /** Auditoria — quem fez o quê. Requer a capacidade "auditoria". */
 export default async function AuditoriaPage() {
-  await requireCapability("auditoria");
+  await requireModule("auditoria", "VIEW");
 
   const logs = await prisma.auditLog.findMany({
     orderBy: { createdAt: "desc" },

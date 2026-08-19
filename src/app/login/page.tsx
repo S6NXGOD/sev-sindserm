@@ -28,21 +28,26 @@ export default async function LoginPage({
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-6">
       <div className="w-full max-w-md">
         <Card className="shadow-lg">
-          <CardHeader className="items-center space-y-2 text-center">
-            {/* Logo configurável (Configurações Globais) com fallback estrito. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={loginLogoUrl}
-              alt="SEV SINDSERM"
-              width={208}
-              height={208}
-              className="h-52 w-52 object-contain"
-            />
-            <CardTitle className="text-2xl">SEV SINDSERM</CardTitle>
-            <CardDescription>
-              Sistema Eletrônico de Votação do SINDSERM
-            </CardDescription>
-            <p className="pt-1 text-sm font-medium text-slate-700">
+          <CardHeader className="items-center space-y-3 text-center">
+            {/* Logo configurável (Configurações Globais) com fallback estrito.
+                Dentro de um "medalhão" para dar respiro e destacar melhor. */}
+            <div className="flex h-36 w-36 items-center justify-center rounded-full border bg-white shadow-sm ring-1 ring-slate-100">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={loginLogoUrl}
+                alt="SEV SINDSERM"
+                width={128}
+                height={128}
+                className="h-28 w-28 object-contain"
+              />
+            </div>
+            <div className="space-y-1">
+              <CardTitle className="text-2xl">SEV SINDSERM</CardTitle>
+              <CardDescription>
+                Sistema Eletrônico de Votação do SINDSERM
+              </CardDescription>
+            </div>
+            <p className="inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
               Painel Administrativo
             </p>
           </CardHeader>

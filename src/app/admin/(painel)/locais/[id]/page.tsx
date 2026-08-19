@@ -7,6 +7,7 @@ import { formatDateTime, toDateTimeLocalValue } from "@/lib/format";
 import { votingStatus } from "@/lib/voting-status";
 import { apurarEleitos, calcularVagas } from "@/lib/vagas";
 import { getCurrentElectionYear, requirePleito } from "@/lib/election";
+import { requireModule } from "@/lib/current-user";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +31,7 @@ export default async function LocalDetailPage({
   params: { id: string };
   searchParams: { cq?: string; cpage?: string };
 }) {
+  await requireModule("locais", "VIEW");
   await requirePleito();
   const id = params.id;
   const h = headers();

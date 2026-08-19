@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import {
   getCurrentElectionYear,
   getElectionsForSidebar,
@@ -6,6 +7,7 @@ import {
 import { requireUser } from "@/lib/current-user";
 import { Sidebar } from "@/components/admin/sidebar";
 import { MobileNav } from "@/components/admin/mobile-nav";
+import { AdminHeader } from "@/components/admin/admin-header";
 import { NotificationsPrompt } from "@/components/pwa/notifications";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +22,9 @@ export default async function PainelLayout({
   // Sem usuário válido → redireciona para /login. Assim, ao migrar para a gestão
   // de usuários, todas as sessões antigas caem e cada um reloga com sua senha.
   const user = await requireUser();
+
+  // 1º acesso / após reset: obriga a trocar a senha antes de acessar o painel.
+  if (user.mustChangePassword) redirect("/admin/trocar-senha");
 
   // A guarda de "primeiro acesso" (sem pleito) é feita por página via
   // requirePleito(). O layout monta a sidebar (que, sem pleito, exibe o estado
@@ -39,6 +44,8 @@ export default async function PainelLayout({
         />
       </div>
       <main className="min-w-0 flex-1">
+        {/* Cabeçalho desktop (lg+): notificações + menu do usuário à direita. */}
+        <AdminHeader user={user} />
         {/* Navegação mobile (hambúrguer + gaveta) — só aparece abaixo de lg. */}
         <MobileNav
           elections={elections}

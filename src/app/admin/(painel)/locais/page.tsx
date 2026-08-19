@@ -12,6 +12,7 @@ import {
   getSelectedElectionYear,
   requirePleito,
 } from "@/lib/election";
+import { requireModule } from "@/lib/current-user";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -143,6 +144,7 @@ export default async function LocaisPage({
   const proto = h.get("x-forwarded-proto") ?? "http";
   const votingBaseUrl = `${proto}://${host}`;
 
+  await requireModule("locais", "VIEW");
   await requirePleito();
   const ano = getSelectedElectionYear(searchParams.ano);
   const anoVigente = getCurrentElectionYear();

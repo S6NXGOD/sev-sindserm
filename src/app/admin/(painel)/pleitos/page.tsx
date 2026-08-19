@@ -7,6 +7,7 @@ import {
   tituloInstitucional,
   trienioLabel,
 } from "@/lib/election";
+import { requireModule } from "@/lib/current-user";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DeleteElectionButton } from "@/components/admin/delete-election-button";
@@ -22,6 +23,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function PleitosPage() {
+  await requireModule("pleitos", "VIEW");
   const anoVigente = getCurrentElectionYear();
 
   const [elections, locaisPorAno] = await Promise.all([

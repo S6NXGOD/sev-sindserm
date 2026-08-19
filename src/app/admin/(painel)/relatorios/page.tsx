@@ -9,6 +9,7 @@ import {
   requirePleito,
   tituloInstitucional,
 } from "@/lib/election";
+import { requireModule } from "@/lib/current-user";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -53,6 +54,7 @@ export default async function RelatoriosPage({
 }: {
   searchParams: SearchParams;
 }) {
+  await requireModule("relatorios", "VIEW");
   await requirePleito();
   const tipo = searchParams.tipo ?? "geral";
   const ano = getSelectedElectionYear(searchParams.ano);

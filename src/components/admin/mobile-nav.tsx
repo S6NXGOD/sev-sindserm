@@ -8,6 +8,7 @@ import type { SidebarElection } from "@/lib/election";
 import type { SessionUser } from "@/lib/permissions";
 import { DEFAULT_LOGO } from "@/lib/logo-constants";
 import { Sidebar } from "@/components/admin/sidebar";
+import { AdminHeaderMobileActions } from "@/components/admin/admin-header";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -61,6 +62,10 @@ export function MobileNav({
           <span className="truncate text-sm font-bold tracking-tight">
             SEV SINDSERM
           </span>
+        </div>
+        {/* Sino de notificações + menu do usuário à direita. */}
+        <div className="ml-auto">
+          <AdminHeaderMobileActions user={user} />
         </div>
       </div>
 

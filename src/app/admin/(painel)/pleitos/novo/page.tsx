@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { getCurrentElectionYear } from "@/lib/election";
+import { requireModule } from "@/lib/current-user";
 import { listGalleryImages } from "@/lib/system-settings";
 import {
   Card,
@@ -15,6 +16,7 @@ import { CreateElectionForm } from "@/components/admin/create-election-form";
 export const dynamic = "force-dynamic";
 
 export default async function NovoPleitoPage() {
+  await requireModule("pleitos", "EDIT");
   const images = await listGalleryImages();
   return (
     <div className="mx-auto max-w-3xl space-y-6">

@@ -1,5 +1,6 @@
 "use server";
 
+import { ensureModule } from "@/lib/current-user";
 import {
   getLowTurnoutLocations,
   getRitmoSeries,
@@ -18,6 +19,7 @@ export async function fetchRitmoSeries(
   customInicio?: string,
   customFim?: string,
 ): Promise<RitmoPonto[]> {
+  await ensureModule("dashboard", "VIEW");
   return getRitmoSeries(anoEleicao, range, customInicio, customFim);
 }
 
@@ -29,5 +31,6 @@ export async function fetchLowTurnoutLocations(
   anoEleicao: number,
   limit = 5,
 ): Promise<LowTurnoutLocal[]> {
+  await ensureModule("dashboard", "VIEW");
   return getLowTurnoutLocations(anoEleicao, limit);
 }

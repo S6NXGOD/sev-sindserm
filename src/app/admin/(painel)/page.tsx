@@ -27,6 +27,7 @@ import {
   getSelectedElectionYear,
   requirePleito,
 } from "@/lib/election";
+import { requireModule } from "@/lib/current-user";
 import { formatDateTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -97,6 +98,7 @@ export default async function DashboardPage({
 }: {
   searchParams: { ano?: string };
 }) {
+  await requireModule("dashboard", "VIEW");
   await requirePleito();
   const ano = getSelectedElectionYear(searchParams.ano);
   const anoVigente = getCurrentElectionYear();

@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { getCurrentUser } from "@/lib/current-user";
 import { registrarAuditoria } from "@/lib/audit";
-import type { Role } from "@/lib/permissions";
+import { normalizarPermissoes } from "@/lib/permissions";
 import type { ActionState } from "@/lib/types";
 
 const COOKIE_OPTS = {
@@ -64,9 +64,14 @@ export async function login(
       id: user.id,
       nome: user.nome,
       username: user.username,
-      role: user.role as Role,
+      fotoUrl: user.fotoUrl,
+      permissoes: normalizarPermissoes(user.permissoes),
+      mustChangePassword: user.mustChangePassword,
     },
   });
+
+  // 1º acesso (ou após reset pelo admin): obriga a trocar a senha antes de tudo.
+  if (user.mustChangePassword) redirect("/admin/trocar-senha");
 
   const destino =
     redirectTo.startsWith("/admin") && redirectTo !== "/admin/login"
@@ -126,7 +131,12 @@ export async function changeMyPassword(
   const novaVersao = dbUser.sessionVersion + 1;
   await prisma.user.update({
     where: { id: atual.id },
-    data: { passwordHash: hash, sessionVersion: novaVersao },
+    // Trocar a senha também limpa a obrigação de "trocar no 1º acesso".
+    data: {
+      passwordHash: hash,
+      sessionVersion: novaVersao,
+      mustChangePassword: false,
+    },
   });
 
   // Reemite o cookie desta sessão com a nova versão (mantém o usuário logado).

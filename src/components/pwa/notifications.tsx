@@ -2,13 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Bell, BellOff, Loader2, X } from "lucide-react";
+import { Bell, BellOff, BellRing, Loader2, X } from "lucide-react";
 import {
   getPushConfig,
   removePushSubscription,
   savePushSubscription,
 } from "@/lib/actions/push";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 const DISMISS_KEY = "sev-push-prompt-dismissed";
 
@@ -186,6 +191,44 @@ export function NotificationsPrompt() {
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * SINO no cabeçalho (PWA): botão sempre acessível para ligar/desligar as
+ * notificações. Um pontinho âmbar avisa quando dá para ativar mas está desligado.
+ * Se o push não estiver configurado no servidor, o sino não aparece.
+ */
+export function NotificationsBell() {
+  const push = usePush();
+  if (!push.loaded || !push.supported || !push.enabled) return null;
+
+  const precisaAtivar = !push.subscribed && push.permission !== "denied";
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative"
+          aria-label="Notificações"
+        >
+          {push.subscribed ? (
+            <BellRing className="h-5 w-5 text-primary" />
+          ) : (
+            <Bell className="h-5 w-5" />
+          )}
+          {precisaAtivar && (
+            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white" />
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72">
+        <p className="mb-2 text-sm font-semibold">Notificações</p>
+        <NotificationsToggle />
+      </PopoverContent>
+    </Popover>
   );
 }
 

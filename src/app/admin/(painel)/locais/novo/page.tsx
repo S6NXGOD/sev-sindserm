@@ -6,6 +6,7 @@ import {
   requirePleito,
   trienioLabel,
 } from "@/lib/election";
+import { requireModule } from "@/lib/current-user";
 import {
   Card,
   CardContent,
@@ -23,6 +24,7 @@ export default async function NovoLocalPage({
 }: {
   searchParams: { ano?: string };
 }) {
+  await requireModule("locais", "EDIT");
   await requirePleito();
   // Pleito do contexto (cookie da sidebar, com override ?ano= para deep-link).
   const ano = getSelectedElectionYear(searchParams.ano);

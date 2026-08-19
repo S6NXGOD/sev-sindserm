@@ -9,36 +9,50 @@ import { hashPassword } from "@/lib/password";
 import { SESSION_COOKIE } from "@/lib/auth";
 import { guard } from "@/lib/current-user";
 import { registrarAuditoria } from "@/lib/audit";
-import { ROLES_ATRIBUIVEIS, type Role } from "@/lib/permissions";
+import {
+  isSuperAdmin,
+  normalizarPermissoes,
+  rotuloPerfil,
+  type Permissoes,
+} from "@/lib/permissions";
+import { validarFoto } from "@/lib/foto";
 import type { ActionState } from "@/lib/types";
 
 // login: 3–30, minúsculas/números e . _ - (sem espaço/acento).
 const USERNAME_RE = /^[a-z0-9._-]{3,30}$/;
 
-function parseRole(v: unknown): Role | null {
-  const s = String(v ?? "");
-  return (ROLES_ATRIBUIVEIS as string[]).includes(s) ? (s as Role) : null;
+/** Lê o campo "permissoes" (JSON string) do form e normaliza para o mapa válido. */
+function parsePermissoes(v: unknown): Permissoes {
+  try {
+    return normalizarPermissoes(JSON.parse(String(v ?? "{}")));
+  } catch {
+    return normalizarPermissoes({});
+  }
 }
 
-/** Impede ficar sem NENHUM Administrador Geral ativo (trava de segurança). */
+/**
+ * Impede ficar sem NENHUM Administrador Geral ativo (quem tem usuarios=EDIT).
+ * Percorre os demais usuários ativos e checa as permissões.
+ */
 async function seriaOUltimoSuperAdmin(userId: string): Promise<boolean> {
-  const outros = await prisma.user.count({
-    where: { role: "SUPER_ADMIN", ativo: true, id: { not: userId } },
+  const outros = await prisma.user.findMany({
+    where: { ativo: true, id: { not: userId } },
+    select: { permissoes: true },
   });
-  return outros === 0;
+  return !outros.some((u) => isSuperAdmin(normalizarPermissoes(u.permissoes)));
 }
 
 export async function createUser(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("users");
+  const g = await guard("usuarios", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const nome = String(formData.get("nome") ?? "").trim().slice(0, 80);
   const username = String(formData.get("username") ?? "").trim().toLowerCase();
   const senha = String(formData.get("senha") ?? "");
-  const role = parseRole(formData.get("role"));
+  const permissoes = parsePermissoes(formData.get("permissoes"));
 
   if (!nome) return { status: "error", message: "Informe o nome de exibição." };
   if (!USERNAME_RE.test(username)) {
@@ -51,16 +65,16 @@ export async function createUser(
   if (senha.length < 6) {
     return { status: "error", message: "A senha deve ter ao menos 6 caracteres." };
   }
-  if (!role) return { status: "error", message: "Selecione um papel válido." };
 
   try {
     const hash = await hashPassword(senha);
     await prisma.user.create({
-      data: { nome, username, passwordHash: hash, role },
+      // mustChangePassword usa o default (true): o usuário novo troca no 1º login.
+      data: { nome, username, passwordHash: hash, permissoes },
     });
     await registrarAuditoria("CRIOU_USUARIO", {
       alvo: nome,
-      detalhe: `@${username} · ${role}`,
+      detalhe: `@${username} · ${rotuloPerfil(permissoes)}`,
       user: g.user,
     });
   } catch (error) {
@@ -78,39 +92,46 @@ export async function createUser(
   return { status: "success", message: `Usuário ${nome} criado.` };
 }
 
-/** Edita nome e papel. Não deixa rebaixar o último Administrador Geral ativo. */
+/** Edita nome, foto e permissões. Não deixa remover o último Administrador Geral. */
 export async function updateUser(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("users");
+  const g = await guard("usuarios", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const id = String(formData.get("id") ?? "").trim();
   const nome = String(formData.get("nome") ?? "").trim().slice(0, 80);
-  const role = parseRole(formData.get("role"));
+  const permissoes = parsePermissoes(formData.get("permissoes"));
+  const foto = validarFoto(formData.get("fotoUrl"));
   if (!id) return { status: "error", message: "Usuário inválido." };
   if (!nome) return { status: "error", message: "Informe o nome de exibição." };
-  if (!role) return { status: "error", message: "Selecione um papel válido." };
+  if (!foto.ok) return { status: "error", message: foto.error };
 
   const alvo = await prisma.user.findUnique({ where: { id } });
   if (!alvo) return { status: "error", message: "Usuário não encontrado." };
 
+  // Se o alvo é Administrador Geral e está perdendo esse poder, garante que não
+  // é o último — senão ninguém mais poderia gerenciar usuários.
+  const eraSuper = isSuperAdmin(normalizarPermissoes(alvo.permissoes));
   if (
-    alvo.role === "SUPER_ADMIN" &&
-    role !== "SUPER_ADMIN" &&
+    eraSuper &&
+    !isSuperAdmin(permissoes) &&
     (await seriaOUltimoSuperAdmin(id))
   ) {
     return {
       status: "error",
-      message: "Não é possível rebaixar o último Administrador Geral ativo.",
+      message: "Não é possível remover o poder do último Administrador Geral ativo.",
     };
   }
 
-  await prisma.user.update({ where: { id }, data: { nome, role } });
+  await prisma.user.update({
+    where: { id },
+    data: { nome, permissoes, fotoUrl: foto.value },
+  });
   await registrarAuditoria("EDITOU_USUARIO", {
     alvo: nome,
-    detalhe: `papel: ${role}`,
+    detalhe: `perfil: ${rotuloPerfil(permissoes)}`,
     user: g.user,
   });
   revalidatePath("/admin/usuarios");
@@ -122,7 +143,7 @@ export async function setUserAtivo(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("users");
+  const g = await guard("usuarios", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const id = String(formData.get("id") ?? "").trim();
@@ -138,7 +159,7 @@ export async function setUserAtivo(
 
   if (
     !ativo &&
-    alvo.role === "SUPER_ADMIN" &&
+    isSuperAdmin(normalizarPermissoes(alvo.permissoes)) &&
     (await seriaOUltimoSuperAdmin(id))
   ) {
     return {
@@ -165,12 +186,15 @@ export async function setUserAtivo(
   };
 }
 
-/** Redefine a senha de um usuário (o alvo é deslogado das sessões atuais). */
+/**
+ * Redefine a senha de um usuário (o alvo é deslogado das sessões atuais) e marca
+ * para trocar no próximo login (senha temporária definida pelo administrador).
+ */
 export async function resetUserPassword(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("users");
+  const g = await guard("usuarios", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const id = String(formData.get("id") ?? "").trim();
@@ -186,13 +210,17 @@ export async function resetUserPassword(
   const hash = await hashPassword(senha);
   await prisma.user.update({
     where: { id },
-    data: { passwordHash: hash, sessionVersion: { increment: 1 } },
+    data: {
+      passwordHash: hash,
+      mustChangePassword: true,
+      sessionVersion: { increment: 1 },
+    },
   });
   await registrarAuditoria("RESETOU_SENHA", { alvo: alvo.nome, user: g.user });
   revalidatePath("/admin/usuarios");
   return {
     status: "success",
-    message: `Senha de ${alvo.nome} redefinida. Ele(a) precisará logar de novo.`,
+    message: `Senha de ${alvo.nome} redefinida. Ele(a) trocará no próximo login.`,
   };
 }
 
@@ -201,7 +229,7 @@ export async function deleteUser(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("users");
+  const g = await guard("usuarios", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const id = String(formData.get("id") ?? "").trim();
@@ -213,7 +241,10 @@ export async function deleteUser(
   const alvo = await prisma.user.findUnique({ where: { id } });
   if (!alvo) return { status: "error", message: "Usuário não encontrado." };
 
-  if (alvo.role === "SUPER_ADMIN" && (await seriaOUltimoSuperAdmin(id))) {
+  if (
+    isSuperAdmin(normalizarPermissoes(alvo.permissoes)) &&
+    (await seriaOUltimoSuperAdmin(id))
+  ) {
     return {
       status: "error",
       message: "Não é possível excluir o último Administrador Geral ativo.",
@@ -236,7 +267,7 @@ export async function deleteUser(
  * os usuários — os tokens atuais deixam de valer e todos precisam logar de novo.
  */
 export async function deslogarTodos(): Promise<void> {
-  const g = await guard("users");
+  const g = await guard("usuarios", "EDIT");
   if ("error" in g) return;
 
   await prisma.user.updateMany({ data: { sessionVersion: { increment: 1 } } });

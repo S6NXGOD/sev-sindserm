@@ -16,6 +16,7 @@ import {
   requirePleito,
   tituloInstitucional,
 } from "@/lib/election";
+import { requireModule } from "@/lib/current-user";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ApuracoesList } from "@/components/admin/apuracoes-list";
@@ -70,6 +71,7 @@ export default async function EncerradasPage({
 }: {
   searchParams: { ano?: string };
 }) {
+  await requireModule("encerradas", "VIEW");
   await requirePleito();
   const ano = getSelectedElectionYear(searchParams.ano);
   const anoVigente = getCurrentElectionYear();

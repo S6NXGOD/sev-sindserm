@@ -55,7 +55,17 @@ model User {
   username     String   @unique
   nome         String
   passwordHash String
+  // VESTIGIAL: mantido por compatibilidade; a autorização real vem de `permissoes`.
   role         UserRole @default(OPERADOR)
+  // Permissões GRANULARES por módulo: { dashboard: "EDIT", locais: "VIEW", ... }.
+  // Fonte única de autorização (ver src/lib/permissions.ts). "usuarios":"EDIT" =
+  // Administrador Geral. Preenchido na criação/edição.
+  permissoes   Json     @default("{}")
+  // Foto de perfil (data URL base64, redimensionada no cliente). Robusto a
+  // deploys do Railway (não depende de volume). Null = mostra as iniciais.
+  fotoUrl      String?
+  // No 1º acesso, o usuário novo é obrigado a trocar a senha inicial.
+  mustChangePassword Boolean @default(true)
   // Usuário inativo não consegue logar e é deslogado na próxima requisição.
   ativo        Boolean  @default(true)
   // Invalidação de sessão: o token carrega esta versão; ao incrementar, todas

@@ -24,11 +24,13 @@ import {
 } from "@/lib/actions/users";
 import { initialActionState } from "@/lib/types";
 import {
-  ROLE_DESC,
-  ROLE_LABEL,
-  ROLES_ATRIBUIVEIS,
-  type Role,
+  presetPermissoes,
+  rotuloPerfil,
+  type Permissoes,
 } from "@/lib/permissions";
+import { Avatar } from "@/components/admin/avatar";
+import { PermissoesGrid } from "@/components/admin/permissoes-grid";
+import { PhotoInput } from "@/components/admin/photo-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,29 +44,24 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 export type UserRow = {
   id: string;
   nome: string;
   username: string;
-  role: Role;
+  permissoes: Permissoes;
+  fotoUrl: string | null;
   ativo: boolean;
   createdAt: string;
 };
 
-const ROLE_BADGE: Record<Role, string> = {
-  SUPER_ADMIN: "border-rose-300 bg-rose-50 text-rose-700",
-  ADMIN: "border-primary/30 bg-primary/10 text-primary",
-  OPERADOR: "border-sky-300 bg-sky-50 text-sky-700",
-  AUDITOR: "border-slate-300 bg-slate-100 text-slate-600",
-};
+/** Cor do badge conforme o rótulo inferido do perfil. */
+function badgeCor(rotulo: string): string {
+  if (rotulo === "Administrador Geral") return "border-rose-300 bg-rose-50 text-rose-700";
+  if (rotulo === "Administrador") return "border-primary/30 bg-primary/10 text-primary";
+  if (rotulo === "Operador") return "border-sky-300 bg-sky-50 text-sky-700";
+  return "border-slate-300 bg-slate-100 text-slate-600";
+}
 
 function PendingButton({
   children,
@@ -79,44 +76,18 @@ function PendingButton({
   );
 }
 
-/** Select de papel + descrição do que ele pode. Reutilizado em criar/editar. */
-function RoleSelect({
-  value,
-  onChange,
-}: {
-  value: Role;
-  onChange: (r: Role) => void;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label>Papel</Label>
-      <Select value={value} onValueChange={(v) => onChange(v as Role)}>
-        <SelectTrigger>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {ROLES_ATRIBUIVEIS.map((r) => (
-            <SelectItem key={r} value={r}>
-              {ROLE_LABEL[r]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <p className="text-xs text-muted-foreground">{ROLE_DESC[value]}</p>
-    </div>
-  );
-}
-
 function NovoUsuarioDialog() {
   const [state, formAction] = useFormState(createUser, initialActionState);
   const [open, setOpen] = useState(false);
-  const [role, setRole] = useState<Role>("OPERADOR");
+  const [permissoes, setPermissoes] = useState<Permissoes>(
+    presetPermissoes("OPERADOR"),
+  );
 
   useEffect(() => {
     if (state.status === "success") {
       toast.success(state.message);
       setOpen(false);
-      setRole("OPERADOR");
+      setPermissoes(presetPermissoes("OPERADOR"));
     } else if (state.status === "error") {
       toast.error(state.message);
     }
@@ -130,46 +101,54 @@ function NovoUsuarioDialog() {
           Novo usuário
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Criar usuário</DialogTitle>
+          <DialogTitle>Novo usuário</DialogTitle>
           <DialogDescription>
-            Cada pessoa tem seu login e senha próprios — para auditar quem faz o
-            quê no sistema.
+            Perfil de acesso e permissões. Cada pessoa tem login e senha próprios.
           </DialogDescription>
         </DialogHeader>
         <form action={formAction} className="space-y-4">
-          <input type="hidden" name="role" value={role} />
+          <input
+            type="hidden"
+            name="permissoes"
+            value={JSON.stringify(permissoes)}
+          />
           <div className="space-y-1.5">
             <Label htmlFor="nu-nome">Nome de exibição</Label>
             <Input id="nu-nome" name="nome" placeholder="Ex.: Maria Diretora" required />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="nu-user">Usuário (login)</Label>
-            <Input
-              id="nu-user"
-              name="username"
-              placeholder="ex.: maria.diretora"
-              autoCapitalize="none"
-              spellCheck={false}
-              required
-            />
-            <p className="text-xs text-muted-foreground">
-              Minúsculas, números e . _ - (3 a 30 caracteres).
-            </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="nu-user">Usuário (login)</Label>
+              <Input
+                id="nu-user"
+                name="username"
+                placeholder="ex.: maria.diretora"
+                autoCapitalize="none"
+                spellCheck={false}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="nu-senha">Senha inicial</Label>
+              <Input
+                id="nu-senha"
+                name="senha"
+                type="password"
+                autoComplete="new-password"
+                minLength={6}
+                required
+              />
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="nu-senha">Senha inicial</Label>
-            <Input
-              id="nu-senha"
-              name="senha"
-              type="password"
-              autoComplete="new-password"
-              minLength={6}
-              required
-            />
-          </div>
-          <RoleSelect value={role} onChange={setRole} />
+          <p className="-mt-2 text-xs text-muted-foreground">
+            Usuário: minúsculas, números e . _ - (3 a 30). No 1º acesso, a pessoa
+            troca a senha.
+          </p>
+
+          <PermissoesGrid value={permissoes} onChange={setPermissoes} />
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancelar
@@ -188,8 +167,9 @@ function NovoUsuarioDialog() {
 function EditarUsuarioDialog({ user }: { user: UserRow }) {
   const [state, formAction] = useFormState(updateUser, initialActionState);
   const [open, setOpen] = useState(false);
-  const [role, setRole] = useState<Role>(user.role);
   const [nome, setNome] = useState(user.nome);
+  const [foto, setFoto] = useState<string | null>(user.fotoUrl);
+  const [permissoes, setPermissoes] = useState<Permissoes>(user.permissoes);
 
   useEffect(() => {
     if (state.status === "success") {
@@ -200,6 +180,15 @@ function EditarUsuarioDialog({ user }: { user: UserRow }) {
     }
   }, [state]);
 
+  // Ao reabrir, restaura os valores do usuário (descarta edições não salvas).
+  useEffect(() => {
+    if (open) {
+      setNome(user.nome);
+      setFoto(user.fotoUrl);
+      setPermissoes(user.permissoes);
+    }
+  }, [open, user]);
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -207,14 +196,22 @@ function EditarUsuarioDialog({ user }: { user: UserRow }) {
           <Pencil className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Editar {user.nome}</DialogTitle>
           <DialogDescription>@{user.username}</DialogDescription>
         </DialogHeader>
         <form action={formAction} className="space-y-4">
           <input type="hidden" name="id" value={user.id} />
-          <input type="hidden" name="role" value={role} />
+          <input
+            type="hidden"
+            name="permissoes"
+            value={JSON.stringify(permissoes)}
+          />
+          <input type="hidden" name="fotoUrl" value={foto ?? ""} />
+
+          <PhotoInput nome={nome} value={foto} onChange={setFoto} />
+
           <div className="space-y-1.5">
             <Label htmlFor={`ed-nome-${user.id}`}>Nome de exibição</Label>
             <Input
@@ -225,7 +222,9 @@ function EditarUsuarioDialog({ user }: { user: UserRow }) {
               required
             />
           </div>
-          <RoleSelect value={role} onChange={setRole} />
+
+          <PermissoesGrid value={permissoes} onChange={setPermissoes} />
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancelar
@@ -262,14 +261,14 @@ function ResetSenhaDialog({ user }: { user: UserRow }) {
         <DialogHeader>
           <DialogTitle>Redefinir senha de {user.nome}</DialogTitle>
           <DialogDescription>
-            Define uma nova senha. O usuário será deslogado e precisará entrar de
-            novo com ela.
+            Define uma senha temporária. O usuário será deslogado e, no próximo
+            login, precisará criar uma nova senha.
           </DialogDescription>
         </DialogHeader>
         <form action={formAction} className="space-y-4">
           <input type="hidden" name="id" value={user.id} />
           <div className="space-y-1.5">
-            <Label htmlFor={`rs-${user.id}`}>Nova senha</Label>
+            <Label htmlFor={`rs-${user.id}`}>Nova senha temporária</Label>
             <Input
               id={`rs-${user.id}`}
               name="senha"
@@ -435,52 +434,53 @@ export function UsersManager({
 
       <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
         <ul className="divide-y">
-          {users.map((u) => (
-            <li
-              key={u.id}
-              className={`flex flex-wrap items-center gap-3 p-4 ${
-                u.ativo ? "" : "bg-slate-50 opacity-70"
-              }`}
-            >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                {u.nome.slice(0, 2).toUpperCase()}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="flex flex-wrap items-center gap-2 font-semibold">
-                  <span className="truncate">{u.nome}</span>
-                  {u.id === currentUserId && (
-                    <Badge variant="secondary" className="text-[10px]">
-                      você
-                    </Badge>
+          {users.map((u) => {
+            const rotulo = rotuloPerfil(u.permissoes);
+            return (
+              <li
+                key={u.id}
+                className={`flex flex-wrap items-center gap-3 p-4 ${
+                  u.ativo ? "" : "bg-slate-50 opacity-70"
+                }`}
+              >
+                <Avatar nome={u.nome} fotoUrl={u.fotoUrl} size={40} />
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-2 font-semibold">
+                    <span className="truncate">{u.nome}</span>
+                    {u.id === currentUserId && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        você
+                      </Badge>
+                    )}
+                    {!u.ativo && (
+                      <Badge variant="outline" className="text-[10px] text-slate-500">
+                        inativo
+                      </Badge>
+                    )}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    @{u.username} · desde {u.createdAt}
+                  </p>
+                </div>
+                <Badge variant="outline" className={`shrink-0 ${badgeCor(rotulo)}`}>
+                  <Shield className="mr-1 h-3 w-3" />
+                  {rotulo}
+                </Badge>
+                <div className="flex shrink-0 items-center">
+                  <EditarUsuarioDialog user={u} />
+                  <ResetSenhaDialog user={u} />
+                  {/* Ativar/desativar e excluir NÃO se aplicam ao próprio usuário
+                      (você não pode se desativar/excluir — trava também no servidor). */}
+                  {u.id !== currentUserId && (
+                    <>
+                      <AtivarToggle user={u} />
+                      <ExcluirDialog user={u} />
+                    </>
                   )}
-                  {!u.ativo && (
-                    <Badge variant="outline" className="text-[10px] text-slate-500">
-                      inativo
-                    </Badge>
-                  )}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  @{u.username} · desde {u.createdAt}
-                </p>
-              </div>
-              <Badge variant="outline" className={`shrink-0 ${ROLE_BADGE[u.role]}`}>
-                <Shield className="mr-1 h-3 w-3" />
-                {ROLE_LABEL[u.role]}
-              </Badge>
-              <div className="flex shrink-0 items-center">
-                <EditarUsuarioDialog user={u} />
-                <ResetSenhaDialog user={u} />
-                {/* Ativar/desativar e excluir NÃO se aplicam ao próprio usuário
-                    (você não pode se desativar/excluir — trava também no servidor). */}
-                {u.id !== currentUserId && (
-                  <>
-                    <AtivarToggle user={u} />
-                    <ExcluirDialog user={u} />
-                  </>
-                )}
-              </div>
-            </li>
-          ))}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </div>

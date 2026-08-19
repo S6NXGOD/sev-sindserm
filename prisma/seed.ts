@@ -21,6 +21,19 @@ const prisma = new PrismaClient();
 const ADMIN_PASSWORD_KEY = "admin_password_hash";
 const DEFAULT_ADMIN_PASSWORD = "Sindserm@2026";
 
+// Administrador Geral do bootstrap: acesso total a todos os módulos.
+const PERMISSOES_TOTAL = {
+  dashboard: "EDIT",
+  locais: "EDIT",
+  encerradas: "EDIT",
+  votantes: "EDIT",
+  relatorios: "EDIT",
+  pleitos: "EDIT",
+  auditoria: "EDIT",
+  usuarios: "EDIT",
+  configuracoes: "EDIT",
+} as const;
+
 async function main() {
   const jaTemUsuario = await prisma.user.count();
   if (jaTemUsuario > 0) {
@@ -40,6 +53,10 @@ async function main() {
       nome: "Administrador Geral",
       passwordHash,
       role: "SUPER_ADMIN",
+      permissoes: PERMISSOES_TOTAL,
+      // Se reusou o hash antigo (senha real em uso), não força troca; se usou a
+      // senha de fábrica, obriga a trocar no 1º acesso.
+      mustChangePassword: !antigo,
     },
   });
 

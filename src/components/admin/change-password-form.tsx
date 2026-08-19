@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useFormState, useFormStatus } from "react-dom";
 import { toast } from "sonner";
 import { KeyRound, Loader2 } from "lucide-react";
@@ -24,21 +25,31 @@ function SubmitButton() {
   );
 }
 
-export function ChangePasswordForm() {
+export function ChangePasswordForm({
+  redirectOnSuccess,
+}: {
+  /** Se definido, após trocar a senha navega para cá (ex.: 1º acesso → /admin). */
+  redirectOnSuccess?: string;
+} = {}) {
   const [state, formAction] = useFormState(
     changeMyPassword,
     initialActionState,
   );
   const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     if (state.status === "success") {
       toast.success(state.message);
       formRef.current?.reset();
+      if (redirectOnSuccess) {
+        router.replace(redirectOnSuccess);
+        router.refresh();
+      }
     } else if (state.status === "error") {
       toast.error(state.message);
     }
-  }, [state]);
+  }, [state, redirectOnSuccess, router]);
 
   return (
     <form ref={formRef} action={formAction} className="space-y-4">

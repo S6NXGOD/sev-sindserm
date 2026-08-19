@@ -8,6 +8,7 @@ import {
   getSelectedElectionYear,
   requirePleito,
 } from "@/lib/election";
+import { requireModule } from "@/lib/current-user";
 import { buildVoterWhere } from "@/lib/voter-filters";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +61,7 @@ export default async function VotantesPage({
 }: {
   searchParams: SearchParams;
 }) {
+  await requireModule("votantes", "VIEW");
   await requirePleito();
   const ano = getSelectedElectionYear(searchParams.ano);
   const anoVigente = getCurrentElectionYear();

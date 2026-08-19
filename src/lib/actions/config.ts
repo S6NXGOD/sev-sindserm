@@ -188,7 +188,7 @@ export async function uploadElectionLogo(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const gp = await guard("pleitos");
+  const gp = await guard("pleitos", "EDIT");
   if ("error" in gp) return { status: "error", message: gp.error };
 
   const ano = Number(formData.get("ano"));
@@ -265,7 +265,7 @@ export async function createElection(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const gp = await guard("pleitos");
+  const gp = await guard("pleitos", "EDIT");
   if ("error" in gp) return { status: "error", message: gp.error };
 
   const titulo = String(formData.get("titulo") ?? "").trim();
@@ -432,7 +432,7 @@ export async function clonePleito(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const gp = await guard("pleitos");
+  const gp = await guard("pleitos", "EDIT");
   if ("error" in gp) return { status: "error", message: gp.error };
 
   const sourceId = String(formData.get("sourceId") ?? "").trim();
@@ -641,7 +641,7 @@ export async function deleteElection(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const gp = await guard("pleitos");
+  const gp = await guard("pleitos", "EDIT");
   if ("error" in gp) return { status: "error", message: gp.error };
 
   const id = String(formData.get("id") ?? "").trim();
@@ -723,7 +723,7 @@ export async function updateElection(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const gp = await guard("pleitos");
+  const gp = await guard("pleitos", "EDIT");
   if ("error" in gp) return { status: "error", message: gp.error };
 
   const id = String(formData.get("id") ?? "").trim();
@@ -837,7 +837,7 @@ export async function setElectionLogo(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const gp = await guard("pleitos");
+  const gp = await guard("pleitos", "EDIT");
   if ("error" in gp) return { status: "error", message: gp.error };
 
   const id = String(formData.get("id") ?? "").trim();

@@ -1,8 +1,8 @@
 import { Shield } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { requireCapability } from "@/lib/current-user";
+import { requireModule } from "@/lib/current-user";
 import { formatDateTime } from "@/lib/format";
-import type { Role } from "@/lib/permissions";
+import { normalizarPermissoes } from "@/lib/permissions";
 import {
   UsersManager,
   type UserRow,
@@ -10,17 +10,18 @@ import {
 
 export const dynamic = "force-dynamic";
 
-/** Gestão de usuários — SOMENTE Administrador Geral (capacidade "users"). */
+/** Gestão de usuários — SOMENTE Administrador Geral (usuarios = EDIT). */
 export default async function UsuariosPage() {
-  const me = await requireCapability("users");
+  const me = await requireModule("usuarios", "EDIT");
 
   const users = await prisma.user.findMany({
-    orderBy: [{ ativo: "desc" }, { role: "asc" }, { nome: "asc" }],
+    orderBy: [{ ativo: "desc" }, { nome: "asc" }],
     select: {
       id: true,
       nome: true,
       username: true,
-      role: true,
+      permissoes: true,
+      fotoUrl: true,
       ativo: true,
       createdAt: true,
     },
@@ -30,7 +31,8 @@ export default async function UsuariosPage() {
     id: u.id,
     nome: u.nome,
     username: u.username,
-    role: u.role as Role,
+    permissoes: normalizarPermissoes(u.permissoes),
+    fotoUrl: u.fotoUrl,
     ativo: u.ativo,
     createdAt: formatDateTime(u.createdAt),
   }));

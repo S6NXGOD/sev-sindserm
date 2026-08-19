@@ -20,11 +20,12 @@ import {
 import { logout } from "@/lib/actions/auth";
 import type { SidebarElection } from "@/lib/election";
 import {
-  can,
-  ROLE_LABEL,
-  type Capability,
+  pode,
+  rotuloPerfil,
+  type Modulo,
   type SessionUser,
 } from "@/lib/permissions";
+import { Avatar } from "@/components/admin/avatar";
 import { DEFAULT_LOGO } from "@/lib/logo-constants";
 import { PLEITO_COOKIE, PLEITO_COOKIE_MAX_AGE } from "@/lib/pleito-cookie";
 import { Button } from "@/components/ui/button";
@@ -43,17 +44,17 @@ const NAV: {
   label: string;
   icon: typeof LayoutDashboard;
   exact?: boolean;
-  cap?: Capability;
+  modulo: Modulo;
 }[] = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { href: "/admin/locais", label: "Locais de Trabalho", icon: Building2 },
-  { href: "/admin/encerradas", label: "Encerradas & Eleitos", icon: Trophy },
-  { href: "/admin/votantes", label: "Votantes", icon: Users },
-  { href: "/admin/relatorios", label: "Relatórios", icon: FileText },
-  { href: "/admin/pleitos", label: "Pleitos", icon: Vote },
-  { href: "/admin/auditoria", label: "Auditoria", icon: ScrollText, cap: "auditoria" },
-  { href: "/admin/usuarios", label: "Usuários", icon: Shield, cap: "users" },
-  { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true, modulo: "dashboard" },
+  { href: "/admin/locais", label: "Locais de Trabalho", icon: Building2, modulo: "locais" },
+  { href: "/admin/encerradas", label: "Encerradas & Eleitos", icon: Trophy, modulo: "encerradas" },
+  { href: "/admin/votantes", label: "Votantes", icon: Users, modulo: "votantes" },
+  { href: "/admin/relatorios", label: "Relatórios", icon: FileText, modulo: "relatorios" },
+  { href: "/admin/pleitos", label: "Pleitos", icon: Vote, modulo: "pleitos" },
+  { href: "/admin/auditoria", label: "Auditoria", icon: ScrollText, modulo: "auditoria" },
+  { href: "/admin/usuarios", label: "Usuários", icon: Shield, modulo: "usuarios" },
+  { href: "/admin/configuracoes", label: "Configurações", icon: Settings, modulo: "configuracoes" },
 ];
 
 export function Sidebar({
@@ -70,8 +71,8 @@ export function Sidebar({
   user: SessionUser;
 }) {
   const pathname = usePathname();
-  // Só mostra os itens que o papel do usuário pode acessar.
-  const navItems = NAV.filter((i) => !i.cap || can(user.role, i.cap));
+  // Só mostra os módulos que o usuário pode ao menos visualizar.
+  const navItems = NAV.filter((i) => pode(user.permissoes, i.modulo, "VIEW"));
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -257,18 +258,19 @@ export function Sidebar({
       </nav>
 
       <div className="space-y-3 border-t p-3">
-        {/* Usuário logado + papel (auditoria de quem está usando o sistema). */}
-        <div className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-            {user.nome.slice(0, 2).toUpperCase()}
-          </div>
+        {/* Usuário logado — clique abre o perfil (nome + foto). */}
+        <Link
+          href="/admin/perfil"
+          className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 transition hover:bg-slate-100"
+        >
+          <Avatar nome={user.nome} fotoUrl={user.fotoUrl} size={36} />
           <div className="min-w-0 leading-tight">
             <p className="truncate text-sm font-semibold">{user.nome}</p>
             <p className="truncate text-[11px] text-muted-foreground">
-              {ROLE_LABEL[user.role]}
+              {rotuloPerfil(user.permissoes)}
             </p>
           </div>
-        </div>
+        </Link>
         <form action={logout}>
           <Button
             type="submit"

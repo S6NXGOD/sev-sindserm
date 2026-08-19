@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { ORGAOS, ZONAS } from "@/lib/constants";
 import { isValidSlug, searchScore, searchTokens, slugify } from "@/lib/slug";
 import { VOTING_STATUS_ASCII, votingStatus } from "@/lib/voting-status";
-import { guard } from "@/lib/current-user";
+import { ensureModule, getCurrentUser, guard } from "@/lib/current-user";
 import { registrarAuditoria } from "@/lib/audit";
 import { notificarAdminsBg } from "@/lib/push";
 import { formatDateTime } from "@/lib/format";
@@ -47,7 +47,7 @@ export async function createWorkplace(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("write");
+  const g = await guard("locais", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const nome = String(formData.get("nome") ?? "").trim();
@@ -197,6 +197,8 @@ export async function searchWorkplacesLite(
   search: string,
   limit = 20,
 ): Promise<WorkplaceOption[]> {
+  // Usada por vários módulos (locais/relatórios/votantes) — exige apenas sessão.
+  if (!(await getCurrentUser())) return [];
   if (!Number.isInteger(anoEleicao)) return [];
   const take = Math.min(Math.max(Math.trunc(limit) || 20, 1), 50);
   const tokens = searchTokens(search ?? "");
@@ -226,7 +228,7 @@ export async function updateSlug(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("write");
+  const g = await guard("locais", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const id = String(formData.get("id") ?? "").trim();
@@ -275,7 +277,7 @@ export async function updateWorkplace(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("write");
+  const g = await guard("locais", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const id = String(formData.get("id") ?? "").trim();
@@ -320,7 +322,7 @@ export async function updateWorkplaceSchedule(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("write");
+  const g = await guard("locais", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const id = String(formData.get("id") ?? "").trim();
@@ -400,7 +402,7 @@ export async function updateVoteLimit(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("write");
+  const g = await guard("locais", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const id = String(formData.get("id") ?? "").trim();
@@ -445,7 +447,7 @@ export async function updateVoteLimit(
 
 /** Encerra a votação manualmente AGORA, mesmo antes do horário previsto. */
 export async function encerrarVotacao(formData: FormData): Promise<void> {
-  const g = await guard("write");
+  const g = await guard("locais", "EDIT");
   if ("error" in g) return;
 
   const id = String(formData.get("id") ?? "").trim();
@@ -490,7 +492,7 @@ export async function reopenWorkplace(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("write");
+  const g = await guard("locais", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const id = String(formData.get("id") ?? "").trim();
@@ -565,7 +567,7 @@ export async function createCandidate(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("write");
+  const g = await guard("locais", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const nome = String(formData.get("nome") ?? "").trim();
@@ -616,7 +618,7 @@ export async function importCandidatesChunk(
   nomes: string[],
   isLast: boolean,
 ): Promise<{ status: "ok" | "error"; count: number; message?: string }> {
-  const g = await guard("write");
+  const g = await guard("locais", "EDIT");
   if ("error" in g) {
     return { status: "error", count: 0, message: g.error };
   }
@@ -677,7 +679,7 @@ export async function deleteCandidate(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("write");
+  const g = await guard("locais", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const id = String(formData.get("id") ?? "").trim();
@@ -726,7 +728,7 @@ export async function setCandidateRenuncia(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("write");
+  const g = await guard("locais", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const id = String(formData.get("id") ?? "").trim();
@@ -793,6 +795,7 @@ const CSV_EXPORT_LIMIT = 50000;
  * Usa a MESMA cláusula where da listagem (buildVoterWhere).
  */
 export async function exportVotersCsv(filtros: VoterFiltros): Promise<string> {
+  await ensureModule("votantes", "VIEW"); // dados pessoais — nunca sem permissão
   const where = buildVoterWhere(filtros);
 
   const voters = await prisma.voter.findMany({
@@ -869,6 +872,7 @@ export type LocaisReportOpts = {
 export async function exportLocaisReport(
   opts: LocaisReportOpts,
 ): Promise<string> {
+  await ensureModule("relatorios", "VIEW");
   const now = new Date();
   const where: Prisma.WorkplaceWhereInput = { anoEleicao: opts.anoEleicao };
   if (opts.localId) where.id = opts.localId;
@@ -1022,6 +1026,7 @@ const PDF_ROW_CAP = 4000;
 export async function getLocaisReportData(
   opts: LocaisReportOpts,
 ): Promise<LocaisReportData> {
+  await ensureModule("relatorios", "VIEW");
   const now = new Date();
   const where: Prisma.WorkplaceWhereInput = { anoEleicao: opts.anoEleicao };
   if (opts.localId) where.id = opts.localId;
@@ -1166,6 +1171,7 @@ export async function exportEleitosCsv(opts: {
   orgao?: string;
   localId?: string;
 }): Promise<string> {
+  await ensureModule("encerradas", "VIEW");
   const now = new Date();
   const header = ["Orgao", "Zona", "Local", "Posicao", "Eleito", "Votos"];
 
@@ -1267,7 +1273,7 @@ export async function deleteWorkplace(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const g = await guard("delete");
+  const g = await guard("locais", "EDIT");
   if ("error" in g) return { status: "error", message: g.error };
 
   const id = String(formData.get("id") ?? "").trim();
