@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { ReportControls } from "@/components/admin/report-controls";
 import { ExportEleitosButton } from "@/components/admin/export-eleitos-button";
+import { ApuracaoPdfButton } from "@/components/admin/apuracao-pdf-button";
 import { ApuracoesList } from "@/components/admin/apuracoes-list";
 
 export const dynamic = "force-dynamic";
@@ -114,6 +115,16 @@ export default async function RelatoriosPage({
   const data = precisaSelecionarLocal ? null : await getReportData(opts);
   const mostrarResumo = tipo !== "local";
 
+  // Cabeçalho do PDF consolidado (gerado no cliente a partir de `data`).
+  const pdfHeader = {
+    logoSindserm: logos.sindserm,
+    logoPleito: logos.pleito,
+    tituloPleito: tituloInstitucional(pleito?.titulo, ano, duracao),
+    subtitulo: tituloRelatorio,
+    filtro: filtroDescricao,
+    geradoEm: data?.geradoEmDisplay ?? "",
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3 print:hidden">
@@ -121,11 +132,14 @@ export default async function RelatoriosPage({
           <h1 className="text-2xl font-bold tracking-tight">Relatórios</h1>
           <p className="text-sm text-muted-foreground">
             Apuração da eleição {ano}
-            {ano !== anoVigente ? " (histórico — auditoria)" : ""}. Selecione o
-            tipo e use “Imprimir / Salvar PDF”.
+            {ano !== anoVigente ? " (histórico — auditoria)" : ""}. Escolha o
+            critério e gere o documento (PDF/CSV) ou imprima.
           </p>
         </div>
-        <ExportEleitosButton ano={ano} />
+        <div className="flex flex-wrap items-center gap-2">
+          {data && <ApuracaoPdfButton data={data} header={pdfHeader} />}
+          <ExportEleitosButton ano={ano} />
+        </div>
       </div>
 
       <ReportControls ano={ano} selectedLocalNome={selectedLocalNome} />

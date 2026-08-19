@@ -3,8 +3,8 @@ import {
   getPleitosPublicos,
   getTransparenciaData,
 } from "@/lib/transparencia";
-import { StatusPieChart } from "@/components/admin/status-pie-chart";
 import { ProximasAberturas } from "@/components/proximas-aberturas";
+import { ParticipacaoPanel } from "@/components/transparencia/participacao-panel";
 import { PleitoSelector } from "@/components/transparencia/pleito-selector";
 import { FiltrosBar } from "@/components/transparencia/filtros-bar";
 import { BuscaUrna } from "@/components/transparencia/busca-urna";
@@ -158,21 +158,24 @@ export default async function TransparenciaPage({
           <ExportCsvButton electionId={pleitoId} />
         </div>
 
-        {/* KPIs + gráfico de status */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="grid grid-cols-2 gap-3 lg:col-span-2">
-            <Kpi label="Locais de votação" value={data.kpis.locais} icon={Vote} tone="blue" />
-            <Kpi label="Total de votantes" value={data.kpis.votos} icon={Users} />
-            <Kpi label="Eleitos definidos" value={data.kpis.eleitos} icon={Award} tone="green" />
-            <Kpi label="Vagas no pleito" value={data.kpis.vagas} icon={CheckCircle2} />
-            <Kpi label="Em andamento" value={data.kpis.abertas} icon={Activity} tone="amber" />
-            <Kpi label="Encerradas" value={data.kpis.encerradas} icon={CheckCircle2} tone="green" />
-          </div>
-          <div className="rounded-xl border bg-card p-4 shadow-sm">
-            <p className="mb-1 text-sm font-bold">Situação dos locais</p>
-            <StatusPieChart data={data.statusPie} />
-          </div>
+        {/* KPIs (linha cheia, responsiva) */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Kpi label="Locais de votação" value={data.kpis.locais} icon={Vote} tone="blue" />
+          <Kpi label="Total de votantes" value={data.kpis.votos} icon={Users} />
+          <Kpi label="Eleitos definidos" value={data.kpis.eleitos} icon={Award} tone="green" />
+          <Kpi label="Vagas no pleito" value={data.kpis.vagas} icon={CheckCircle2} />
+          <Kpi label="Em andamento" value={data.kpis.abertas} icon={Activity} tone="amber" />
+          <Kpi label="Encerradas" value={data.kpis.encerradas} icon={CheckCircle2} tone="green" />
         </div>
+
+        {/* Ranking & Participação (substitui o antigo gráfico de pizza) */}
+        <ParticipacaoPanel
+          ranking={data.rankingParticipacao}
+          porZona={data.votantesPorZona}
+          totalVotantes={data.kpis.votos}
+          eleitos={data.kpis.eleitos}
+          vagas={data.kpis.vagas}
+        />
 
         {/* Próximas aberturas: o filiado vê quais urnas vão abrir e quando. */}
         <ProximasAberturas

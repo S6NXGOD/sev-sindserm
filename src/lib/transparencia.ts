@@ -101,6 +101,17 @@ export type TransparenciaData = {
   statusPie: { status: string; valor: number }[];
   /** Locais agendados que abrem primeiro (limitado para render). */
   proximasAberturas: ProximaAbertura[];
+  /** Ranking público de PARTICIPAÇÃO (locais que já começaram, por votantes). */
+  rankingParticipacao: {
+    id: string;
+    nome: string;
+    orgao: string;
+    zona: string;
+    votantes: number;
+    status: LocalStatus;
+  }[];
+  /** Votantes por zona (barras de participação). */
+  votantesPorZona: { zona: string; votantes: number }[];
   orgaos: string[];
   locais: TransparenciaLocal[];
 };
@@ -121,6 +132,8 @@ const EMPTY: TransparenciaData = {
   },
   statusPie: [],
   proximasAberturas: [],
+  rankingParticipacao: [],
+  votantesPorZona: [],
   orgaos: [],
   locais: [],
 };
@@ -212,6 +225,33 @@ export async function getTransparenciaData(
       inicio: l.dataInicio,
     }));
 
+  // RANKING PÚBLICO de participação: só locais que JÁ começaram (open/closed),
+  // ordenados por comparecimento. É o "lugar rico em dados" para o filiado.
+  const rankingParticipacao = todos
+    .filter((l) => l.status === "open" || l.status === "closed")
+    .sort(
+      (a, b) =>
+        b.totalVotantes - a.totalVotantes || a.nome.localeCompare(b.nome),
+    )
+    .slice(0, 8)
+    .map((l) => ({
+      id: l.id,
+      nome: l.nome,
+      orgao: l.orgao,
+      zona: l.zona,
+      votantes: l.totalVotantes,
+      status: l.status,
+    }));
+
+  // Participação por zona (votantes = comparecimento; Voter 1:1 voto).
+  const zonaMap = new Map<string, number>();
+  for (const l of todos) {
+    zonaMap.set(l.zona, (zonaMap.get(l.zona) ?? 0) + l.totalVotantes);
+  }
+  const votantesPorZona = [...zonaMap.entries()]
+    .map(([zona, votantes]) => ({ zona, votantes }))
+    .sort((a, b) => b.votantes - a.votantes);
+
   const orgaos = [...new Set(todos.map((l) => l.orgao))].sort((a, b) =>
     a.localeCompare(b),
   );
@@ -283,6 +323,8 @@ export async function getTransparenciaData(
       { status: "Encerradas", valor: encerradas },
     ],
     proximasAberturas,
+    rankingParticipacao,
+    votantesPorZona,
     orgaos,
     locais,
   };
