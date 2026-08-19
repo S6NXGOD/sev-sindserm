@@ -144,6 +144,9 @@ export async function createWorkplace(
             dataInicioVotacao: null,
             dataFimVotacao: null,
             voteLimit,
+            // Rastro: quem criou este local (foto/nome aparecem no próprio local).
+            criadoPorId: g.user.id,
+            criadoPorNome: g.user.nome,
           },
         });
         if (candidatos.length > 0) {
@@ -266,6 +269,11 @@ export async function updateSlug(
   revalidatePath("/admin");
   revalidatePath("/admin/locais");
   revalidatePath(`/admin/locais/${id}`);
+  await registrarAuditoria("ALTEROU_LINK", {
+    alvo: slug,
+    detalhe: "link público do local",
+    user: g.user,
+  });
   return { status: "success", message: "Link atualizado." };
 }
 
@@ -316,6 +324,11 @@ export async function updateWorkplace(
   revalidatePath("/admin");
   revalidatePath("/admin/locais");
   revalidatePath(`/admin/locais/${id}`);
+  await registrarAuditoria("EDITOU_LOCAL", {
+    alvo: nome,
+    detalhe: `${orgao} · ${zona}`,
+    user: g.user,
+  });
   return { status: "success", message: "Dados do local atualizados." };
 }
 
@@ -364,6 +377,10 @@ export async function updateWorkplaceSchedule(
         notifStartSent: false,
         notifCloseSent: false,
         notifEndingSoonSent: false,
+        // Rastro: quem agendou e quando (mostrado no próprio local).
+        agendadoPorId: g.user.id,
+        agendadoPorNome: g.user.nome,
+        agendadoEm: new Date(),
       },
       select: { nome: true },
     });
@@ -441,8 +458,13 @@ export async function updateVoteLimit(
     }
   }
 
+  let localLimite: { nome: string } | null = null;
   try {
-    await prisma.workplace.update({ where: { id }, data: { voteLimit } });
+    localLimite = await prisma.workplace.update({
+      where: { id },
+      data: { voteLimit },
+      select: { nome: true },
+    });
   } catch (error) {
     console.error("Erro ao atualizar limite:", error);
     return { status: "error", message: "Erro ao atualizar o limite de votos." };
@@ -450,6 +472,11 @@ export async function updateVoteLimit(
 
   revalidatePath("/admin/locais");
   revalidatePath(`/admin/locais/${id}`);
+  await registrarAuditoria("DEFINIU_LIMITE", {
+    alvo: localLimite?.nome ?? "local",
+    detalhe: voteLimit === null ? "ilimitado" : `limite de ${voteLimit} votos`,
+    user: g.user,
+  });
   return {
     status: "success",
     message:
@@ -483,7 +510,15 @@ export async function encerrarVotacao(formData: FormData): Promise<void> {
     where: { id },
     // notifCloseSent=true: encerramento MANUAL já notifica aqui; o cron não
     // deve re-notificar este local como "encerrado automaticamente".
-    data: { dataInicioVotacao: inicio, dataFimVotacao: fim, notifCloseSent: true },
+    data: {
+      dataInicioVotacao: inicio,
+      dataFimVotacao: fim,
+      notifCloseSent: true,
+      // Rastro: quem encerrou e quando.
+      encerradoPorId: g.user.id,
+      encerradoPorNome: g.user.nome,
+      encerradoEm: new Date(),
+    },
   });
 
   revalidatePath("/admin");
@@ -563,6 +598,13 @@ export async function reopenWorkplace(
         dataFimVotacao: novoFim,
         notifCloseSent: false,
         notifEndingSoonSent: false,
+        // Reabrir é um novo agendamento; limpa o rastro de encerramento.
+        agendadoPorId: g.user.id,
+        agendadoPorNome: g.user.nome,
+        agendadoEm: new Date(),
+        encerradoPorId: null,
+        encerradoPorNome: null,
+        encerradoEm: null,
       },
     });
   } catch (error) {
@@ -611,9 +653,14 @@ export async function createCandidate(
     return { status: "error", message: "Informe o nome do candidato." };
   }
 
+  let local: { nome: string } | null = null;
   try {
     await prisma.candidate.create({
       data: { nome, workplaceId },
+    });
+    local = await prisma.workplace.findUnique({
+      where: { id: workplaceId },
+      select: { nome: true },
     });
   } catch (error) {
     if (
@@ -629,6 +676,11 @@ export async function createCandidate(
   revalidatePath("/admin");
   revalidatePath("/admin/locais");
   revalidatePath(`/admin/locais/${workplaceId}`);
+  await registrarAuditoria("ADICIONOU_CANDIDATO", {
+    alvo: nome,
+    detalhe: local ? `no local "${local.nome}"` : undefined,
+    user: g.user,
+  });
   return { status: "success", message: "Candidato cadastrado com sucesso." };
 }
 
@@ -683,6 +735,19 @@ export async function importCandidatesChunk(
       revalidatePath("/admin");
       revalidatePath("/admin/locais");
       revalidatePath(`/admin/locais/${workplaceId}`);
+      // Audita UMA vez (no fim do lote), com o total de candidatos do local.
+      const [local, total] = await Promise.all([
+        prisma.workplace.findUnique({
+          where: { id: workplaceId },
+          select: { nome: true },
+        }),
+        prisma.candidate.count({ where: { workplaceId } }),
+      ]);
+      await registrarAuditoria("IMPORTOU_CANDIDATOS", {
+        alvo: local?.nome ?? "local",
+        detalhe: `importação concluída — ${total} candidato(s) no local`,
+        user: g.user,
+      });
     }
 
     return { status: "ok", count: result.count };
@@ -737,6 +802,10 @@ export async function deleteCandidate(
   revalidatePath("/admin");
   revalidatePath("/admin/locais");
   revalidatePath(`/admin/locais/${candidate.workplaceId}`);
+  await registrarAuditoria("EXCLUIU_CANDIDATO", {
+    alvo: candidate.nome,
+    user: g.user,
+  });
   return { status: "success", message: "Candidato removido." };
 }
 

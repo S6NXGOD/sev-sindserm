@@ -8,6 +8,7 @@ import { votingStatus } from "@/lib/voting-status";
 import { apurarEleitos, calcularVagas } from "@/lib/vagas";
 import { getCurrentElectionYear, requirePleito } from "@/lib/election";
 import { requireModule } from "@/lib/current-user";
+import { RegistroLocal } from "@/components/admin/registro-local";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,12 +52,37 @@ export default async function LocalDetailPage({
       voteLimit: true,
       dataInicioVotacao: true,
       dataFimVotacao: true,
+      createdAt: true,
+      criadoPorId: true,
+      criadoPorNome: true,
+      agendadoPorId: true,
+      agendadoPorNome: true,
+      agendadoEm: true,
+      encerradoPorId: true,
+      encerradoPorNome: true,
+      encerradoEm: true,
     },
   });
 
   if (!workplace) {
     notFound();
   }
+
+  // Resolve as fotos ATUAIS dos autores das ações (o nome é desnormalizado e
+  // sobrevive à exclusão; a foto vem do usuário, se ainda existir).
+  const atorIds = [
+    workplace.criadoPorId,
+    workplace.agendadoPorId,
+    workplace.encerradoPorId,
+  ].filter((x): x is string => Boolean(x));
+  const atores = atorIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: atorIds } },
+        select: { id: true, fotoUrl: true },
+      })
+    : [];
+  const fotoDe = (uid: string | null) =>
+    (uid && atores.find((a) => a.id === uid)?.fotoUrl) || null;
 
   const candQuery = (searchParams.cq ?? "").trim();
   const candPage = Math.max(1, Number(searchParams.cpage) || 1);
@@ -210,6 +236,25 @@ export default async function LocalDetailPage({
       </div>
 
       <WorkplaceManager data={data} />
+
+      {/* Quem criou / agendou / encerrou este local (foto + nome + horário). */}
+      <RegistroLocal
+        criado={{
+          nome: workplace.criadoPorNome,
+          fotoUrl: fotoDe(workplace.criadoPorId),
+          em: workplace.createdAt,
+        }}
+        agendado={{
+          nome: workplace.agendadoPorNome,
+          fotoUrl: fotoDe(workplace.agendadoPorId),
+          em: workplace.agendadoEm,
+        }}
+        encerrado={{
+          nome: workplace.encerradoPorNome,
+          fotoUrl: fotoDe(workplace.encerradoPorId),
+          em: workplace.encerradoEm,
+        }}
+      />
     </div>
   );
 }

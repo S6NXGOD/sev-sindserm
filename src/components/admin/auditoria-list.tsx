@@ -34,11 +34,18 @@ const ACAO_LABEL: Record<string, string> = {
   RESETOU_SENHA: "Redefiniu senha de usuário",
   EXCLUIU_USUARIO: "Excluiu usuário",
   DESLOGOU_TODOS: "Deslogou todos os usuários",
+  EDITOU_PERFIL: "Editou o próprio perfil",
   CRIOU_LOCAL: "Cadastrou local",
+  EDITOU_LOCAL: "Editou dados do local",
+  ALTEROU_LINK: "Alterou o link do local",
+  DEFINIU_LIMITE: "Definiu limite de votos",
   AGENDOU_VOTACAO: "Agendou/alterou a votação",
   ENCERROU: "Encerrou a votação",
   REABRIU: "Reabriu a votação",
   EXCLUIU_LOCAL: "Excluiu local",
+  ADICIONOU_CANDIDATO: "Adicionou candidato",
+  IMPORTOU_CANDIDATOS: "Importou candidatos (lote)",
+  EXCLUIU_CANDIDATO: "Excluiu candidato",
   RENUNCIA: "Registrou 'não assume a vaga'",
   REVERTEU_RENUNCIA: "Reverteu 'não assume a vaga'",
   CRIOU_PLEITO: "Criou pleito",
@@ -67,7 +74,11 @@ const FILTROS = [
 ];
 
 function categoria(acao: string): string {
-  if (["LOGIN", "LOGOUT", "TROCOU_SENHA", "DESLOGOU_TODOS"].includes(acao))
+  if (
+    ["LOGIN", "LOGOUT", "TROCOU_SENHA", "DESLOGOU_TODOS", "EDITOU_PERFIL"].includes(
+      acao,
+    )
+  )
     return "auth";
   if (acao.endsWith("_USUARIO") || acao === "RESETOU_SENHA") return "usuarios";
   if (acao.endsWith("_PLEITO")) return "pleitos";

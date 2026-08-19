@@ -199,6 +199,19 @@ model Workplace {
   // Aviso "encerrando em breve" (janela de ~2h antes do fim). Reset ao reagendar/reabrir.
   notifEndingSoonSent Boolean @default(false)
 
+  // RASTRO DE AÇÕES (denormalizado, para mostrar "quem fez" direto no local):
+  // guarda o AUTOR e o HORÁRIO das ações que definem o estado do local. O nome é
+  // desnormalizado (sobrevive à exclusão do usuário); o id serve para buscar a
+  // foto atual. A auditoria completa (histórico) continua no módulo Auditoria.
+  criadoPorId      String?
+  criadoPorNome    String?
+  agendadoPorId    String?
+  agendadoPorNome  String?
+  agendadoEm       DateTime?
+  encerradoPorId   String?
+  encerradoPorNome String?
+  encerradoEm      DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
