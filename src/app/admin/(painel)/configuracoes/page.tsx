@@ -116,11 +116,11 @@ export default async function ConfiguracoesPage({
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <ShieldCheck className="h-5 w-5" />
-            Segurança — Alterar senha
+            Segurança — Minha senha
           </CardTitle>
           <CardDescription>
-            Informe a senha atual e a nova senha. A nova senha passa a valer no
-            próximo acesso ao painel.
+            Altere a SUA senha (a deste usuário). Confirme a senha atual e defina
+            a nova. Suas outras sessões serão encerradas por segurança.
           </CardDescription>
         </CardHeader>
         <CardContent>

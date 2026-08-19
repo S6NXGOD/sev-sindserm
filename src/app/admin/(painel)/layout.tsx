@@ -3,6 +3,7 @@ import {
   getElectionsForSidebar,
   getSelectedElectionYear,
 } from "@/lib/election";
+import { requireUser } from "@/lib/current-user";
 import { Sidebar } from "@/components/admin/sidebar";
 import { MobileNav } from "@/components/admin/mobile-nav";
 
@@ -13,9 +14,15 @@ export default async function PainelLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // GATE FINO: exige um usuário logado, ATIVO e com a versão de sessão vigente.
+  // (O middleware só valida a assinatura do token — a checagem no banco é aqui.)
+  // Sem usuário válido → redireciona para /login. Assim, ao migrar para a gestão
+  // de usuários, todas as sessões antigas caem e cada um reloga com sua senha.
+  const user = await requireUser();
+
   // A guarda de "primeiro acesso" (sem pleito) é feita por página via
-  // requirePleito() — confiável em navegação client-side. O layout só monta a
-  // sidebar (que, sem pleito, exibe o estado bloqueado).
+  // requirePleito(). O layout monta a sidebar (que, sem pleito, exibe o estado
+  // bloqueado) e o cabeçalho com o usuário/papel.
   const elections = await getElectionsForSidebar();
   const anoVigente = getCurrentElectionYear();
   const anoSelecionado = getSelectedElectionYear();
@@ -27,6 +34,7 @@ export default async function PainelLayout({
           elections={elections}
           currentElectionYear={anoVigente}
           selectedYear={anoSelecionado}
+          user={user}
         />
       </div>
       <main className="min-w-0 flex-1">
@@ -35,6 +43,7 @@ export default async function PainelLayout({
           elections={elections}
           currentElectionYear={anoVigente}
           selectedYear={anoSelecionado}
+          user={user}
         />
         <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">{children}</div>
       </main>

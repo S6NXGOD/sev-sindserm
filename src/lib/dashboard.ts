@@ -340,10 +340,14 @@ export async function getDashboardData(
       where: { workplace: { anoEleicao } },
       _count: { workplaceId: true },
     }),
+    // Candidatos votados que ASSUMEM a vaga (exclui renunciantes) — assim a
+    // "vaga preenchida" reflete a apuração real (renúncia com vaga vazia conta
+    // a menos, promoção normal mantém o número).
     prisma.$queryRaw<{ wid: string; n: number }[]>`
-      SELECT "workplaceId" AS wid, COUNT(DISTINCT "candidateId")::int AS n
-      FROM votes WHERE "anoEleicao" = ${anoEleicao}
-      GROUP BY "workplaceId"`,
+      SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
+      FROM votes v JOIN candidates c ON c.id = v."candidateId"
+      WHERE v."anoEleicao" = ${anoEleicao} AND c."renunciou" = false
+      GROUP BY v."workplaceId"`,
   ]);
   const votadosMap = new Map(votadosPorLocal.map((r) => [r.wid, Number(r.n)]));
   let vagasTotais = 0;
@@ -573,6 +577,7 @@ export async function getLiderancaParcial(
         FROM votes v
         JOIN candidates c ON c.id = v."candidateId"
         WHERE v."anoEleicao" = ${anoEleicao}
+          AND c."renunciou" = false
           AND v."workplaceId" IN (${Prisma.join(ids)})
         GROUP BY v."workplaceId", c.id, c.nome
       ) t WHERE rn <= 60`,
@@ -641,6 +646,8 @@ export async function getPresentationData(
         where: { workplace: { anoEleicao } },
         _count: { workplaceId: true },
       }),
+      // Pódio (top 5) e contagem de eleitos: só candidatos que ASSUMEM a vaga
+      // (exclui renunciantes) — o telão mostra os vencedores reais.
       prisma.$queryRaw<EleitoRaw[]>`
         SELECT wid, cid, nome, votos FROM (
           SELECT v."workplaceId" AS wid, c.id AS cid, c.nome AS nome,
@@ -650,13 +657,14 @@ export async function getPresentationData(
                  ) AS rn
           FROM votes v
           JOIN candidates c ON c.id = v."candidateId"
-          WHERE v."anoEleicao" = ${anoEleicao}
+          WHERE v."anoEleicao" = ${anoEleicao} AND c."renunciou" = false
           GROUP BY v."workplaceId", c.id, c.nome
         ) t WHERE rn <= 5`,
       prisma.$queryRaw<VotedRaw[]>`
-        SELECT "workplaceId" AS wid, COUNT(DISTINCT "candidateId")::int AS n
-        FROM votes WHERE "anoEleicao" = ${anoEleicao}
-        GROUP BY "workplaceId"`,
+        SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
+        FROM votes v JOIN candidates c ON c.id = v."candidateId"
+        WHERE v."anoEleicao" = ${anoEleicao} AND c."renunciou" = false
+        GROUP BY v."workplaceId"`,
     ]);
 
   const votosMap = new Map(
@@ -726,10 +734,13 @@ export async function getMuralEleitos(
       where: { workplace: { anoEleicao } },
       _count: { workplaceId: true },
     }),
+    // Eleitos que ASSUMEM a vaga (exclui renunciantes) — alinha o Mural à
+    // apuração real: renúncia com vaga vazia conta a menos.
     prisma.$queryRaw<VotedRaw[]>`
-      SELECT "workplaceId" AS wid, COUNT(DISTINCT "candidateId")::int AS n
-      FROM votes WHERE "anoEleicao" = ${anoEleicao}
-      GROUP BY "workplaceId"`,
+      SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
+      FROM votes v JOIN candidates c ON c.id = v."candidateId"
+      WHERE v."anoEleicao" = ${anoEleicao} AND c."renunciou" = false
+      GROUP BY v."workplaceId"`,
   ]);
 
   const candMap = new Map(
@@ -765,6 +776,7 @@ export async function getMuralEleitos(
         FROM votes v
         JOIN candidates c ON c.id = v."candidateId"
         WHERE v."anoEleicao" = ${anoEleicao}
+          AND c."renunciou" = false
           AND v."workplaceId" IN (${Prisma.join(fechados.map((l) => l.id))})
         GROUP BY v."workplaceId", c.id, c.nome
       ) t WHERE rn <= ${MURAL_RN_POR_LOCAL}`);

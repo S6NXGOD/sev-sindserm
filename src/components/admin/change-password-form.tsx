@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { toast } from "sonner";
 import { KeyRound, Loader2 } from "lucide-react";
-import { changeAdminPassword } from "@/lib/actions/auth";
+import { changeMyPassword } from "@/lib/actions/auth";
 import { initialActionState } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,7 @@ function SubmitButton() {
 
 export function ChangePasswordForm() {
   const [state, formAction] = useFormState(
-    changeAdminPassword,
+    changeMyPassword,
     initialActionState,
   );
   const formRef = useRef<HTMLFormElement>(null);

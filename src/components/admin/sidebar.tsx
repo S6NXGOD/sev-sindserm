@@ -10,13 +10,21 @@ import {
   Lock,
   LogOut,
   Plus,
+  ScrollText,
   Settings,
+  Shield,
   Trophy,
   Users,
   Vote,
 } from "lucide-react";
 import { logout } from "@/lib/actions/auth";
 import type { SidebarElection } from "@/lib/election";
+import {
+  can,
+  ROLE_LABEL,
+  type Capability,
+  type SessionUser,
+} from "@/lib/permissions";
 import { DEFAULT_LOGO } from "@/lib/logo-constants";
 import { PLEITO_COOKIE, PLEITO_COOKIE_MAX_AGE } from "@/lib/pleito-cookie";
 import { Button } from "@/components/ui/button";
@@ -30,13 +38,21 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-const NAV = [
+const NAV: {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  exact?: boolean;
+  cap?: Capability;
+}[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/admin/locais", label: "Locais de Trabalho", icon: Building2 },
   { href: "/admin/encerradas", label: "Encerradas & Eleitos", icon: Trophy },
   { href: "/admin/votantes", label: "Votantes", icon: Users },
   { href: "/admin/relatorios", label: "Relatórios", icon: FileText },
   { href: "/admin/pleitos", label: "Pleitos", icon: Vote },
+  { href: "/admin/auditoria", label: "Auditoria", icon: ScrollText, cap: "auditoria" },
+  { href: "/admin/usuarios", label: "Usuários", icon: Shield, cap: "users" },
   { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
 ];
 
@@ -44,13 +60,18 @@ export function Sidebar({
   elections,
   currentElectionYear,
   selectedYear,
+  user,
 }: {
   elections: SidebarElection[];
   currentElectionYear: number;
   /** Ano resolvido pelo cookie no servidor (seleção persistente). */
   selectedYear: number;
+  /** Usuário logado — filtra a navegação por permissão e mostra nome/papel. */
+  user: SessionUser;
 }) {
   const pathname = usePathname();
+  // Só mostra os itens que o papel do usuário pode acessar.
+  const navItems = NAV.filter((i) => !i.cap || can(user.role, i.cap));
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -124,7 +145,9 @@ export function Sidebar({
 
           {/* Módulos bloqueados (visual) até existir um pleito. */}
           <nav className="space-y-1 pt-1">
-            {NAV.filter((i) => i.href !== "/admin/pleitos").map((item) => {
+            {navItems
+              .filter((i) => i.href !== "/admin/pleitos")
+              .map((item) => {
               const Icon = item.icon;
               return (
                 <div
@@ -212,7 +235,7 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-1 p-3">
-        {NAV.map((item) => {
+        {navItems.map((item) => {
           const active = isActive(item.href, item.exact);
           const Icon = item.icon;
           return (
@@ -234,6 +257,18 @@ export function Sidebar({
       </nav>
 
       <div className="space-y-3 border-t p-3">
+        {/* Usuário logado + papel (auditoria de quem está usando o sistema). */}
+        <div className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+            {user.nome.slice(0, 2).toUpperCase()}
+          </div>
+          <div className="min-w-0 leading-tight">
+            <p className="truncate text-sm font-semibold">{user.nome}</p>
+            <p className="truncate text-[11px] text-muted-foreground">
+              {ROLE_LABEL[user.role]}
+            </p>
+          </div>
+        </div>
         <form action={logout}>
           <Button
             type="submit"

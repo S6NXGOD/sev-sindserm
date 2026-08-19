@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormState, useFormStatus } from "react-dom";
-import { Loader2, Lock } from "lucide-react";
+import { Loader2, Lock, User } from "lucide-react";
 import { login } from "@/lib/actions/auth";
 import { initialActionState } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,25 @@ export function LoginForm({ redirectTo }: { redirectTo: string }) {
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="redirect" value={redirectTo} />
       <div className="space-y-2">
-        <Label htmlFor="password">Senha de administrador</Label>
+        <Label htmlFor="username">Usuário</Label>
+        <div className="relative">
+          <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id="username"
+            name="username"
+            type="text"
+            className="pl-9"
+            placeholder="seu.usuario"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+            autoFocus
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="password">Senha</Label>
         <div className="relative">
           <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -42,7 +60,6 @@ export function LoginForm({ redirectTo }: { redirectTo: string }) {
             placeholder="••••••••"
             autoComplete="current-password"
             required
-            autoFocus
           />
         </div>
       </div>

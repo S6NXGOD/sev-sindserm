@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { ORGAOS, ZONAS } from "@/lib/constants";
 import { isValidSlug, searchScore, searchTokens, slugify } from "@/lib/slug";
 import { VOTING_STATUS_ASCII, votingStatus } from "@/lib/voting-status";
+import { guard } from "@/lib/current-user";
+import { registrarAuditoria } from "@/lib/audit";
 import { formatDateTime } from "@/lib/format";
 import { buildVoterWhere, type VoterFiltros } from "@/lib/voter-filters";
 import { calcularVagas } from "@/lib/vagas";
@@ -44,6 +46,9 @@ export async function createWorkplace(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const g = await guard("write");
+  if ("error" in g) return { status: "error", message: g.error };
+
   const nome = String(formData.get("nome") ?? "").trim();
   const zona = String(formData.get("zona") ?? "").trim();
   const orgao = String(formData.get("orgao") ?? "").trim();
@@ -163,6 +168,12 @@ export async function createWorkplace(
 
   revalidatePath("/admin");
   revalidatePath("/admin/locais");
+  await registrarAuditoria("CRIOU_LOCAL", {
+    alvo: nome,
+    detalhe:
+      candidatos.length > 0 ? `${candidatos.length} candidato(s)` : undefined,
+    user: g.user,
+  });
   return {
     status: "success",
     message:
@@ -214,6 +225,9 @@ export async function updateSlug(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const g = await guard("write");
+  if ("error" in g) return { status: "error", message: g.error };
+
   const id = String(formData.get("id") ?? "").trim();
   const slug = slugify(String(formData.get("slug") ?? "").trim());
 
@@ -260,6 +274,9 @@ export async function updateWorkplace(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const g = await guard("write");
+  if ("error" in g) return { status: "error", message: g.error };
+
   const id = String(formData.get("id") ?? "").trim();
   const nome = String(formData.get("nome") ?? "").trim();
   const zona = String(formData.get("zona") ?? "").trim();
@@ -302,6 +319,9 @@ export async function updateWorkplaceSchedule(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const g = await guard("write");
+  if ("error" in g) return { status: "error", message: g.error };
+
   const id = String(formData.get("id") ?? "").trim();
   const inicioRaw = String(formData.get("dataInicioVotacao") ?? "");
   const fimRaw = String(formData.get("dataFimVotacao") ?? "");
@@ -323,10 +343,17 @@ export async function updateWorkplaceSchedule(
     };
   }
 
+  // Aviso (não bloqueia): agendar um local SEM candidatos deixa a urna abrir
+  // mostrando "sem candidatos" — vexatório. A UI já alerta; aqui reforçamos.
+  const semCandidatos =
+    (await prisma.candidate.count({ where: { workplaceId: id } })) === 0;
+
+  let wp: { nome: string };
   try {
-    await prisma.workplace.update({
+    wp = await prisma.workplace.update({
       where: { id },
       data: { dataInicioVotacao, dataFimVotacao },
+      select: { nome: true },
     });
   } catch (error) {
     console.error("Erro ao atualizar horário:", error);
@@ -336,7 +363,18 @@ export async function updateWorkplaceSchedule(
   revalidatePath("/admin");
   revalidatePath("/admin/locais");
   revalidatePath(`/admin/locais/${id}`);
-  return { status: "success", message: "Horário atualizado." };
+  await registrarAuditoria("AGENDOU_VOTACAO", {
+    alvo: wp.nome,
+    detalhe: `${formatDateTime(dataInicioVotacao)} até ${formatDateTime(dataFimVotacao)}`,
+    user: g.user,
+  });
+  return semCandidatos
+    ? {
+        status: "warning",
+        message:
+          "Horário salvo — ATENÇÃO: este local não tem candidatos cadastrados. A urna abrirá mostrando 'sem candidatos'.",
+      }
+    : { status: "success", message: "Horário atualizado." };
 }
 
 /** Define ou remove o limite de votos do local (vazio = ilimitado). */
@@ -344,6 +382,9 @@ export async function updateVoteLimit(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const g = await guard("write");
+  if ("error" in g) return { status: "error", message: g.error };
+
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { status: "error", message: "Local inválido." };
 
@@ -386,6 +427,9 @@ export async function updateVoteLimit(
 
 /** Encerra a votação manualmente AGORA, mesmo antes do horário previsto. */
 export async function encerrarVotacao(formData: FormData): Promise<void> {
+  const g = await guard("write");
+  if ("error" in g) return;
+
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return;
 
@@ -409,6 +453,7 @@ export async function encerrarVotacao(formData: FormData): Promise<void> {
   revalidatePath("/admin");
   revalidatePath("/admin/locais");
   revalidatePath(`/admin/locais/${id}`);
+  await registrarAuditoria("ENCERROU", { alvo: workplace.nome, user: g.user });
 }
 
 /** Reabre uma votação encerrada definindo um novo horário de término futuro. */
@@ -416,6 +461,9 @@ export async function reopenWorkplace(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const g = await guard("write");
+  if ("error" in g) return { status: "error", message: g.error };
+
   const id = String(formData.get("id") ?? "").trim();
   const novoFimRaw = String(formData.get("novoFim") ?? "");
 
@@ -458,6 +506,11 @@ export async function reopenWorkplace(
   revalidatePath("/admin");
   revalidatePath("/admin/locais");
   revalidatePath(`/admin/locais/${id}`);
+  await registrarAuditoria("REABRIU", {
+    alvo: workplace.nome,
+    detalhe: `novo término ${formatDateTime(novoFim)}`,
+    user: g.user,
+  });
   return { status: "success", message: "Votação reaberta com sucesso." };
 }
 
@@ -469,6 +522,9 @@ export async function createCandidate(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const g = await guard("write");
+  if ("error" in g) return { status: "error", message: g.error };
+
   const nome = String(formData.get("nome") ?? "").trim();
   const workplaceId = String(formData.get("workplaceId") ?? "").trim();
 
@@ -517,6 +573,10 @@ export async function importCandidatesChunk(
   nomes: string[],
   isLast: boolean,
 ): Promise<{ status: "ok" | "error"; count: number; message?: string }> {
+  const g = await guard("write");
+  if ("error" in g) {
+    return { status: "error", count: 0, message: g.error };
+  }
   if (!workplaceId) {
     return { status: "error", count: 0, message: "Local de trabalho inválido." };
   }
@@ -574,6 +634,9 @@ export async function deleteCandidate(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const g = await guard("write");
+  if ("error" in g) return { status: "error", message: g.error };
+
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { status: "error", message: "Candidato inválido." };
 
@@ -620,6 +683,9 @@ export async function setCandidateRenuncia(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const g = await guard("write");
+  if ("error" in g) return { status: "error", message: g.error };
+
   const id = String(formData.get("id") ?? "").trim();
   const renunciou = String(formData.get("renunciou") ?? "") === "true";
   const motivoRaw = String(formData.get("motivo") ?? "").trim();
@@ -648,6 +714,11 @@ export async function setCandidateRenuncia(
   revalidatePath(`/admin/locais/${candidate.workplaceId}`);
   revalidatePath("/admin/encerradas");
   revalidatePath("/admin/relatorios");
+  await registrarAuditoria(renunciou ? "RENUNCIA" : "REVERTEU_RENUNCIA", {
+    alvo: candidate.nome,
+    detalhe: renunciou ? motivo : undefined,
+    user: g.user,
+  });
   return {
     status: "success",
     message: renunciou
@@ -1142,6 +1213,9 @@ export async function deleteWorkplace(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const g = await guard("delete");
+  if ("error" in g) return { status: "error", message: g.error };
+
   const id = String(formData.get("id") ?? "").trim();
   const confirmacao = String(formData.get("confirmacao") ?? "").trim();
 
@@ -1172,6 +1246,12 @@ export async function deleteWorkplace(
     return { status: "error", message: "Erro ao excluir o local de trabalho." };
   }
 
+  await registrarAuditoria("EXCLUIU_LOCAL", {
+    alvo: workplace.nome,
+    detalhe:
+      workplace._count.votes > 0 ? `${workplace._count.votes} voto(s)` : undefined,
+    user: g.user,
+  });
   revalidatePath("/admin");
   revalidatePath("/admin/locais");
   // redirect lança internamente (NEXT_REDIRECT) — fora do try/catch acima.

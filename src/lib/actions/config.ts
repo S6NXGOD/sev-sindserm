@@ -6,6 +6,8 @@ import { revalidatePath } from "next/cache";
 import { Prisma, ElectionStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { generateSlug } from "@/lib/slug";
+import { guard } from "@/lib/current-user";
+import { registrarAuditoria } from "@/lib/audit";
 import { DEFAULT_LOGO, UPLOADS_PREFIX } from "@/lib/logo-constants";
 import type { ActionState } from "@/lib/types";
 
@@ -186,6 +188,9 @@ export async function uploadElectionLogo(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const gp = await guard("pleitos");
+  if ("error" in gp) return { status: "error", message: gp.error };
+
   const ano = Number(formData.get("ano"));
   const tipo = String(formData.get("tipo") ?? "");
 
@@ -260,6 +265,9 @@ export async function createElection(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const gp = await guard("pleitos");
+  if ("error" in gp) return { status: "error", message: gp.error };
+
   const titulo = String(formData.get("titulo") ?? "").trim();
   const ano = Number(formData.get("ano"));
 
@@ -394,6 +402,11 @@ export async function createElection(
   revalidatePath("/admin/pleitos");
   revalidatePath("/admin/configuracoes");
   revalidatePath("/admin", "layout");
+  await registrarAuditoria("CRIOU_PLEITO", {
+    alvo: titulo,
+    detalhe: `ano ${ano}`,
+    user: gp.user,
+  });
   return { status: "success", message: "Pleito criado com sucesso." };
 }
 
@@ -419,6 +432,9 @@ export async function clonePleito(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const gp = await guard("pleitos");
+  if ("error" in gp) return { status: "error", message: gp.error };
+
   const sourceId = String(formData.get("sourceId") ?? "").trim();
   const novoTitulo = String(formData.get("titulo") ?? "").trim();
   const novoAno = Number(formData.get("ano"));
@@ -598,6 +614,11 @@ export async function clonePleito(
   revalidatePath("/admin");
   revalidatePath("/admin/pleitos");
   revalidatePath("/admin/locais");
+  await registrarAuditoria("CLONOU_PLEITO", {
+    alvo: novoTitulo,
+    detalhe: `ano ${novoAno} · ${totalLocais} local(is), ${totalCandidatos} candidato(s)`,
+    user: gp.user,
+  });
   return {
     status: "success",
     message: `Pleito duplicado para ${novoAno}: ${totalLocais} local(is) e ${totalCandidatos} candidato(s) copiados, sem votos nem eleitores.`,
@@ -620,6 +641,9 @@ export async function deleteElection(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const gp = await guard("pleitos");
+  if ("error" in gp) return { status: "error", message: gp.error };
+
   const id = String(formData.get("id") ?? "").trim();
   const confirmacao = String(formData.get("confirmacao") ?? "").trim();
   if (!id) return { status: "error", message: "Pleito inválido." };
@@ -662,6 +686,11 @@ export async function deleteElection(
 
   revalidatePath("/admin/pleitos");
   revalidatePath("/admin", "layout");
+  await registrarAuditoria("EXCLUIU_PLEITO", {
+    alvo: `Pleito ${election.ano}`,
+    detalhe: apagaDados ? "com locais/votos/votantes" : "só o registro do pleito",
+    user: gp.user,
+  });
   return {
     status: "success",
     message: apagaDados
@@ -694,6 +723,9 @@ export async function updateElection(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const gp = await guard("pleitos");
+  if ("error" in gp) return { status: "error", message: gp.error };
+
   const id = String(formData.get("id") ?? "").trim();
   if (!id) {
     return { status: "error", message: "Pleito inválido." };
@@ -775,6 +807,10 @@ export async function updateElection(
   revalidatePath(`/admin/pleitos/${id}/editar`);
   revalidatePath("/admin/configuracoes");
   revalidatePath("/admin", "layout");
+  await registrarAuditoria("EDITOU_PLEITO", {
+    alvo: titulo || `Pleito ${atual.ano}`,
+    user: gp.user,
+  });
 
   // FEEDBACK DE IMPACTO: datas mexidas + votos já computados => alerta (não bloqueia).
   if (datasAlteradas) {
@@ -801,6 +837,9 @@ export async function setElectionLogo(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const gp = await guard("pleitos");
+  if ("error" in gp) return { status: "error", message: gp.error };
+
   const id = String(formData.get("id") ?? "").trim();
   const tipo = String(formData.get("tipo") ?? "");
   const raw = String(formData.get("url") ?? "").trim();

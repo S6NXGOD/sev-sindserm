@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Menu, X } from "lucide-react";
 import type { SidebarElection } from "@/lib/election";
+import type { SessionUser } from "@/lib/permissions";
 import { DEFAULT_LOGO } from "@/lib/logo-constants";
 import { Sidebar } from "@/components/admin/sidebar";
 import { Button } from "@/components/ui/button";
@@ -21,10 +22,12 @@ export function MobileNav({
   elections,
   currentElectionYear,
   selectedYear,
+  user,
 }: {
   elections: SidebarElection[];
   currentElectionYear: number;
   selectedYear: number;
+  user: SessionUser;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -79,6 +82,7 @@ export function MobileNav({
             elections={elections}
             currentElectionYear={currentElectionYear}
             selectedYear={selectedYear}
+            user={user}
           />
         </Dialog.Content>
       </Dialog.Portal>

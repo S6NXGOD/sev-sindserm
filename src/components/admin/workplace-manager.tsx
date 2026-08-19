@@ -172,6 +172,7 @@ function PendingButton({
 function useToastState(state: { status: string; message: string }) {
   useEffect(() => {
     if (state.status === "success") toast.success(state.message);
+    else if (state.status === "warning") toast.warning(state.message);
     else if (state.status === "error") toast.error(state.message);
   }, [state]);
 }

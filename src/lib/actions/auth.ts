@@ -9,59 +9,65 @@ import {
 } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/password";
+import { getCurrentUser } from "@/lib/current-user";
+import { registrarAuditoria } from "@/lib/audit";
+import type { Role } from "@/lib/permissions";
 import type { ActionState } from "@/lib/types";
 
-const ADMIN_PASSWORD_KEY = "admin_password_hash";
+const COOKIE_OPTS = {
+  httpOnly: true as const,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+  path: "/",
+  maxAge: SESSION_MAX_AGE_SECONDS,
+};
 
 /**
- * Verifica a senha do admin. Se já houver senha definida no banco (alterada
- * pelo sistema), valida contra o hash; caso contrário, usa o ADMIN_PASSWORD do
- * .env (senha de fábrica/bootstrap).
- * Não exportada: módulos "use server" expõem apenas as actions.
+ * Login por USUÁRIO + SENHA. Cada pessoa tem seu login; a sessão carrega a
+ * identidade (para auditoria e permissões). Mensagem genérica em falha de
+ * credencial (não revela se o usuário existe).
  */
-async function verifyAdminPassword(plain: string): Promise<boolean> {
-  const setting = await prisma.setting.findUnique({
-    where: { key: ADMIN_PASSWORD_KEY },
-  });
-  if (setting?.value) {
-    return verifyPassword(plain, setting.value);
-  }
-  const env = process.env.ADMIN_PASSWORD ?? "";
-  return env.length > 0 && plain === env;
-}
-
 export async function login(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const username = String(formData.get("username") ?? "")
+    .trim()
+    .toLowerCase();
   const password = String(formData.get("password") ?? "");
   const redirectTo = String(formData.get("redirect") ?? "/admin");
 
-  const semSenhaConfigurada =
-    !process.env.ADMIN_PASSWORD &&
-    !(await prisma.setting.findUnique({ where: { key: ADMIN_PASSWORD_KEY } }));
-  if (semSenhaConfigurada) {
+  if (!username || !password) {
+    return { status: "error", message: "Informe o usuário e a senha." };
+  }
+
+  const user = await prisma.user.findUnique({ where: { username } });
+  const senhaOk = user
+    ? await verifyPassword(password, user.passwordHash)
+    : false;
+
+  if (!user || !senhaOk) {
+    return { status: "error", message: "Usuário ou senha incorretos." };
+  }
+  if (!user.ativo) {
     return {
       status: "error",
-      message:
-        "Nenhuma senha configurada. Defina ADMIN_PASSWORD no arquivo .env.",
+      message: "Seu acesso está desativado. Fale com o administrador.",
     };
   }
 
-  if (!(await verifyAdminPassword(password))) {
-    return { status: "error", message: "Senha incorreta." };
-  }
+  const token = await createSessionToken(user.id, user.sessionVersion);
+  cookies().set(SESSION_COOKIE, token, COOKIE_OPTS);
 
-  const token = await createSessionToken();
-  cookies().set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: SESSION_MAX_AGE_SECONDS,
+  await registrarAuditoria("LOGIN", {
+    user: {
+      id: user.id,
+      nome: user.nome,
+      username: user.username,
+      role: user.role as Role,
+    },
   });
 
-  // redirect lança internamente (NEXT_REDIRECT) — fora de try/catch.
   const destino =
     redirectTo.startsWith("/admin") && redirectTo !== "/admin/login"
       ? redirectTo
@@ -70,23 +76,31 @@ export async function login(
 }
 
 export async function logout(): Promise<void> {
+  await registrarAuditoria("LOGOUT");
   cookies().delete(SESSION_COOKIE);
   redirect("/login");
 }
 
 /**
- * Altera a senha do administrador (confirmando a senha atual). A nova senha é
- * salva com hash (scrypt) na tabela Setting e passa a valer no próximo login.
+ * Troca a PRÓPRIA senha (confirmando a atual). Incrementa a versão de sessão
+ * (derruba as OUTRAS sessões do usuário) e reemite o cookie desta sessão para a
+ * pessoa continuar logada aqui.
  */
-export async function changeAdminPassword(
+export async function changeMyPassword(
   _prevState: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  const atual = await getCurrentUser();
+  if (!atual) {
+    return { status: "error", message: "Sessão expirada. Faça login." };
+  }
+
   const senhaAtual = String(formData.get("senhaAtual") ?? "");
   const novaSenha = String(formData.get("novaSenha") ?? "");
   const confirmarSenha = String(formData.get("confirmarSenha") ?? "");
 
-  if (!(await verifyAdminPassword(senhaAtual))) {
+  const dbUser = await prisma.user.findUnique({ where: { id: atual.id } });
+  if (!dbUser || !(await verifyPassword(senhaAtual, dbUser.passwordHash))) {
     return { status: "error", message: "Senha atual incorreta." };
   }
   if (novaSenha.length < 6) {
@@ -109,11 +123,19 @@ export async function changeAdminPassword(
   }
 
   const hash = await hashPassword(novaSenha);
-  await prisma.setting.upsert({
-    where: { key: ADMIN_PASSWORD_KEY },
-    update: { value: hash },
-    create: { key: ADMIN_PASSWORD_KEY, value: hash },
+  const novaVersao = dbUser.sessionVersion + 1;
+  await prisma.user.update({
+    where: { id: atual.id },
+    data: { passwordHash: hash, sessionVersion: novaVersao },
   });
 
-  return { status: "success", message: "Senha alterada com sucesso." };
+  // Reemite o cookie desta sessão com a nova versão (mantém o usuário logado).
+  const token = await createSessionToken(atual.id, novaVersao);
+  cookies().set(SESSION_COOKIE, token, COOKIE_OPTS);
+
+  await registrarAuditoria("TROCOU_SENHA", { user: atual });
+  return {
+    status: "success",
+    message: "Senha alterada. Suas outras sessões foram encerradas.",
+  };
 }

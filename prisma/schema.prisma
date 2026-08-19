@@ -37,6 +37,62 @@ model Setting {
   @@map("settings")
 }
 
+/// Papel do usuário do painel — define o conjunto de permissões (ver
+/// src/lib/permissions.ts). SUPER_ADMIN é o único que gerencia usuários.
+enum UserRole {
+  SUPER_ADMIN // Administrador Geral: tudo + gestão de usuários.
+  ADMIN // Administra pleitos/locais/resultados; NÃO gerencia usuários.
+  OPERADOR // Alimenta o sistema (locais/candidatos/agenda); não exclui pleitos.
+  AUDITOR // Somente leitura (dashboard/resultados/relatórios/auditoria).
+}
+
+/// Usuário do painel administrativo. Autenticação por SENHA (scrypt), sem
+/// e-mail/2FA — cada pessoa tem seu login (`username`), nome de exibição e senha
+/// própria, para auditoria de "quem fez o quê".
+model User {
+  id           String   @id @default(cuid())
+  // Identificador de login (único, minúsculo). O nome de exibição é `nome`.
+  username     String   @unique
+  nome         String
+  passwordHash String
+  role         UserRole @default(OPERADOR)
+  // Usuário inativo não consegue logar e é deslogado na próxima requisição.
+  ativo        Boolean  @default(true)
+  // Invalidação de sessão: o token carrega esta versão; ao incrementar, todas
+  // as sessões DESTE usuário caem (troca de senha, "deslogar todos", etc.).
+  sessionVersion Int    @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+/// Registro de AUDITORIA das ações do painel (quem, o quê, quando). O nome do
+/// autor é DESNORMALIZADO (`userNome`) para o histórico sobreviver à exclusão do
+/// usuário. Somente leitura na UI.
+model AuditLog {
+  id       String  @id @default(cuid())
+  userId   String?
+  userNome String
+  // Código curto da ação (ex.: "AGENDOU_VOTACAO", "ENCERROU", "CRIOU_USUARIO").
+  acao     String
+  // Alvo/objeto (ex.: nome do local, do pleito, do usuário) — legível na lista.
+  alvo     String?
+  // Detalhe livre (ex.: janela agendada, motivo da renúncia).
+  detalhe  String?
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId])
+  @@map("audit_logs")
+}
+
 /// Configurações GLOBAIS do sistema — padrão Singleton: existe sempre UM único
 /// registro, com id fixo "global". Isolado dos Pleitos (Election): alterar aqui
 /// nunca toca nos dados de nenhum pleito/triênio.

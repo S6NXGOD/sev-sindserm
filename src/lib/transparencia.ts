@@ -167,10 +167,12 @@ export async function getTransparenciaData(
       },
       orderBy: { nome: "asc" },
     }),
+    // Eleitos = candidatos votados que ASSUMEM a vaga (exclui renunciantes).
     prisma.$queryRaw<{ wid: string; n: number }[]>`
-      SELECT "workplaceId" AS wid, COUNT(DISTINCT "candidateId")::int AS n
-      FROM votes WHERE "anoEleicao" = ${ano}
-      GROUP BY "workplaceId"`,
+      SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
+      FROM votes v JOIN candidates c ON c.id = v."candidateId"
+      WHERE v."anoEleicao" = ${ano} AND c."renunciou" = false
+      GROUP BY v."workplaceId"`,
   ]);
 
   const votedMap = new Map(votedCounts.map((v) => [v.wid, v.n]));
@@ -473,9 +475,10 @@ export async function getEleitosCsv(electionId: string): Promise<{
       _count: { workplaceId: true },
     }),
     prisma.$queryRaw<{ wid: string; n: number }[]>`
-      SELECT "workplaceId" AS wid, COUNT(DISTINCT "candidateId")::int AS n
-      FROM votes WHERE "anoEleicao" = ${ano}
-      GROUP BY "workplaceId"`,
+      SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
+      FROM votes v JOIN candidates c ON c.id = v."candidateId"
+      WHERE v."anoEleicao" = ${ano} AND c."renunciou" = false
+      GROUP BY v."workplaceId"`,
   ]);
   const candMap = new Map(
     candCounts.map((c) => [c.workplaceId, c._count.workplaceId]),
@@ -497,6 +500,7 @@ export async function getEleitosCsv(electionId: string): Promise<{
                ) AS rn
         FROM votes v JOIN candidates c ON c.id = v."candidateId"
         WHERE v."anoEleicao" = ${ano}
+          AND c."renunciou" = false
           AND v."workplaceId" IN (${Prisma.join(fechados.map((l) => l.id))})
         GROUP BY v."workplaceId", c.id, c.nome
       ) t`);

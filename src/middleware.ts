@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import {
   SESSION_COOKIE,
   SESSION_MAX_AGE_SECONDS,
-  verifySessionToken,
+  readSessionToken,
 } from "@/lib/auth";
 
 /**
@@ -26,9 +26,12 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  const isValid = await verifySessionToken(token);
+  // Gate GROSSO (edge): token com assinatura válida e não expirado. A checagem
+  // fina (usuário ativo, papel, versão de sessão) roda no layout/páginas com
+  // acesso ao banco (getCurrentUser).
+  const payload = await readSessionToken(token);
 
-  if (!isValid) {
+  if (!payload) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.search = "";
