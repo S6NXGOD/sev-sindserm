@@ -22,6 +22,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ApuracoesList } from "@/components/admin/apuracoes-list";
 import { ApuracaoPdfButton } from "@/components/admin/apuracao-pdf-button";
 import { EmpatesPanel } from "@/components/admin/empates-panel";
+import { VagasVaziasPanel } from "@/components/admin/vagas-vazias-panel";
 import { ExportEleitosButton } from "@/components/admin/export-eleitos-button";
 
 export const dynamic = "force-dynamic";
@@ -91,7 +92,22 @@ export default async function EncerradasPage({
   const totalEleitos = data.apuracoes.reduce((s, a) => s + a.eleitos.length, 0);
   const totalVotos = data.apuracoes.reduce((s, a) => s + a.totalVotos, 0);
   const empates = data.apuracoes.filter((a) => a.temEmpate);
-  const comVagaVazia = data.apuracoes.filter((a) => a.vagasVazias > 0);
+  // Vagas sem eleito: separa o que ainda precisa de DECISÃO do que já foi
+  // finalizado (aceito) — vaga vazia costuma ser natural, não obriga suplementar.
+  const toVagaItem = (a: (typeof data.apuracoes)[number]) => ({
+    id: a.id,
+    nome: a.nome,
+    orgao: a.orgao,
+    zona: a.zona,
+    vagas: a.vagas,
+    vagasVazias: a.vagasVazias,
+  });
+  const vagaVaziaPendentes = data.apuracoes
+    .filter((a) => a.vagasVazias > 0 && !a.vagasVaziasAceitas)
+    .map(toVagaItem);
+  const vagaVaziaAceitas = data.apuracoes
+    .filter((a) => a.vagasVazias > 0 && a.vagasVaziasAceitas)
+    .map(toVagaItem);
 
   // Opções de filtro derivadas do que REALMENTE existe entre as encerradas.
   const orgaos = [...new Set(data.apuracoes.map((a) => a.orgao))].sort((x, y) =>
@@ -144,46 +160,11 @@ export default async function EncerradasPage({
       {/* EMPATES — no topo, para resolver rápido (só aparece se houver). */}
       <EmpatesPanel empates={empates} />
 
-      {/* VAGAS SEM PREENCHIMENTO → sugestão de votação suplementar. */}
-      {comVagaVazia.length > 0 && (
-        <section className="rounded-xl border-2 border-amber-300 bg-amber-50 shadow-sm">
-          <div className="flex items-center gap-2 border-b border-amber-200 p-4">
-            <Scale className="h-5 w-5 shrink-0 text-amber-600" />
-            <h2 className="text-base font-bold text-amber-900">
-              Vagas sem preenchimento
-            </h2>
-            <span className="rounded-full border border-amber-400 bg-white px-2 py-0.5 text-xs font-semibold text-amber-800">
-              {comVagaVazia.length} local(is)
-            </span>
-          </div>
-          <ul className="divide-y divide-amber-200">
-            {comVagaVazia.map((a) => (
-              <li
-                key={a.id}
-                className="flex flex-wrap items-center justify-between gap-2 p-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate font-semibold">{a.nome}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {a.orgao} · Zona {a.zona} · {a.vagasVazias} de {a.vagas}{" "}
-                    {a.vagas === 1 ? "vaga" : "vagas"} sem eleito
-                  </p>
-                </div>
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/admin/locais/${a.id}`}>
-                    Agendar suplementar
-                  </Link>
-                </Button>
-              </li>
-            ))}
-          </ul>
-          <p className="border-t border-amber-200 p-3 text-xs text-amber-800">
-            Faltam candidatos com votos para preencher todas as vagas. Considere
-            uma <strong>votação suplementar</strong>: cadastre novos candidatos no
-            local e reabra/reagende a votação.
-          </p>
-        </section>
-      )}
+      {/* VAGAS SEM ELEITO → decisão caso a caso (suplementar OU manter assim). */}
+      <VagasVaziasPanel
+        pendentes={vagaVaziaPendentes}
+        aceitas={vagaVaziaAceitas}
+      />
 
       {/* Ações rápidas — o PDF agora é gerado direto aqui (jsPDF). */}
       <Card>

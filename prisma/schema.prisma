@@ -198,6 +198,10 @@ model Workplace {
   notifCloseSent Boolean @default(false)
   // Aviso "encerrando em breve" (janela de ~2h antes do fim). Reset ao reagendar/reabrir.
   notifEndingSoonSent Boolean @default(false)
+  // Decisão da diretoria: vagas sem eleito ACEITAS (finalizado sem suplementar).
+  // Vaga vazia costuma ser natural (menos candidatos/votos que vagas); quando
+  // aceita, o local some do painel "Vagas sem eleito". Reset ao reabrir.
+  vagasVaziasAceitas Boolean @default(false)
 
   // RASTRO DE AÇÕES (denormalizado, para mostrar "quem fez" direto no local):
   // guarda o AUTOR e o HORÁRIO das ações que definem o estado do local. O nome é

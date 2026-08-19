@@ -598,6 +598,8 @@ export async function reopenWorkplace(
         dataFimVotacao: novoFim,
         notifCloseSent: false,
         notifEndingSoonSent: false,
+        // Reabrir zera a decisão de "manter assim" (nova votação em andamento).
+        vagasVaziasAceitas: false,
         // Reabrir é um novo agendamento; limpa o rastro de encerramento.
         agendadoPorId: g.user.id,
         agendadoPorNome: g.user.nome,
@@ -630,6 +632,48 @@ export async function reopenWorkplace(
     { exceptUserId: g.user.id },
   );
   return { status: "success", message: "Votação reaberta com sucesso." };
+}
+
+/**
+ * Decisão da diretoria sobre um local encerrado com VAGAS SEM ELEITO:
+ *  - aceito=true  → "Manter assim": finaliza sem suplementar (some do painel).
+ *  - aceito=false → reabre a decisão (volta a aparecer no painel).
+ * Vaga vazia costuma ser natural (menos candidatos/votos que vagas). Registrado
+ * na auditoria; reversível.
+ */
+export async function setVagasVaziasAceitas(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const g = await guard("locais", "EDIT");
+  if ("error" in g) return { status: "error", message: g.error };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const aceito = String(formData.get("aceito") ?? "") === "true";
+  if (!id) return { status: "error", message: "Local inválido." };
+
+  const wp = await prisma.workplace.findUnique({
+    where: { id },
+    select: { nome: true },
+  });
+  if (!wp) return { status: "error", message: "Local não encontrado." };
+
+  await prisma.workplace.update({
+    where: { id },
+    data: { vagasVaziasAceitas: aceito },
+  });
+  revalidatePath("/admin/encerradas");
+  revalidatePath(`/admin/locais/${id}`);
+  await registrarAuditoria(
+    aceito ? "ACEITOU_VAGAS_VAZIAS" : "REVERTEU_VAGAS_VAZIAS",
+    { alvo: wp.nome, user: g.user },
+  );
+  return {
+    status: "success",
+    message: aceito
+      ? `"${wp.nome}" finalizado sem suplementar.`
+      : `"${wp.nome}" voltou para a lista de decisão.`,
+  };
 }
 
 /* -------------------------------------------------------------------------- */

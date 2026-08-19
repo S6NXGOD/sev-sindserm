@@ -48,6 +48,8 @@ export type Apuracao = {
   renunciantes: { nome: string; votos: number; motivo: string | null }[];
   /** Vagas sem preenchimento (faltam suplentes com voto). */
   vagasVazias: number;
+  /** A diretoria já aceitou as vagas vazias (finalizado sem suplementar)? */
+  vagasVaziasAceitas: boolean;
 };
 
 export type ReportSummary = {
@@ -115,6 +117,7 @@ export async function getReportData(opts: {
       voteLimit: true,
       dataInicioVotacao: true,
       dataFimVotacao: true,
+      vagasVaziasAceitas: true,
     },
   });
 
@@ -232,6 +235,7 @@ export async function getReportData(opts: {
         motivo: c.renunciaMotivo,
       })),
       vagasVazias: resultado.vagasVazias,
+      vagasVaziasAceitas: w.vagasVaziasAceitas,
     };
   });
 

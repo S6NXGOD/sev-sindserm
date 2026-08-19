@@ -48,6 +48,8 @@ const ACAO_LABEL: Record<string, string> = {
   EXCLUIU_CANDIDATO: "Excluiu candidato",
   RENUNCIA: "Registrou 'não assume a vaga'",
   REVERTEU_RENUNCIA: "Reverteu 'não assume a vaga'",
+  ACEITOU_VAGAS_VAZIAS: "Finalizou sem suplementar (vagas vazias)",
+  REVERTEU_VAGAS_VAZIAS: "Reverteu decisão de vagas vazias",
   CRIOU_PLEITO: "Criou pleito",
   EDITOU_PLEITO: "Editou pleito",
   EXCLUIU_PLEITO: "Excluiu pleito",
