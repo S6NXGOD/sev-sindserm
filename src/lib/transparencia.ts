@@ -96,9 +96,17 @@ export type LiderancaAoVivo = {
   zona: string;
   votantes: number;
   vagas: number;
-  /** Líder parcial atual — só quando `parciaisPublicas` do pleito está ON. */
-  lider: { nome: string; votos: number } | null;
+  /**
+   * Líderes parciais atuais (os provisoriamente eleitos, até `vagas`) — LIMITADO
+   * para prévia (a lista completa é buscada ao expandir). Vazio quando as
+   * parciais públicas do pleito estão OFF ou ainda não há votos.
+   */
+  lideres: { nome: string; votos: number }[];
 };
+
+// Quantos líderes trazer na PRÉVIA de cada local aberto (a lista completa vem ao
+// expandir). Locais com muitas vagas mostram "+N em disputa".
+const LIDERES_PREVIA = 5;
 
 export type TransparenciaData = {
   pleito: TransparenciaPleito | null;
@@ -277,12 +285,14 @@ export async function getTransparenciaData(
     .filter((l) => l.status === "open")
     .sort((a, b) => b.totalVotantes - a.totalVotantes || a.nome.localeCompare(b.nome))
     .slice(0, 12);
-  const liderMap = new Map<string, { nome: string; votos: number }>();
+  // Prévia dos LÍDERES parciais (top-N por local aberto), só se habilitado. A
+  // lista completa é buscada ao expandir o card (getResultadoLocal, gated).
+  const lideresMap = new Map<string, { nome: string; votos: number }[]>();
   if (election.parciaisPublicas && abertos.length > 0) {
-    const lideres = await prisma.$queryRaw<
-      { wid: string; nome: string; votos: number }[]
+    const linhas = await prisma.$queryRaw<
+      { wid: string; nome: string; votos: number; rn: number }[]
     >(Prisma.sql`
-      SELECT wid, nome, votos::int AS votos FROM (
+      SELECT wid, nome, votos::int AS votos, rn::int AS rn FROM (
         SELECT v."workplaceId" AS wid, c.nome AS nome, COUNT(*)::int AS votos,
                ROW_NUMBER() OVER (
                  PARTITION BY v."workplaceId" ORDER BY COUNT(*) DESC, c.nome ASC
@@ -292,8 +302,13 @@ export async function getTransparenciaData(
           AND c."renunciou" = false
           AND v."workplaceId" IN (${Prisma.join(abertos.map((l) => l.id))})
         GROUP BY v."workplaceId", c.id, c.nome
-      ) t WHERE rn = 1`);
-    for (const l of lideres) liderMap.set(l.wid, { nome: l.nome, votos: l.votos });
+      ) t WHERE rn <= ${LIDERES_PREVIA}
+      ORDER BY wid, rn`);
+    for (const l of linhas) {
+      const arr = lideresMap.get(l.wid) ?? [];
+      arr.push({ nome: l.nome, votos: l.votos });
+      lideresMap.set(l.wid, arr);
+    }
   }
   const liderancaAoVivo: LiderancaAoVivo[] = abertos.map((l) => ({
     id: l.id,
@@ -302,7 +317,7 @@ export async function getTransparenciaData(
     zona: l.zona,
     votantes: l.totalVotantes,
     vagas: l.vagas,
-    lider: liderMap.get(l.id) ?? null,
+    lideres: lideresMap.get(l.id) ?? [],
   }));
 
   const orgaos = [...new Set(todos.map((l) => l.orgao))].sort((a, b) =>
