@@ -16,9 +16,12 @@ const PAGE = 24; // locais por página (cards colapsados → DOM leve no celular
 export function LocaisGrid({
   locais,
   pleito,
+  parciaisPublicas = false,
 }: {
   locais: TransparenciaLocal[];
   pleito: PdfPleito;
+  /** Parciais dos locais abertos são públicas? (habilitado pela diretoria) */
+  parciaisPublicas?: boolean;
 }) {
   const [shown, setShown] = useState(PAGE);
 
@@ -43,7 +46,12 @@ export function LocaisGrid({
       </p>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {locais.slice(0, shown).map((l) => (
-          <LocalCard key={l.id} local={l} pleito={pleito} />
+          <LocalCard
+            key={l.id}
+            local={l}
+            pleito={pleito}
+            parciaisPublicas={parciaisPublicas}
+          />
         ))}
       </div>
       {shown < locais.length && (

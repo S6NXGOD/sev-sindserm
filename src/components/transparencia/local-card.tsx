@@ -37,16 +37,26 @@ const STATUS = {
 function ListaCandidatos({
   itens,
   tipo,
+  parcial = false,
   shown,
   onMore,
 }: {
   itens: CandidatoResultado[];
   tipo: "eleito" | "suplente";
+  /** true = números parciais (votação aberta): rótulos "Liderando"/"Na disputa". */
+  parcial?: boolean;
   shown: number;
   onMore: () => void;
 }) {
   const visiveis = itens.slice(0, shown);
   const eleito = tipo === "eleito";
+  const rotulo = eleito
+    ? parcial
+      ? "Liderando"
+      : "Eleito"
+    : parcial
+      ? "Na disputa"
+      : "Suplente";
   return (
     <ol className="space-y-1.5">
       {visiveis.map((c, i) => (
@@ -67,7 +77,7 @@ function ListaCandidatos({
               }
             >
               {eleito && <Award className="h-3 w-3" />}
-              {eleito ? "Eleito" : "Suplente"}
+              {rotulo}
             </Badge>
           </span>
           <span className="shrink-0 font-semibold tabular-nums">
@@ -91,9 +101,11 @@ function ListaCandidatos({
 export function LocalCard({
   local,
   pleito,
+  parciaisPublicas = false,
 }: {
   local: TransparenciaLocal;
   pleito: PdfPleito;
+  parciaisPublicas?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -104,6 +116,10 @@ export function LocalCard({
 
   const st = STATUS[local.status];
   const isClosed = local.status === "closed";
+  const isOpen = local.status === "open";
+  // Pode revelar a apuração por candidato? Encerrado (final) OU aberto COM
+  // parciais públicas habilitadas (parcial ao vivo). O servidor também barra.
+  const podeVerApuracao = isClosed || (isOpen && parciaisPublicas);
 
   async function garantirResultado(): Promise<ResultadoLocal | null> {
     if (resultado) return resultado;
@@ -120,7 +136,7 @@ export function LocalCard({
   async function toggle() {
     const next = !open;
     setOpen(next);
-    if (next && isClosed && !resultado) await garantirResultado();
+    if (next && podeVerApuracao && !resultado) await garantirResultado();
   }
 
   async function baixarPdf() {
@@ -182,7 +198,13 @@ export function LocalCard({
             ) : (
               <ChevronDown className="mr-2 h-4 w-4" />
             )}
-            {open ? "Recolher" : isClosed ? "Ver eleitos e suplentes" : "Detalhes"}
+            {open
+              ? "Recolher"
+              : isClosed
+                ? "Ver eleitos e suplentes"
+                : isOpen && parciaisPublicas
+                  ? "Ver parcial ao vivo"
+                  : "Detalhes"}
           </Button>
           {isClosed && (
             <Button size="sm" onClick={baixarPdf} disabled={pdfLoading}>
@@ -200,23 +222,37 @@ export function LocalCard({
       {/* Conteúdo expandido */}
       {open && (
         <div className="border-t bg-muted/30 p-4">
-          {!isClosed ? (
+          {!podeVerApuracao ? (
             <p className="text-sm text-muted-foreground">
               {local.status === "open"
                 ? "Votação em andamento. Os eleitos e suplentes ficam disponíveis quando a votação encerrar."
-                : "Votação ainda não iniciada."}
+                : local.status === "upcoming"
+                  ? "Votação ainda não iniciada."
+                  : "Votação ainda não agendada."}
             </p>
           ) : loading || !resultado ? (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando resultados…
+              Carregando…
             </p>
           ) : resultado.eleitos.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Votação encerrada sem votos registrados.
+              {resultado.parcial
+                ? "Votação em andamento — ainda sem votos computados."
+                : "Votação encerrada sem votos registrados."}
             </p>
           ) : (
             <div className="space-y-4">
+              {/* Aviso claro quando são números PARCIAIS de votação aberta. */}
+              {resultado.parcial && (
+                <p className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                  <span className="mt-0.5 h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-500" />
+                  <span>
+                    PARCIAL · votação em andamento — os números mudam a cada voto
+                    e o resultado só é oficial quando encerrar.
+                  </span>
+                </p>
+              )}
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">
@@ -228,11 +264,14 @@ export function LocalCard({
 
               <div>
                 <p className="mb-2 text-sm font-bold text-emerald-700">
-                  Eleitos (Titulares)
+                  {resultado.parcial
+                    ? "Liderando agora (parcial)"
+                    : "Eleitos (Titulares)"}
                 </p>
                 <ListaCandidatos
                   itens={resultado.eleitos}
                   tipo="eleito"
+                  parcial={resultado.parcial}
                   shown={eleitosShown}
                   onMore={() => setEleitosShown((n) => n + PAGE)}
                 />
@@ -241,11 +280,12 @@ export function LocalCard({
               {resultado.suplentes.length > 0 && (
                 <div>
                   <p className="mb-2 text-sm font-bold text-slate-600">
-                    Suplentes
+                    {resultado.parcial ? "Logo atrás" : "Suplentes"}
                   </p>
                   <ListaCandidatos
                     itens={resultado.suplentes}
                     tipo="suplente"
+                    parcial={resultado.parcial}
                     shown={suplentesShown}
                     onMore={() => setSuplentesShown((n) => n + PAGE)}
                   />

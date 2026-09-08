@@ -56,6 +56,8 @@ const ACAO_LABEL: Record<string, string> = {
   EDITOU_PLEITO: "Editou pleito",
   EXCLUIU_PLEITO: "Excluiu pleito",
   CLONOU_PLEITO: "Clonou pleito",
+  LIGOU_PARCIAIS_PUBLICAS: "Ligou apuração ao vivo (pública)",
+  DESLIGOU_PARCIAIS_PUBLICAS: "Desligou apuração ao vivo (pública)",
 };
 
 /** Cor por família de ação. */

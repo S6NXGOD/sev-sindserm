@@ -84,6 +84,20 @@ export type TransparenciaPleito = {
   logoSindserm: string;
   logoPleito: string | null;
   emailOficial: string | null;
+  /** Parciais por candidato dos locais ABERTOS são públicas neste pleito? */
+  parciaisPublicas: boolean;
+};
+
+/** Um local com votação em andamento (para o painel "Apuração ao vivo"). */
+export type LiderancaAoVivo = {
+  id: string;
+  nome: string;
+  orgao: string;
+  zona: string;
+  votantes: number;
+  vagas: number;
+  /** Líder parcial atual — só quando `parciaisPublicas` do pleito está ON. */
+  lider: { nome: string; votos: number } | null;
 };
 
 export type TransparenciaData = {
@@ -112,6 +126,8 @@ export type TransparenciaData = {
   }[];
   /** Votantes por zona (barras de participação). */
   votantesPorZona: { zona: string; votantes: number }[];
+  /** Locais com votação EM ANDAMENTO agora (para o painel "Apuração ao vivo"). */
+  liderancaAoVivo: LiderancaAoVivo[];
   orgaos: string[];
   locais: TransparenciaLocal[];
 };
@@ -134,6 +150,7 @@ const EMPTY: TransparenciaData = {
   proximasAberturas: [],
   rankingParticipacao: [],
   votantesPorZona: [],
+  liderancaAoVivo: [],
   orgaos: [],
   locais: [],
 };
@@ -254,6 +271,40 @@ export async function getTransparenciaData(
     .map(([zona, votantes]) => ({ zona, votantes }))
     .sort((a, b) => b.votantes - a.votantes);
 
+  // APURAÇÃO AO VIVO: locais EM ANDAMENTO agora (mais votantes no topo). O líder
+  // parcial só é calculado/revelado se a diretoria habilitou `parciaisPublicas`.
+  const abertos = todos
+    .filter((l) => l.status === "open")
+    .sort((a, b) => b.totalVotantes - a.totalVotantes || a.nome.localeCompare(b.nome))
+    .slice(0, 12);
+  const liderMap = new Map<string, { nome: string; votos: number }>();
+  if (election.parciaisPublicas && abertos.length > 0) {
+    const lideres = await prisma.$queryRaw<
+      { wid: string; nome: string; votos: number }[]
+    >(Prisma.sql`
+      SELECT wid, nome, votos::int AS votos FROM (
+        SELECT v."workplaceId" AS wid, c.nome AS nome, COUNT(*)::int AS votos,
+               ROW_NUMBER() OVER (
+                 PARTITION BY v."workplaceId" ORDER BY COUNT(*) DESC, c.nome ASC
+               ) AS rn
+        FROM votes v JOIN candidates c ON c.id = v."candidateId"
+        WHERE v."anoEleicao" = ${ano}
+          AND c."renunciou" = false
+          AND v."workplaceId" IN (${Prisma.join(abertos.map((l) => l.id))})
+        GROUP BY v."workplaceId", c.id, c.nome
+      ) t WHERE rn = 1`);
+    for (const l of lideres) liderMap.set(l.wid, { nome: l.nome, votos: l.votos });
+  }
+  const liderancaAoVivo: LiderancaAoVivo[] = abertos.map((l) => ({
+    id: l.id,
+    nome: l.nome,
+    orgao: l.orgao,
+    zona: l.zona,
+    votantes: l.totalVotantes,
+    vagas: l.vagas,
+    lider: liderMap.get(l.id) ?? null,
+  }));
+
   const orgaos = [...new Set(todos.map((l) => l.orgao))].sort((a, b) =>
     a.localeCompare(b),
   );
@@ -308,6 +359,7 @@ export async function getTransparenciaData(
       logoSindserm: resolveSindsermLogo(election.logoSindsermUrl),
       logoPleito: resolvePleitoLogo(election.logoPleitoUrl),
       emailOficial: election.emailOficial?.trim() || null,
+      parciaisPublicas: election.parciaisPublicas,
     },
     kpis: {
       locais: todos.length,
@@ -327,6 +379,7 @@ export async function getTransparenciaData(
     proximasAberturas,
     rankingParticipacao,
     votantesPorZona,
+    liderancaAoVivo,
     orgaos,
     locais,
   };
@@ -358,6 +411,12 @@ export type ResultadoLocal = {
   renunciantes: { nome: string; votos: number; motivo: string | null }[];
   /** Candidatos sem nenhum voto (não listados, apenas contados). */
   semVotos: number;
+  /**
+   * true quando os números exibidos são uma PARCIAL de votação AINDA ABERTA
+   * (apuração ao vivo habilitada pela diretoria). A UI deve rotular como
+   * "parcial · pode mudar", não como resultado final.
+   */
+  parcial: boolean;
 };
 
 // Limite de candidatos detalhados por local (anti-quebra no celular/PDF).
@@ -373,6 +432,7 @@ export async function getResultadoLocal(
       nome: true,
       orgao: true,
       zona: true,
+      anoEleicao: true,
       dataInicioVotacao: true,
       dataFimVotacao: true,
       _count: { select: { voters: true, candidates: true } },
@@ -380,8 +440,50 @@ export async function getResultadoLocal(
   });
   if (!wp) return null;
 
+  const status = votingStatus(wp.dataInicioVotacao, wp.dataFimVotacao);
   const totalCandidatos = wp._count.candidates;
   const vagas = calcularVagas(totalCandidatos);
+
+  // GATE de sigilo: a apuração por candidato só é revelada quando o local está
+  // ENCERRADO — OU quando está ABERTO e a diretoria habilitou as parciais
+  // públicas do pleito (`parciaisPublicas`). Nos demais casos, devolvemos só o
+  // comparecimento (seguro), sem revelar quem lidera.
+  let revelar = status === "closed";
+  let parcial = false;
+  if (status === "open") {
+    const el = await prisma.election.findFirst({
+      where: { ano: wp.anoEleicao },
+      orderBy: [{ isEleicaoEspecial: "asc" }, { createdAt: "asc" }],
+      select: { parciaisPublicas: true },
+    });
+    if (el?.parciaisPublicas) {
+      revelar = true;
+      parcial = true;
+    }
+  }
+
+  const baseVazia = {
+    id: wp.id,
+    nome: wp.nome,
+    orgao: wp.orgao,
+    zona: wp.zona,
+    status,
+    dataInicio: wp.dataInicioVotacao?.toISOString() ?? null,
+    dataFim: wp.dataFimVotacao?.toISOString() ?? null,
+    vagas,
+    totalCandidatos,
+    totalVotantes: wp._count.voters,
+  };
+  if (!revelar) {
+    return {
+      ...baseVazia,
+      eleitos: [],
+      suplentes: [],
+      renunciantes: [],
+      semVotos: 0,
+      parcial: false,
+    };
+  }
 
   // Ranking por votos (agregado no banco, ordenado e limitado).
   const grupos = await prisma.vote.groupBy({
@@ -428,20 +530,12 @@ export async function getResultadoLocal(
   const semVotos = Math.max(0, totalCandidatos - ranked.length);
 
   return {
-    id: wp.id,
-    nome: wp.nome,
-    orgao: wp.orgao,
-    zona: wp.zona,
-    status: votingStatus(wp.dataInicioVotacao, wp.dataFimVotacao),
-    dataInicio: wp.dataInicioVotacao?.toISOString() ?? null,
-    dataFim: wp.dataFimVotacao?.toISOString() ?? null,
-    vagas,
-    totalCandidatos,
-    totalVotantes: wp._count.voters,
+    ...baseVazia,
     eleitos,
     suplentes,
     renunciantes,
     semVotos,
+    parcial,
   };
 }
 

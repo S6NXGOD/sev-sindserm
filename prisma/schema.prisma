@@ -161,6 +161,11 @@ model Election {
   // Eleição especial/suplementar: dispensa a trava anti-conflito de ano (pode
   // coexistir com o pleito regular do mesmo ano). Pleito regular = false.
   isEleicaoEspecial Boolean      @default(false)
+  // Apuração AO VIVO no portal público: quando TRUE, os locais com votação
+  // ABERTA exibem a parcial por candidato (quem lidera) em tempo real. Padrão
+  // FALSE (seguro): parciais só aparecem quando o local ENCERRA — evita efeito
+  // manada/voto tático. Decisão da diretoria, por pleito.
+  parciaisPublicas Boolean      @default(false)
   logoSindsermUrl String?
   logoPleitoUrl   String?
 

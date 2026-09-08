@@ -1,4 +1,5 @@
-import { Bell, Settings, ImageIcon, LogIn, ShieldCheck } from "lucide-react";
+import { Bell, Radio, Settings, ImageIcon, LogIn, ShieldCheck } from "lucide-react";
+import { prisma } from "@/lib/prisma";
 import {
   getCurrentElectionYear,
   getElectionLogos,
@@ -8,6 +9,7 @@ import {
 } from "@/lib/election";
 import { requireModule } from "@/lib/current-user";
 import { pode } from "@/lib/permissions";
+import { ParciaisPublicasToggle } from "@/components/admin/parciais-publicas-toggle";
 import {
   getLoginLogoSetting,
   getLoginLogoUrl,
@@ -35,16 +37,23 @@ export default async function ConfiguracoesPage({
 }) {
   const me = await requireModule("configuracoes", "VIEW");
   const podeEditar = pode(me.permissoes, "configuracoes", "EDIT");
+  const podePleitos = pode(me.permissoes, "pleitos", "EDIT");
   await requirePleito();
   const ano = getSelectedElectionYear(searchParams.ano);
   const anoVigente = getCurrentElectionYear();
   const logos = await getElectionLogos(ano);
 
   // Configurações GLOBAIS (independentes do pleito): logo da tela de login.
-  const [loginLogoUrl, loginLogoRaw, galleryImages] = await Promise.all([
+  // + o pleito REGULAR do ano (para o toggle de apuração ao vivo).
+  const [loginLogoUrl, loginLogoRaw, galleryImages, eleicao] = await Promise.all([
     getLoginLogoUrl(),
     getLoginLogoSetting(),
     listGalleryImages(),
+    prisma.election.findFirst({
+      where: { ano },
+      orderBy: [{ isEleicaoEspecial: "asc" }, { createdAt: "asc" }],
+      select: { id: true, parciaisPublicas: true },
+    }),
   ]);
 
   return (
@@ -126,6 +135,29 @@ export default async function ConfiguracoesPage({
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* Apuração ao vivo pública — decisão de pleito (quem tem Pleitos = editar). */}
+      {podePleitos && eleicao && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Radio className="h-5 w-5" />
+              Apuração ao vivo no portal público
+            </CardTitle>
+            <CardDescription>
+              Controla se os locais com votação <strong>aberta</strong> mostram
+              quem está liderando (parcial) no portal público, em tempo real.
+              Pleito {ano}. O comparecimento (quantos votaram) é sempre público.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ParciaisPublicasToggle
+              electionId={eleicao.id}
+              ativo={eleicao.parciaisPublicas}
+            />
+          </CardContent>
+        </Card>
       )}
 
       <Card>

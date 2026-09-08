@@ -879,3 +879,44 @@ export async function setElectionLogo(
     message: url ? `Logo ${nome} atualizada.` : `Logo ${nome} removida.`,
   };
 }
+
+/**
+ * Liga/desliga a APURAÇÃO AO VIVO pública do pleito: quando ligada, os locais
+ * com votação ABERTA passam a exibir a parcial por candidato (quem lidera) no
+ * portal público. Decisão sensível (efeito manada) — registrada na auditoria.
+ */
+export async function setParciaisPublicas(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const gp = await guard("pleitos", "EDIT");
+  if ("error" in gp) return { status: "error", message: gp.error };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const ativo = String(formData.get("ativo") ?? "") === "true";
+  if (!id) return { status: "error", message: "Pleito inválido." };
+
+  const election = await prisma.election.findUnique({
+    where: { id },
+    select: { id: true, titulo: true, ano: true },
+  });
+  if (!election) return { status: "error", message: "Pleito não encontrado." };
+
+  await prisma.election.update({
+    where: { id },
+    data: { parciaisPublicas: ativo },
+  });
+
+  revalidatePath("/admin/configuracoes");
+  revalidatePath("/transparencia");
+  await registrarAuditoria(
+    ativo ? "LIGOU_PARCIAIS_PUBLICAS" : "DESLIGOU_PARCIAIS_PUBLICAS",
+    { alvo: election.titulo ?? `Pleito ${election.ano}`, user: gp.user },
+  );
+  return {
+    status: "success",
+    message: ativo
+      ? "Apuração ao vivo LIGADA: as parciais dos locais abertos agora são públicas."
+      : "Apuração ao vivo DESLIGADA: as parciais só aparecem quando o local encerra.",
+  };
+}

@@ -4,6 +4,7 @@ import {
   getTransparenciaData,
 } from "@/lib/transparencia";
 import { ProximasAberturas } from "@/components/proximas-aberturas";
+import { ApuracaoAoVivo } from "@/components/transparencia/apuracao-ao-vivo";
 import { ParticipacaoPanel } from "@/components/transparencia/participacao-panel";
 import { PleitoSelector } from "@/components/transparencia/pleito-selector";
 import { FiltrosBar } from "@/components/transparencia/filtros-bar";
@@ -162,6 +163,13 @@ export default async function TransparenciaPage({
           <Kpi label="Encerradas" value={data.kpis.encerradas} icon={CheckCircle2} tone="green" />
         </div>
 
+        {/* Apuração ao vivo: votações em andamento agora (participação + líder
+            parcial quando a diretoria habilita). Some quando não há nada aberto. */}
+        <ApuracaoAoVivo
+          itens={data.liderancaAoVivo}
+          parciaisPublicas={pleito.parciaisPublicas}
+        />
+
         {/* Ranking & Participação (substitui o antigo gráfico de pizza) */}
         <ParticipacaoPanel
           ranking={data.rankingParticipacao}
@@ -186,7 +194,11 @@ export default async function TransparenciaPage({
         </div>
 
         {/* Resultados (cards) */}
-        <LocaisGrid locais={data.locais} pleito={pdfPleito} />
+        <LocaisGrid
+          locais={data.locais}
+          pleito={pdfPleito}
+          parciaisPublicas={pleito.parciaisPublicas}
+        />
 
         <footer className="border-t pt-6 text-center text-xs text-muted-foreground">
           Portal da Transparência do SEV SINDSERM · Sistema Eletrônico de Votação.
