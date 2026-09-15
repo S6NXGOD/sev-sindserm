@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, HelpCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -131,9 +131,12 @@ export function GuiaPortal() {
       setRect(null);
       return;
     }
+    // Alvo mais alto que a tela → rola até o COMEÇO dele (mostra os primeiros
+    // itens); senão, centraliza.
+    const alto = el.getBoundingClientRect().height > window.innerHeight - 140;
     el.scrollIntoView({
       behavior: usaMenosMovimento() ? "auto" : "smooth",
-      block: "center",
+      block: alto ? "start" : "center",
     });
     const medir = () => setRect(el.getBoundingClientRect());
     const t = setTimeout(medir, usaMenosMovimento() ? 0 : 340);
@@ -162,29 +165,57 @@ export function GuiaPortal() {
   const [montado, setMontado] = useState(false);
   useEffect(() => setMontado(true), []);
 
+  // Mede a altura real do balão para NUNCA deixá-lo sair da tela (alvos altos).
+  const balaoRef = useRef<HTMLDivElement>(null);
+  const [balaoH, setBalaoH] = useState(190);
+  useLayoutEffect(() => {
+    const h = balaoRef.current?.offsetHeight;
+    if (h && Math.abs(h - balaoH) > 2) setBalaoH(h);
+  }, [idx, rect, ativo, balaoH]);
+
   const ultimo = idx === passos.length - 1;
   const primeiro = idx === 0;
 
-  // Posição do balão: acima ou abaixo do alvo (o que couber); centro no boas-vindas.
-  const LARG = 340;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 400;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const GAP = 14;
+  const w = Math.min(340, vw - 32);
+  const clamp = (v: number, min: number, max: number) =>
+    Math.max(min, Math.min(v, max));
+
+  // ÂNCORA do holofote: o alvo, clampeado à tela. Se for mais alto que a tela
+  // (ex.: a grade inteira de locais), foca na FAIXA DO TOPO — assim destaca a
+  // primeira leva de cards e sobra espaço para o balão logo abaixo.
+  const anchor =
+    rect &&
+    (() => {
+      const cabe = rect.height <= vh - 140;
+      const top = clamp(rect.top, 8, vh - 80);
+      const bottom = cabe
+        ? clamp(rect.bottom, top + 24, vh - 8)
+        : Math.min(vh - 8, top + 220);
+      const left = clamp(rect.left, 8, vw - 60);
+      const right = clamp(rect.right, left + 24, vw - 8);
+      return { top, bottom, left, right };
+    })();
+
+  // Posição do balão: abaixo da âncora se couber; senão acima; senão clampeado.
+  // SEMPRE 100% visível.
   let balao: React.CSSProperties;
-  if (!rect) {
-    balao = {
-      left: "50%",
-      top: "50%",
-      transform: "translate(-50%, -50%)",
-      width: `min(${LARG}px, calc(100vw - 32px))`,
-    };
+  if (!anchor) {
+    balao = { left: (vw - w) / 2, top: Math.max(16, (vh - balaoH) / 2), width: w };
   } else {
-    const vw = typeof window !== "undefined" ? window.innerWidth : 400;
-    const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-    const w = Math.min(LARG, vw - 32);
-    const left = Math.max(16, Math.min(rect.left + rect.width / 2 - w / 2, vw - w - 16));
-    const acima = rect.top > vh * 0.55;
-    balao = acima
-      ? { left, bottom: vh - rect.top + GAP, width: w }
-      : { left, top: rect.bottom + GAP, width: w };
+    const centro = (anchor.left + anchor.right) / 2;
+    const left = clamp(centro - w / 2, 16, vw - w - 16);
+    let top: number;
+    if (anchor.bottom + GAP + balaoH <= vh - 16) {
+      top = anchor.bottom + GAP; // cabe abaixo
+    } else if (anchor.top - GAP - balaoH >= 16) {
+      top = anchor.top - GAP - balaoH; // cabe acima
+    } else {
+      top = vh - balaoH - 16; // encosta no rodapé visível
+    }
+    balao = { left, top: clamp(top, 16, Math.max(16, vh - balaoH - 16)), width: w };
   }
 
   return (
@@ -210,16 +241,17 @@ export function GuiaPortal() {
             aria-modal="true"
             onClick={() => (ultimo ? fechar() : setIdx((n) => n + 1))}
           >
-          {/* Holofote: recorta o alvo e escurece o resto (ou dim total no intro). */}
-          {rect ? (
+          {/* Holofote: recorta a área visível do alvo e escurece o resto
+              (ou dim total no boas-vindas). */}
+          {anchor ? (
             <div
               aria-hidden
               className="pointer-events-none fixed rounded-xl ring-2 ring-white/90 transition-all duration-300"
               style={{
-                left: rect.left - 6,
-                top: rect.top - 6,
-                width: rect.width + 12,
-                height: rect.height + 12,
+                left: anchor.left - 6,
+                top: anchor.top - 6,
+                width: Math.max(0, anchor.right - anchor.left + 12),
+                height: Math.max(0, anchor.bottom - anchor.top + 12),
                 boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.66)",
               }}
             />
@@ -229,6 +261,7 @@ export function GuiaPortal() {
 
           {/* Balão explicativo (não fecha ao tocar nele). */}
           <div
+            ref={balaoRef}
             className="fixed rounded-2xl border bg-white p-4 shadow-xl"
             style={balao}
             onClick={(e) => e.stopPropagation()}
