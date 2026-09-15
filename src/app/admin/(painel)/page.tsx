@@ -41,7 +41,6 @@ import {
 } from "@/components/ui/card";
 import { ProximasAberturas } from "@/components/proximas-aberturas";
 import { AutoRefresh } from "@/components/admin/auto-refresh";
-import { LowTurnoutLocations } from "@/components/admin/low-turnout-locations";
 import { RitmoCard } from "@/components/admin/ritmo-card";
 import { StatusPieChart } from "@/components/admin/status-pie-chart";
 import { PresentationMode } from "@/components/admin/presentation/presentation-mode";
@@ -117,7 +116,7 @@ export default async function DashboardPage({
   const maxZona = Math.max(1, ...d.zonasAtivas.map((z) => z.votos));
 
   return (
-    <div className="space-y-6">
+    <div className="sev-stagger space-y-6">
       {/* Som de "resultado consolidado" (success.mp3) ao encerrar um local. */}
       <NovoResultadoSom encerradas={d.kpis.encerradas} />
 
@@ -481,9 +480,6 @@ export default async function DashboardPage({
           </CardContent>
         </Card>
       </div>
-
-      {/* Painel estratégico: locais com menor adesão (Mobile-First) */}
-      <LowTurnoutLocations ano={ano} geradoEm={d.geradoEm} limit={5} />
 
       {/* Alertas */}
       {totalAlertas > 0 && (

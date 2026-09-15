@@ -14,6 +14,7 @@ import {
   Crown,
   Download,
   FileText,
+  Flag,
   Gauge,
   LinkIcon,
   Loader2,
@@ -770,6 +771,61 @@ function SuplementarForm({ data }: { data: ManagerData }) {
   );
 }
 
+/**
+ * Ações de um local ENCERRADO, reunidas num só lugar com abas — em vez de dois
+ * quadros empilhados (que confundiam). Deixa explícita a diferença:
+ *  - Reabrir ESTA rodada: mantém os votos, só volta a aceitar (corrigir/estender).
+ *  - Abrir NOVA rodada: suplementar (preserva eleitos) ou do zero.
+ */
+function ClosedLocalActions({ data }: { data: ManagerData }) {
+  const [aba, setAba] = useState<"reabrir" | "nova">("reabrir");
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+      <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-800">
+        <Flag className="h-4 w-4" />
+        Este local está encerrado — o que fazer?
+      </div>
+      <p className="mb-3 text-xs text-muted-foreground">
+        <strong>Reabrir</strong> volta a aceitar votos <em>na mesma rodada</em>{" "}
+        (corrigir/estender, mantendo os votos). <strong>Nova rodada</strong> abre
+        uma suplementar (preservando os eleitos) ou uma eleição do zero.
+      </p>
+      {/* Segmented control (uma ação por vez — sem poluir a tela). */}
+      <div className="mb-3 grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
+        <button
+          type="button"
+          onClick={() => setAba("reabrir")}
+          className={`flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition ${
+            aba === "reabrir"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Reabrir esta rodada
+        </button>
+        <button
+          type="button"
+          onClick={() => setAba("nova")}
+          className={`flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition ${
+            aba === "nova"
+              ? "bg-white text-violet-700 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <Repeat className="h-3.5 w-3.5" />
+          Abrir nova rodada
+        </button>
+      </div>
+      {aba === "reabrir" ? (
+        <ReopenForm data={data} />
+      ) : (
+        <SuplementarForm data={data} />
+      )}
+    </div>
+  );
+}
+
 function CandidateRow({
   candidate,
   eleito,
@@ -1378,10 +1434,7 @@ export function WorkplaceManager({ data }: { data: ManagerData }) {
             <VoteLimitForm data={data} />
             <Separator />
             {data.status === "closed" ? (
-              <div className="space-y-3">
-                <ReopenForm data={data} />
-                <SuplementarForm data={data} />
-              </div>
+              <ClosedLocalActions data={data} />
             ) : naoAgendado ? (
               // Sem janela agendada não há o que encerrar — a urna nunca abriu.
               <p className="text-xs text-muted-foreground">

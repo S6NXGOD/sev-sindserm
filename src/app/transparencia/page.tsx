@@ -90,6 +90,7 @@ export default async function TransparenciaPage({
     status:
       searchParams.status === "open" ||
       searchParams.status === "closed" ||
+      searchParams.status === "upcoming" ||
       searchParams.status === "suplementar"
         ? searchParams.status
         : "todos",
@@ -133,7 +134,7 @@ export default async function TransparenciaPage({
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
+      <div className="sev-stagger mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
         {/* Título do pleito selecionado (a logo já aparece no cabeçalho — evita
             redundância). */}
         <div>

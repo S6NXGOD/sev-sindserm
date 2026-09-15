@@ -179,6 +179,61 @@
     0 0 22px 4px rgba(16, 185, 129, 0.45);
 }
 
+/* -------------------------------------------------------------------------- */
+/*   Animações sutis do sistema (entrada + hover) — humanização sem exagero    */
+/* -------------------------------------------------------------------------- */
+
+/* Entrada suave (fade + leve subida). Curva "ease-out expo" = natural, não robótica. */
+@keyframes sev-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.sev-rise {
+  animation: sev-rise 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Escalonamento (cascata): aplique no container; os filhos diretos entram em
+   sequência. Só as primeiras posições recebem atraso — o resto entra no tempo base. */
+.sev-stagger > * {
+  animation: sev-rise 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.sev-stagger > *:nth-child(1) { animation-delay: 30ms; }
+.sev-stagger > *:nth-child(2) { animation-delay: 80ms; }
+.sev-stagger > *:nth-child(3) { animation-delay: 130ms; }
+.sev-stagger > *:nth-child(4) { animation-delay: 180ms; }
+.sev-stagger > *:nth-child(5) { animation-delay: 230ms; }
+.sev-stagger > *:nth-child(6) { animation-delay: 280ms; }
+
+/* Leve elevação ao passar o mouse (cards clicáveis). */
+.sev-hover-lift {
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.sev-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -14px rgba(15, 23, 42, 0.28);
+}
+
+/* ACESSIBILIDADE: quem pede menos movimento não recebe animação nenhuma. */
+@media (prefers-reduced-motion: reduce) {
+  .sev-rise,
+  .sev-stagger > *,
+  .sev-slide-in {
+    animation: none !important;
+  }
+  .sev-hover-lift {
+    transition: none;
+  }
+  .sev-hover-lift:hover {
+    transform: none;
+  }
+}
+
 /* Impressão de relatórios: layout limpo, sem fundo cinza. */
 @media print {
   body {

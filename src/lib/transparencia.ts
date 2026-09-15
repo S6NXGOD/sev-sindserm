@@ -57,7 +57,7 @@ export async function getPleitosPublicos(): Promise<{
 export type TransparenciaFiltros = {
   q?: string;
   orgao?: string;
-  status?: "todos" | "open" | "closed" | "suplementar";
+  status?: "todos" | "open" | "closed" | "upcoming" | "suplementar";
 };
 
 export type TransparenciaLocal = {
@@ -366,6 +366,7 @@ export async function getTransparenciaData(
     if (filtros.orgao && l.orgao !== filtros.orgao) return false;
     if (filtros.status === "open" && l.status !== "open") return false;
     if (filtros.status === "closed" && l.status !== "closed") return false;
+    if (filtros.status === "upcoming" && l.status !== "upcoming") return false;
     if (filtros.status === "suplementar" && l.rodadaAtual <= 1) return false;
     if (
       q &&

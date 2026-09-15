@@ -166,7 +166,7 @@ export function LocalCard({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+    <div className="sev-hover-lift overflow-hidden rounded-xl border bg-card shadow-sm">
       {/* Cabeçalho do card (resumo) */}
       <div className="p-4">
         <div className="flex items-start justify-between gap-2">
