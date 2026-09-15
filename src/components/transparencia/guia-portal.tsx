@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, HelpCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -157,6 +158,10 @@ export function GuiaPortal() {
     return () => window.removeEventListener("keydown", onKey);
   }, [ativo, passos.length, fechar]);
 
+  // Monta só no cliente (portal precisa de document).
+  const [montado, setMontado] = useState(false);
+  useEffect(() => setMontado(true), []);
+
   const ultimo = idx === passos.length - 1;
   const primeiro = idx === 0;
 
@@ -195,13 +200,16 @@ export function GuiaPortal() {
         Como usar
       </Button>
 
-      {ativo && passo && (
-        <div
-          className="fixed inset-0 z-[80]"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => (ultimo ? fechar() : setIdx((n) => n + 1))}
-        >
+      {montado &&
+        ativo &&
+        passo &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[80]"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => (ultimo ? fechar() : setIdx((n) => n + 1))}
+          >
           {/* Holofote: recorta o alvo e escurece o resto (ou dim total no intro). */}
           {rect ? (
             <div
@@ -285,8 +293,9 @@ export function GuiaPortal() {
               )}
             </div>
           </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
