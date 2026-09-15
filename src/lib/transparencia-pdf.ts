@@ -39,6 +39,8 @@ export type PdfPleito = {
   trienio: string;
   logoSindserm: string;
   logoPleito: string | null;
+  /** Canal oficial (rodapé "como contestar"). Opcional. */
+  emailOficial?: string | null;
 };
 
 type LogoPair = { sindserm: string | null; pleito: string | null };
@@ -230,6 +232,78 @@ function pdfToolkit(doc: jsPDF, startY: number) {
   return { pageWidth, bottom, larguraUtil, s, ensureSpace, tituloSecao, linha, paragrafo, barra, callout };
 }
 
+type PdfKit = ReturnType<typeof pdfToolkit>;
+
+/**
+ * Bloco compacto "como é apurado + garantias + LGPD" — deixa o documento
+ * AUTOEXPLICATIVO: quem lê entende por que o resultado é confiável e sob quais
+ * regras/lei foi produzido. Sem muralha jurídica.
+ */
+function blocoGarantiasLgpd(kit: PdfKit) {
+  kit.tituloSecao("COMO É APURADO E POR QUE É CONFIÁVEL", [100, 116, 139]);
+  kit.paragrafo(
+    "Voto secreto: o sistema não guarda nenhuma ligação entre o voto e quem votou, nem o horário do voto. É impossível saber em quem alguém votou.",
+  );
+  kit.paragrafo(
+    "Uma pessoa, um voto: CPF e matrícula são únicos por eleição e por rodada; a segunda tentativa é recusada pelo sistema.",
+  );
+  kit.paragrafo(
+    "Apuração automática: o nº de vagas de cada local segue uma regra pública (progressão pelo nº de candidatos); os mais votados ocupam as vagas; quem renuncia dá lugar ao suplente; empate na linha de corte aguarda desempate pelo estatuto/assembleia.",
+  );
+  kit.paragrafo(
+    "Reconciliação: o total de votos apurados confere com o total de votantes (comparecimento) — divergência seria anomalia auditável.",
+  );
+  kit.paragrafo(
+    "Trilha pública: cada passo oficial (agendamento, encerramento, suplementar, renúncia) fica registrado na linha do tempo do local, no Portal da Transparência.",
+  );
+  kit.paragrafo(
+    "Privacidade (LGPD — Lei nº 13.709/2018): este documento traz apenas dados de interesse coletivo (nomes de candidatos, votos e participação agregada), necessários à transparência e à fiscalização do processo. Dados pessoais dos votantes (CPF, matrícula, telefone, e-mail) não são divulgados e são tratados exclusivamente para impedir voto em duplicidade.",
+  );
+}
+
+/**
+ * Rodapé institucional/legal — natureza do documento, onde auditar (URL do
+ * portal), fundamento e canal de contestação. Fecha qualquer relatório.
+ */
+function rodapeInstitucional(
+  doc: jsPDF,
+  kit: PdfKit,
+  opts: { emailOficial?: string | null },
+) {
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "";
+  const geradoEm = new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date());
+  const canal = opts.emailOficial || "a diretoria do SINDSERM";
+
+  kit.s.y += 6;
+  kit.ensureSpace(20);
+  doc.setDrawColor(210);
+  doc.line(MARGIN_X, kit.s.y, kit.pageWidth - MARGIN_X, kit.s.y);
+  kit.s.y += 12;
+
+  const txt =
+    `Documento gerado eletronicamente pelo SEV SINDSERM em ${geradoEm}. ` +
+    `Confira e audite os mesmos dados, a qualquer momento, no Portal da Transparência` +
+    `${origin ? `: ${origin}` : " do SINDSERM"}. ` +
+    `O processo segue o estatuto/regimento eleitoral do SINDSERM, por voto direto e secreto. ` +
+    `Este relatório reflete os dados públicos no momento da geração e não substitui a ata oficial ` +
+    `homologada pela comissão eleitoral. Dúvidas ou contestação: ${canal}.`;
+
+  for (const ln of doc.splitTextToSize(txt, kit.larguraUtil) as string[]) {
+    kit.ensureSpace(11);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8);
+    doc.setTextColor(120);
+    doc.text(ln, MARGIN_X, kit.s.y);
+    kit.s.y += 10;
+  }
+  doc.setTextColor(20);
+}
+
 /**
  * PDF público de Eleitos e Suplentes de UM local. Cabeçalho oficial, dados do
  * local (com a rodada quando é suplementar) e as listas com os votos.
@@ -328,7 +402,11 @@ export async function downloadResultadoPdf(
     doc.setTextColor(120);
     doc.text(`+ ${resultado.semVotos} candidato(s) sem votos.`, MARGIN_X + 4, s.y);
     doc.setTextColor(20);
+    s.y += 8;
   }
+
+  blocoGarantiasLgpd(kit);
+  rodapeInstitucional(doc, kit, { emailOficial: pleito.emailOficial });
 
   doc.save(
     `eleitos-${resultado.nome.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}.pdf`,
@@ -401,6 +479,9 @@ export async function downloadRodadaPdf(
       s.y += 16;
     });
   }
+
+  blocoGarantiasLgpd(kit);
+  rodapeInstitucional(doc, kit, { emailOficial: pleito.emailOficial });
 
   const slug = data.localNome.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   doc.save(`rodada-${r.rodada}-${slug}.pdf`);
@@ -515,13 +596,16 @@ export async function downloadRelatorioPersonalizado(
   if (secoes.metodologia) {
     kit.tituloSecao("METODOLOGIA E PRIVACIDADE (LGPD)", [100, 116, 139]);
     kit.paragrafo(
-      "Apuração: o número de vagas de cada local depende do total de candidatos (regra pública de progressão). Os mais votados ocupam as vagas; empate na linha de corte exige desempate pelo estatuto/assembleia; quem não assume dá lugar ao próximo suplente.",
+      "Fundamento: eleição de representantes de base por voto direto e secreto, conforme o estatuto/regimento eleitoral do SINDSERM.",
     );
     kit.paragrafo(
-      "Sigilo do voto: não há qualquer vínculo entre o voto e a pessoa que votou, nem registro de horário do voto — é impossível saber em quem alguém votou.",
+      "Apuração: o número de vagas de cada local depende do total de candidatos (regra pública de progressão). Os mais votados ocupam as vagas; empate na linha de corte exige desempate pelo estatuto/assembleia; quem não assume dá lugar ao próximo suplente. Suplementar: nova rodada que preserva os já eleitos e disputa só as vagas restantes (ou recomeça do zero), com o resultado de cada rodada arquivado.",
     );
     kit.paragrafo(
-      "LGPD: este relatório traz apenas dados de interesse coletivo (nomes de candidatos, votos e participação agregada). Dados pessoais dos votantes (CPF, matrícula, telefone, e-mail) NÃO são divulgados e servem somente para impedir voto duplicado.",
+      "Sigilo do voto: não há qualquer vínculo entre o voto e a pessoa que votou, nem registro de horário do voto — é impossível saber em quem alguém votou. Uma pessoa, um voto: CPF e matrícula são únicos por eleição e rodada. Reconciliação: o total de votos confere com o total de votantes.",
+    );
+    kit.paragrafo(
+      "Privacidade (LGPD — Lei nº 13.709/2018): este relatório traz apenas dados de interesse coletivo (nomes de candidatos, votos e participação agregada), necessários à transparência e fiscalização. Dados pessoais dos votantes (CPF, matrícula, telefone, e-mail) NÃO são divulgados e servem somente para impedir voto em duplicidade.",
     );
     // Como contestar — o caminho prático para o filiado.
     kit.paragrafo(
@@ -536,6 +620,8 @@ export async function downloadRelatorioPersonalizado(
       20,
     );
   }
+
+  rodapeInstitucional(doc, kit, { emailOficial: data.pleito.emailOficial });
 
   doc.save(`relatorio-transparencia-pleito-${data.pleito.ano}.pdf`);
 }

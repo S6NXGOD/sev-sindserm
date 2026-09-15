@@ -101,6 +101,7 @@ export default async function TransparenciaPage({
     trienio: pleito.trienio,
     logoSindserm: pleito.logoSindserm,
     logoPleito: pleito.logoPleito,
+    emailOficial: pleito.emailOficial,
   };
 
   return (
