@@ -5,9 +5,11 @@ import { searchScore, searchTokens } from "@/lib/slug";
 import {
   getEleitosCsv,
   getEleitosRows,
+  getLinhaTempoLocal,
   getRelatorioTransparencia,
   getResultadoLocal,
   type EleitoRow,
+  type LinhaTempoLocal,
   type RelatorioTransparencia,
   type ResultadoLocal,
 } from "@/lib/transparencia";
@@ -73,6 +75,15 @@ export async function fetchResultadoLocal(
   const id = String(workplaceId ?? "").trim();
   if (!id) return null;
   return getResultadoLocal(id);
+}
+
+/** Linha do tempo pública + histórico de rodadas de um local (sem PII). */
+export async function fetchLinhaTempoLocal(
+  workplaceId: string,
+): Promise<LinhaTempoLocal | null> {
+  const id = String(workplaceId ?? "").trim();
+  if (!id) return null;
+  return getLinhaTempoLocal(id);
 }
 
 export async function fetchEleitosCsv(

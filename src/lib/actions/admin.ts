@@ -9,6 +9,7 @@ import { isValidSlug, searchScore, searchTokens, slugify } from "@/lib/slug";
 import { VOTING_STATUS_ASCII, votingStatus } from "@/lib/voting-status";
 import { ensureModule, getCurrentUser, guard } from "@/lib/current-user";
 import { registrarAuditoria } from "@/lib/audit";
+import { registrarEventoLocal, registrarEventoLocalSafe } from "@/lib/eventos";
 import { notificarAdminsBg } from "@/lib/push";
 import { formatDateTime } from "@/lib/format";
 import { buildVoterWhere, type VoterFiltros } from "@/lib/voter-filters";
@@ -365,7 +366,7 @@ export async function updateWorkplaceSchedule(
   const semCandidatos =
     (await prisma.candidate.count({ where: { workplaceId: id } })) === 0;
 
-  let wp: { nome: string };
+  let wp: { nome: string; anoEleicao: number; rodadaAtual: number };
   try {
     wp = await prisma.workplace.update({
       where: { id },
@@ -382,7 +383,7 @@ export async function updateWorkplaceSchedule(
         agendadoPorNome: g.user.nome,
         agendadoEm: new Date(),
       },
-      select: { nome: true },
+      select: { nome: true, anoEleicao: true, rodadaAtual: true },
     });
   } catch (error) {
     console.error("Erro ao atualizar horário:", error);
@@ -396,6 +397,15 @@ export async function updateWorkplaceSchedule(
     alvo: wp.nome,
     detalhe: `${formatDateTime(dataInicioVotacao)} até ${formatDateTime(dataFimVotacao)}`,
     user: g.user,
+  });
+  await registrarEventoLocalSafe(prisma, {
+    workplaceId: id,
+    anoEleicao: wp.anoEleicao,
+    rodada: wp.rodadaAtual,
+    tipo: "AGENDAMENTO",
+    titulo: "Votação agendada",
+    detalhe: `De ${formatDateTime(dataInicioVotacao)} até ${formatDateTime(dataFimVotacao)}.`,
+    autorNome: g.user.nome,
   });
   // Notifica a diretoria (menos quem agendou) — inclui QUEM agendou.
   notificarAdminsBg(
@@ -532,6 +542,19 @@ export async function encerrarVotacao(formData: FormData): Promise<void> {
   revalidatePath("/admin/locais");
   revalidatePath(`/admin/locais/${id}`);
   await registrarAuditoria("ENCERROU", { alvo: workplace.nome, user: g.user });
+  // Linha do tempo pública: encerramento manual desta rodada.
+  await registrarEventoLocalSafe(prisma, {
+    workplaceId: id,
+    anoEleicao: workplace.anoEleicao,
+    rodada: workplace.rodadaAtual,
+    tipo: "ENCERRAMENTO",
+    titulo:
+      workplace.rodadaAtual > 1
+        ? `Votação da ${workplace.rodadaAtual}ª rodada encerrada`
+        : "Votação encerrada",
+    detalhe: "Encerramento manual pela diretoria.",
+    autorNome: g.user.nome,
+  });
 
   // Apura para avisar de forma ACIONÁVEL: empate (precisa desempate) ou vaga
   // vazia (precisa suplementar) têm prioridade sobre o aviso comum.
@@ -628,6 +651,15 @@ export async function reopenWorkplace(
     alvo: workplace.nome,
     detalhe: `novo término ${formatDateTime(novoFim)}`,
     user: g.user,
+  });
+  await registrarEventoLocalSafe(prisma, {
+    workplaceId: id,
+    anoEleicao: workplace.anoEleicao,
+    rodada: workplace.rodadaAtual,
+    tipo: "REABERTURA",
+    titulo: "Votação reaberta",
+    detalhe: `Novo término em ${formatDateTime(novoFim)}.`,
+    autorNome: g.user.nome,
   });
   notificarAdminsBg(
     {
@@ -780,6 +812,8 @@ export async function iniciarSuplementar(
   const modo = String(formData.get("modo") ?? "suplementar").trim();
   const novoInicioRaw = String(formData.get("novoInicio") ?? "");
   const novoFimRaw = String(formData.get("novoFim") ?? "");
+  // Motivo público da suplementar (ata/decisão) — aparece na transparência.
+  const motivo = String(formData.get("motivo") ?? "").trim().slice(0, 500);
 
   if (!id) return { status: "error", message: "Local inválido." };
   if (modo !== "suplementar" && modo !== "zero") {
@@ -810,7 +844,13 @@ export async function iniciarSuplementar(
 
   const workplace = await prisma.workplace.findUnique({
     where: { id },
-    select: { nome: true, rodadaAtual: true, dataInicioVotacao: true, dataFimVotacao: true },
+    select: {
+      nome: true,
+      anoEleicao: true,
+      rodadaAtual: true,
+      dataInicioVotacao: true,
+      dataFimVotacao: true,
+    },
   });
   if (!workplace) return { status: "error", message: "Local não encontrado." };
 
@@ -848,7 +888,32 @@ export async function iniciarSuplementar(
   }
 
   const novaRodada = workplace.rodadaAtual + 1;
+  const rodadaEncerrada = workplace.rodadaAtual;
   const eleitosIds = apur.eleitos.map((e) => e.id);
+
+  // SNAPSHOT da rodada que está sendo encerrada (arquivo p/ auditoria retroativa
+  // e "cartão de resultado" de cada rodada na transparência). Reconciliação POR
+  // rodada: comparecimento x votos daquela rodada.
+  const [votantesRodada, votosRodada, preservadosAntes] = await Promise.all([
+    prisma.voter.count({ where: { workplaceId: id, rodada: rodadaEncerrada } }),
+    prisma.vote.count({ where: { workplaceId: id, rodada: rodadaEncerrada } }),
+    prisma.candidate.findMany({
+      where: { workplaceId: id, eleitoPreservado: true },
+      select: { id: true },
+    }),
+  ]);
+  const preservadoIds = new Set(preservadosAntes.map((c) => c.id));
+  const snapshot = {
+    vagas: apur.vagas,
+    votantes: votantesRodada,
+    votos: votosRodada,
+    confere: votantesRodada === votosRodada,
+    eleitos: apur.eleitos.map((e) => ({
+      nome: e.nome,
+      votos: e.votos,
+      preservado: preservadoIds.has(e.id),
+    })),
+  };
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -887,6 +952,35 @@ export async function iniciarSuplementar(
           encerradoPorNome: null,
           encerradoEm: null,
         },
+      });
+
+      // LINHA DO TEMPO: arquiva o resultado da rodada encerrada + registra a
+      // abertura da suplementar (com o motivo público, quando informado).
+      await registrarEventoLocal(tx, {
+        workplaceId: id,
+        anoEleicao: workplace.anoEleicao,
+        rodada: rodadaEncerrada,
+        tipo: "RODADA_ENCERRADA",
+        titulo: `Resultado da ${rodadaEncerrada}ª rodada arquivado`,
+        detalhe: `${snapshot.eleitos.length} eleito(s) · ${snapshot.votantes} votante(s)`,
+        autorNome: g.user.nome,
+        snapshot,
+      });
+      await registrarEventoLocal(tx, {
+        workplaceId: id,
+        anoEleicao: workplace.anoEleicao,
+        rodada: novaRodada,
+        tipo: "SUPLEMENTAR",
+        titulo:
+          modo === "suplementar"
+            ? `${novaRodada}ª rodada (suplementar) aberta`
+            : `${novaRodada}ª rodada (nova eleição do zero) aberta`,
+        detalhe:
+          (modo === "suplementar"
+            ? `${eleitosIds.length} eleito(s) preservado(s). `
+            : "Todos os candidatos concorrem novamente. ") +
+          (motivo ? `Motivo: ${motivo}` : "Sem motivo informado."),
+        autorNome: g.user.nome,
       });
     });
   } catch (error) {
@@ -1135,7 +1229,11 @@ export async function setCandidateRenuncia(
 
   const candidate = await prisma.candidate.findUnique({
     where: { id },
-    select: { workplaceId: true, nome: true },
+    select: {
+      workplaceId: true,
+      nome: true,
+      workplace: { select: { anoEleicao: true, rodadaAtual: true } },
+    },
   });
   if (!candidate) {
     return { status: "error", message: "Candidato não encontrado." };
@@ -1158,6 +1256,18 @@ export async function setCandidateRenuncia(
     alvo: candidate.nome,
     detalhe: renunciou ? motivo : undefined,
     user: g.user,
+  });
+  // Linha do tempo pública: quem não assume a vaga (com o motivo) e reversões.
+  await registrarEventoLocalSafe(prisma, {
+    workplaceId: candidate.workplaceId,
+    anoEleicao: candidate.workplace.anoEleicao,
+    rodada: candidate.workplace.rodadaAtual,
+    tipo: "RENUNCIA",
+    titulo: renunciou
+      ? `${candidate.nome} não assume a vaga`
+      : `${candidate.nome} voltou à disputa`,
+    detalhe: renunciou ? `Motivo: ${motivo}. Suplente promovido.` : "Renúncia revertida.",
+    autorNome: g.user.nome,
   });
   notificarAdminsBg(
     {

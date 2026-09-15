@@ -463,6 +463,8 @@ export type ResultadoLocal = {
   totalVotantes: number;
   /** Rodada de votação atual (1 = normal; 2+ = suplementar). */
   rodadaAtual: number;
+  /** Reconciliação DESTA rodada: comparecimento x votos (o filiado confere a urna). */
+  reconciliacao: { votantes: number; votos: number; confere: boolean };
   eleitos: CandidatoResultado[];
   suplentes: CandidatoResultado[];
   /**
@@ -506,6 +508,17 @@ export async function getResultadoLocal(
   const totalCandidatos = wp._count.candidates;
   const vagas = calcularVagas(totalCandidatos);
 
+  // Reconciliação DESTA rodada (participação x votos) — sempre pública.
+  const [votantesRodada, votosRodada] = await Promise.all([
+    prisma.voter.count({ where: { workplaceId, rodada: wp.rodadaAtual } }),
+    prisma.vote.count({ where: { workplaceId, rodada: wp.rodadaAtual } }),
+  ]);
+  const reconciliacao = {
+    votantes: votantesRodada,
+    votos: votosRodada,
+    confere: votantesRodada === votosRodada,
+  };
+
   // GATE de sigilo: a apuração por candidato só é revelada quando o local está
   // ENCERRADO — OU quando está ABERTO e a diretoria habilitou as parciais
   // públicas do pleito (`parciaisPublicas`). Nos demais casos, devolvemos só o
@@ -536,6 +549,7 @@ export async function getResultadoLocal(
     totalCandidatos,
     totalVotantes: wp._count.voters,
     rodadaAtual: wp.rodadaAtual,
+    reconciliacao,
   };
   if (!revelar) {
     return {
@@ -623,6 +637,152 @@ export async function getResultadoLocal(
     renunciantes,
     semVotos,
     parcial,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/*                 Linha do tempo pública + histórico por rodada              */
+/* -------------------------------------------------------------------------- */
+
+export type TimelineEvento = {
+  tipo: string;
+  titulo: string;
+  detalhe: string | null;
+  autorNome: string | null;
+  rodada: number;
+  data: string; // ISO
+};
+
+export type RodadaArquivada = {
+  rodada: number;
+  encerradaEm: string; // ISO
+  vagas: number;
+  votantes: number;
+  votos: number;
+  confere: boolean;
+  eleitos: { nome: string; votos: number; preservado?: boolean }[];
+};
+
+export type LinhaTempoLocal = {
+  nome: string;
+  rodadaAtual: number;
+  eventos: TimelineEvento[];
+  rodadasArquivadas: RodadaArquivada[];
+};
+
+/**
+ * LINHA DO TEMPO PÚBLICA de um local: cada passo oficial (agendamento, abertura,
+ * encerramento, reabertura, suplementar com MOTIVO, renúncias) mais o HISTÓRICO
+ * de resultado de cada rodada já encerrada (snapshot arquivado). Só dados
+ * públicos (sem PII). Para locais anteriores a este recurso, deriva os marcos
+ * básicos dos campos do próprio local (cadastro/agendamento/encerramento).
+ */
+export async function getLinhaTempoLocal(
+  workplaceId: string,
+): Promise<LinhaTempoLocal | null> {
+  const wp = await prisma.workplace.findUnique({
+    where: { id: workplaceId },
+    select: {
+      nome: true,
+      rodadaAtual: true,
+      createdAt: true,
+      agendadoEm: true,
+      agendadoPorNome: true,
+      encerradoEm: true,
+      encerradoPorNome: true,
+      dataInicioVotacao: true,
+      dataFimVotacao: true,
+    },
+  });
+  if (!wp) return null;
+
+  const registros = await prisma.localEvento.findMany({
+    where: { workplaceId },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const temTipoLogado = (t: string) => registros.some((r) => r.tipo === t);
+  const eventos: TimelineEvento[] = [];
+
+  // Marco fixo: cadastro (sempre derivado — o createdAt do local nunca é sobrescrito).
+  eventos.push({
+    tipo: "CADASTRO",
+    titulo: "Local cadastrado no sistema",
+    detalhe: null,
+    autorNome: null,
+    rodada: 1,
+    data: wp.createdAt.toISOString(),
+  });
+
+  // Marcos derivados (só p/ locais SEM eventos logados do tipo — retrocompat).
+  if (wp.agendadoEm && !temTipoLogado("AGENDAMENTO")) {
+    eventos.push({
+      tipo: "AGENDAMENTO",
+      titulo: "Votação agendada",
+      detalhe:
+        wp.dataInicioVotacao && wp.dataFimVotacao
+          ? `De ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" }).format(wp.dataInicioVotacao)} até ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" }).format(wp.dataFimVotacao)}.`
+          : null,
+      autorNome: wp.agendadoPorNome,
+      rodada: 1,
+      data: wp.agendadoEm.toISOString(),
+    });
+  }
+  const encerradoDerivavel =
+    wp.encerradoEm &&
+    !temTipoLogado("ENCERRAMENTO") &&
+    votingStatus(wp.dataInicioVotacao, wp.dataFimVotacao) === "closed";
+  if (encerradoDerivavel && wp.encerradoEm) {
+    eventos.push({
+      tipo: "ENCERRAMENTO",
+      titulo: "Votação encerrada",
+      detalhe: null,
+      autorNome: wp.encerradoPorNome,
+      rodada: 1,
+      data: wp.encerradoEm.toISOString(),
+    });
+  }
+
+  // Eventos logados (append-only): a fonte de verdade dos passos ricos.
+  const rodadasArquivadas: RodadaArquivada[] = [];
+  for (const r of registros) {
+    eventos.push({
+      tipo: r.tipo,
+      titulo: r.titulo,
+      detalhe: r.detalhe,
+      autorNome: r.autorNome,
+      rodada: r.rodada,
+      data: r.createdAt.toISOString(),
+    });
+    if (r.tipo === "RODADA_ENCERRADA" && r.snapshot) {
+      const s = r.snapshot as {
+        vagas?: number;
+        votantes?: number;
+        votos?: number;
+        confere?: boolean;
+        eleitos?: { nome: string; votos: number; preservado?: boolean }[];
+      };
+      rodadasArquivadas.push({
+        rodada: r.rodada,
+        encerradaEm: r.createdAt.toISOString(),
+        vagas: s.vagas ?? 0,
+        votantes: s.votantes ?? 0,
+        votos: s.votos ?? 0,
+        confere: s.confere ?? true,
+        eleitos: s.eleitos ?? [],
+      });
+    }
+  }
+
+  // Mais recentes primeiro (o filiado acompanha o "agora"); arquivadas por rodada.
+  eventos.sort((a, b) => b.data.localeCompare(a.data));
+  rodadasArquivadas.sort((a, b) => a.rodada - b.rodada);
+
+  return {
+    nome: wp.nome,
+    rodadaAtual: wp.rodadaAtual,
+    eventos,
+    rodadasArquivadas,
   };
 }
 

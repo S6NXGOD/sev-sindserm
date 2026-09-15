@@ -506,6 +506,7 @@ function SuplementarForm({ data }: { data: ManagerData }) {
   );
   const [open, setOpen] = useState(false);
   const [modo, setModo] = useState<"suplementar" | "zero">("suplementar");
+  const [motivo, setMotivo] = useState("");
   const [novoInicio, setNovoInicio] = useState("");
   const [novoFim, setNovoFim] = useState("");
   const [preview, setPreview] = useState<SuplementarPreview | null>(null);
@@ -663,6 +664,26 @@ function SuplementarForm({ data }: { data: ManagerData }) {
         )}
       </div>
 
+      {/* Motivo público (ata/decisão) — aparece na linha do tempo do portal. */}
+      <div className="mb-3 space-y-1.5">
+        <Label htmlFor="supMotivo" className="text-xs">
+          Motivo da suplementar (público na transparência)
+        </Label>
+        <textarea
+          id="supMotivo"
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          rows={2}
+          maxLength={500}
+          placeholder="Ex.: Vagas remanescentes após a 1ª rodada; abrir oportunidade a mais candidatos."
+          className="w-full rounded-md border border-violet-200 bg-white px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-violet-500"
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Explique por que a suplementar foi aberta — o filiado verá isso no
+          histórico do local.
+        </p>
+      </div>
+
       {/* Janela da nova rodada */}
       <div className="mb-3 grid gap-2 sm:grid-cols-2">
         <div className="space-y-1.5">
@@ -737,6 +758,7 @@ function SuplementarForm({ data }: { data: ManagerData }) {
             <form action={formAction}>
               <input type="hidden" name="id" value={data.id} />
               <input type="hidden" name="modo" value={modo} />
+              <input type="hidden" name="motivo" value={motivo} />
               <input type="hidden" name="novoInicio" value={novoInicio} />
               <input type="hidden" name="novoFim" value={novoFim} />
               <PendingButton type="submit">Confirmar e abrir</PendingButton>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   Award,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   Download,
@@ -11,6 +12,7 @@ import {
   Lock,
   MapPin,
   Repeat,
+  TriangleAlert,
   Users,
 } from "lucide-react";
 import { fetchResultadoLocal } from "@/lib/actions/transparencia";
@@ -22,6 +24,7 @@ import type {
 } from "@/lib/transparencia";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { LinhaTempoLocal } from "@/components/transparencia/linha-tempo-local";
 
 const PAGE = 15; // paginação interna por lista (anti-quebra no celular).
 
@@ -293,6 +296,29 @@ export function LocalCard({
                 </p>
               </div>
 
+              {/* Reconciliação DESTA rodada: o filiado confere a "sua" urna. */}
+              <div
+                className={`flex items-start gap-2 rounded-md border px-3 py-2 text-xs ${
+                  resultado.reconciliacao.confere
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-rose-200 bg-rose-50 text-rose-800"
+                }`}
+              >
+                {resultado.reconciliacao.confere ? (
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                )}
+                <span>
+                  <strong>{resultado.reconciliacao.votantes}</strong> votante(s) e{" "}
+                  <strong>{resultado.reconciliacao.votos}</strong> voto(s)
+                  {resultado.rodadaAtual > 1 ? " nesta rodada" : ""} —{" "}
+                  {resultado.reconciliacao.confere
+                    ? "os números conferem."
+                    : "há divergência; verifique."}
+                </span>
+              </div>
+
               <div>
                 <p className="mb-2 text-sm font-bold text-emerald-700">
                   {resultado.parcial
@@ -363,6 +389,12 @@ export function LocalCard({
               )}
             </div>
           )}
+
+          {/* Linha do tempo pública — cada passo do sindicato neste local +
+              histórico de resultado por rodada. Sempre disponível ao expandir. */}
+          <div className="mt-4">
+            <LinhaTempoLocal workplaceId={local.id} />
+          </div>
         </div>
       )}
     </div>

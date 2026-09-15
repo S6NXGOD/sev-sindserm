@@ -232,10 +232,40 @@ model Workplace {
   candidates Candidate[]
   votes      Vote[]
   voters     Voter[]
+  eventos    LocalEvento[]
 
   @@unique([linkToken, anoEleicao])
   @@index([anoEleicao])
   @@map("workplaces")
+}
+
+/// LINHA DO TEMPO PÚBLICA de atos oficiais de um local (append-only). Alimenta a
+/// transparência ("cada passo do sindicato") e ARQUIVA o resultado de cada rodada
+/// encerrada (snapshot) para auditoria retroativa. NUNCA guarda PII — só o ato, a
+/// data, o responsável (institucional) e, quando aplicável, o resultado agregado.
+model LocalEvento {
+  id          String @id @default(cuid())
+  workplaceId String
+  anoEleicao  Int
+  // Rodada a que o ato se refere (1 = normal; 2+ = suplementar).
+  rodada      Int    @default(1)
+  // Código do ato: AGENDAMENTO, ENCERRAMENTO, REABERTURA, SUPLEMENTAR, RENUNCIA,
+  // RODADA_ENCERRADA (este carrega o snapshot do resultado da rodada).
+  tipo        String
+  titulo      String
+  detalhe     String?
+  // Nome do responsável (desnormalizado; sobrevive à exclusão do usuário).
+  autorNome   String?
+  // Snapshot do resultado de uma rodada encerrada (tipo RODADA_ENCERRADA):
+  // { vagas, votantes, votos, confere, eleitos: [{ nome, votos, preservado }] }.
+  snapshot    Json?
+
+  createdAt DateTime @default(now())
+
+  workplace Workplace @relation(fields: [workplaceId], references: [id], onDelete: Cascade)
+
+  @@index([workplaceId, createdAt])
+  @@map("local_eventos")
 }
 
 /// Candidato vinculado a um local de trabalho.
