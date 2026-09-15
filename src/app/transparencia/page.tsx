@@ -5,6 +5,7 @@ import {
 } from "@/lib/transparencia";
 import { ProximasAberturas } from "@/components/proximas-aberturas";
 import { ApuracaoAoVivo } from "@/components/transparencia/apuracao-ao-vivo";
+import { AuditoriaLisura } from "@/components/transparencia/auditoria-lisura";
 import { ParticipacaoPanel } from "@/components/transparencia/participacao-panel";
 import { PleitoSelector } from "@/components/transparencia/pleito-selector";
 import { FiltrosBar } from "@/components/transparencia/filtros-bar";
@@ -177,6 +178,14 @@ export default async function TransparenciaPage({
           totalVotantes={data.kpis.votos}
           eleitos={data.kpis.eleitos}
           vagas={data.kpis.vagas}
+        />
+
+        {/* Auditoria, integridade e lisura — prova pública de que é limpa e
+            auditável, com reconciliação, como conferir/contestar e LGPD. */}
+        <AuditoriaLisura
+          integridade={data.integridade}
+          emailOficial={pleito.emailOficial}
+          tituloPleito={pleito.titulo}
         />
 
         {/* Próximas aberturas: o filiado vê quais urnas vão abrir e quando. */}

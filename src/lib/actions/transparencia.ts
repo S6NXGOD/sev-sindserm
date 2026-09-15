@@ -5,8 +5,10 @@ import { searchScore, searchTokens } from "@/lib/slug";
 import {
   getEleitosCsv,
   getEleitosRows,
+  getRelatorioTransparencia,
   getResultadoLocal,
   type EleitoRow,
+  type RelatorioTransparencia,
   type ResultadoLocal,
 } from "@/lib/transparencia";
 
@@ -88,4 +90,13 @@ export async function fetchEleitosRows(
   const id = String(electionId ?? "").trim();
   if (!id) return null;
   return getEleitosRows(id);
+}
+
+/** Dataset público completo para o RELATÓRIO PERSONALIZADO em PDF do filiado. */
+export async function fetchRelatorioTransparencia(
+  electionId: string,
+): Promise<RelatorioTransparencia | null> {
+  const id = String(electionId ?? "").trim();
+  if (!id) return null;
+  return getRelatorioTransparencia(id);
 }

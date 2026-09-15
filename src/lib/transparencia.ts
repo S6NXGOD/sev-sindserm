@@ -136,6 +136,8 @@ export type TransparenciaData = {
   votantesPorZona: { zona: string; votantes: number }[];
   /** Locais com votação EM ANDAMENTO agora (para o painel "Apuração ao vivo"). */
   liderancaAoVivo: LiderancaAoVivo[];
+  /** Reconciliação pública (anti-fraude): comparecimento x votos na urna. */
+  integridade: { votantes: number; votos: number; confere: boolean };
   orgaos: string[];
   locais: TransparenciaLocal[];
 };
@@ -159,6 +161,7 @@ const EMPTY: TransparenciaData = {
   rankingParticipacao: [],
   votantesPorZona: [],
   liderancaAoVivo: [],
+  integridade: { votantes: 0, votos: 0, confere: true },
   orgaos: [],
   locais: [],
 };
@@ -178,7 +181,7 @@ export async function getTransparenciaData(
   // UMA consulta indexada por ano traz todos os locais com os _count (votantes
   // e candidatos). KPIs vêm do conjunto completo; os cards são filtrados.
   // A contagem de eleitos por local (locais ENCERRADOS) usa COUNT(DISTINCT).
-  const [locaisRaw, votedCounts] = await Promise.all([
+  const [locaisRaw, votedCounts, totalVotosReais] = await Promise.all([
     prisma.workplace.findMany({
       where: { anoEleicao: ano },
       select: {
@@ -198,6 +201,9 @@ export async function getTransparenciaData(
       FROM votes v JOIN candidates c ON c.id = v."candidateId"
       WHERE v."anoEleicao" = ${ano} AND c."renunciou" = false
       GROUP BY v."workplaceId"`,
+    // RECONCILIAÇÃO: total de VOTOS na urna (deve casar com o comparecimento —
+    // cada votante registra exatamente 1 voto). Divergência = anomalia auditável.
+    prisma.vote.count({ where: { anoEleicao: ano } }),
   ]);
 
   const votedMap = new Map(votedCounts.map((v) => [v.wid, v.n]));
@@ -395,6 +401,7 @@ export async function getTransparenciaData(
     rankingParticipacao,
     votantesPorZona,
     liderancaAoVivo,
+    integridade: { votantes: votos, votos: totalVotosReais, confere: votos === totalVotosReais },
     orgaos,
     locais,
   };
@@ -684,5 +691,86 @@ export async function getEleitosCsv(electionId: string): Promise<{
     filename: `eleitos-pleito-${data.ano}.csv`,
     // BOM para o Excel reconhecer UTF-8.
     csv: `﻿${corpo}`,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/*            Relatório PERSONALIZADO do filiado (dados públicos)             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Dataset completo e PÚBLICO para o filiado montar seu relatório em PDF. Contém
+ * SOMENTE dados de interesse coletivo (agregados + resultado eleitoral) — nunca
+ * PII (LGPD): sem CPF/matrícula/telefone/e-mail e sem vínculo voto↔pessoa.
+ */
+export type RelatorioTransparencia = {
+  pleito: {
+    ano: number;
+    titulo: string;
+    trienio: string;
+    logoSindserm: string;
+    logoPleito: string | null;
+  };
+  geradoEm: string;
+  kpis: {
+    locais: number;
+    votantes: number;
+    votos: number;
+    eleitos: number;
+    vagas: number;
+    abertas: number;
+    encerradas: number;
+    agendadas: number;
+  };
+  integridade: { votantes: number; votos: number; confere: boolean };
+  porZona: { zona: string; votantes: number }[];
+  porOrgao: { orgao: string; votantes: number }[];
+  eleitos: EleitoRow[];
+};
+
+export async function getRelatorioTransparencia(
+  electionId: string,
+): Promise<RelatorioTransparencia | null> {
+  const data = await getTransparenciaData(electionId);
+  if (!data.pleito) return null;
+  const eleitosData = await getEleitosRows(electionId);
+  const ano = data.pleito.ano;
+
+  // Participação por ÓRGÃO (agregado — comparecimento por órgão).
+  const orgRows = await prisma.$queryRaw<{ orgao: string; n: number }[]>`
+    SELECT w."orgao" AS orgao, COUNT(vt.id)::int AS n
+    FROM workplaces w LEFT JOIN voters vt ON vt."workplaceId" = w.id
+    WHERE w."anoEleicao" = ${ano}
+    GROUP BY w."orgao"
+    HAVING COUNT(vt.id) > 0
+    ORDER BY COUNT(vt.id) DESC`;
+
+  return {
+    pleito: {
+      ano,
+      titulo: data.pleito.titulo,
+      trienio: data.pleito.trienio,
+      logoSindserm: data.pleito.logoSindserm,
+      logoPleito: data.pleito.logoPleito,
+    },
+    geradoEm: new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+      timeZone: "America/Sao_Paulo",
+    }).format(new Date()),
+    kpis: {
+      locais: data.kpis.locais,
+      votantes: data.kpis.votos,
+      votos: data.integridade.votos,
+      eleitos: data.kpis.eleitos,
+      vagas: data.kpis.vagas,
+      abertas: data.kpis.abertas,
+      encerradas: data.kpis.encerradas,
+      agendadas: data.kpis.agendadas,
+    },
+    integridade: data.integridade,
+    porZona: data.votantesPorZona,
+    porOrgao: orgRows.map((o) => ({ orgao: o.orgao, votantes: o.n })),
+    eleitos: eleitosData?.rows ?? [],
   };
 }

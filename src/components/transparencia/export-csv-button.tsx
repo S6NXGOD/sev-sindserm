@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { fetchEleitosCsv, fetchEleitosRows } from "@/lib/actions/transparencia";
 import { downloadRelatorioGeralPdf, type PdfPleito } from "@/lib/transparencia-pdf";
 import { Button } from "@/components/ui/button";
+import { RelatorioBuilder } from "@/components/transparencia/relatorio-builder";
 
 /**
  * Baixa o relatório geral do pleito (todos os eleitos titulares dos locais
@@ -90,6 +91,8 @@ export function ExportButtons({
         )}
         PDF
       </Button>
+      {/* Relatório PERSONALIZADO — o filiado escolhe as seções. */}
+      <RelatorioBuilder electionId={electionId} />
     </div>
   );
 }
