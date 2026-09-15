@@ -3,8 +3,11 @@
 import { useState } from "react";
 import { FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { fetchEleitosCsv, fetchEleitosRows } from "@/lib/actions/transparencia";
-import { downloadRelatorioGeralPdf, type PdfPleito } from "@/lib/transparencia-pdf";
+import {
+  fetchEleitosCsv,
+  fetchRelatorioTransparencia,
+} from "@/lib/actions/transparencia";
+import { downloadRelatorioGeralPdf } from "@/lib/transparencia-pdf";
 import { Button } from "@/components/ui/button";
 import { RelatorioBuilder } from "@/components/transparencia/relatorio-builder";
 
@@ -13,13 +16,7 @@ import { RelatorioBuilder } from "@/components/transparencia/relatorio-builder";
  * encerrados) em CSV ou PDF. Ambos geram no servidor/cliente e disparam o
  * download via Blob. Layout com wrap — nunca "quebra" em telas estreitas.
  */
-export function ExportButtons({
-  electionId,
-  pleito,
-}: {
-  electionId: string;
-  pleito: PdfPleito;
-}) {
+export function ExportButtons({ electionId }: { electionId: string }) {
   const [loading, setLoading] = useState<"csv" | "pdf" | null>(null);
 
   async function baixarCsv() {
@@ -47,12 +44,16 @@ export function ExportButtons({
   async function baixarPdf() {
     setLoading("pdf");
     try {
-      const data = await fetchEleitosRows(electionId);
-      if (!data || data.rows.length === 0) {
+      const data = await fetchRelatorioTransparencia(electionId);
+      if (!data) {
+        toast.info("Relatório indisponível no momento.");
+        return;
+      }
+      if (data.eleitos.length === 0) {
         toast.info("Ainda não há eleitos consolidados neste pleito.");
         return;
       }
-      await downloadRelatorioGeralPdf(data, pleito);
+      await downloadRelatorioGeralPdf(data);
     } catch {
       toast.error("Não foi possível gerar o PDF.");
     } finally {

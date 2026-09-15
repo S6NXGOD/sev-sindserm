@@ -1,5 +1,5 @@
+import type { jsPDF } from "jspdf";
 import type {
-  EleitoRow,
   RelatorioTransparencia,
   ResultadoLocal,
 } from "@/lib/transparencia";
@@ -31,6 +31,8 @@ function formatData(iso: string): string {
   }
 }
 
+const nf = (n: number) => n.toLocaleString("pt-BR");
+
 export type PdfPleito = {
   titulo: string;
   trienio: string;
@@ -38,10 +40,198 @@ export type PdfPleito = {
   logoPleito: string | null;
 };
 
+type LogoPair = { sindserm: string | null; pleito: string | null };
+
+async function loadLogos(pleito: {
+  logoSindserm: string;
+  logoPleito: string | null;
+}): Promise<LogoPair> {
+  const [sindserm, pleitoLogo] = await Promise.all([
+    fetchPngDataUrl(pleito.logoSindserm),
+    pleito.logoPleito ? fetchPngDataUrl(pleito.logoPleito) : Promise.resolve(null),
+  ]);
+  return { sindserm, pleito: pleitoLogo };
+}
+
+const MARGIN_X = 48;
+
 /**
- * Gera (no cliente) o PDF público de Eleitos e Suplentes de UM local encerrado.
- * Cabeçalho oficial com as logos corretas (proporção preservada), nome do local,
- * data de encerramento e a tabela com badges de Eleito/Suplente.
+ * Desenha o cabeçalho oficial (logos + títulos) e devolve o Y onde o CONTEÚDO
+ * deve começar. O bloco de texto central usa uma largura SEGURA que nunca invade
+ * as áreas das logos — corrige a sobreposição que quebrava o cabeçalho.
+ */
+function drawPdfHeader(
+  doc: jsPDF,
+  logos: LogoPair,
+  opts: { titulo: string; subtitulo: string; geradoEm?: string },
+): number {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const topY = 42;
+  const leftMaxW = 92;
+  const leftMaxH = 42;
+  const rightMax = 46;
+
+  const drawLogo = (
+    dataUrl: string,
+    side: "left" | "right",
+    maxW: number,
+    maxH: number,
+  ): number => {
+    try {
+      const props = doc.getImageProperties(dataUrl);
+      const scale = Math.min(maxW / props.width, maxH / props.height);
+      const w = props.width * scale;
+      const h = props.height * scale;
+      const x = side === "left" ? MARGIN_X : pageWidth - MARGIN_X - w;
+      doc.addImage(dataUrl, x, topY, w, h);
+      return topY + h;
+    } catch {
+      return topY;
+    }
+  };
+
+  let leftBottom = topY;
+  let rightBottom = topY;
+  if (logos.sindserm) leftBottom = drawLogo(logos.sindserm, "left", leftMaxW, leftMaxH);
+  if (logos.pleito) rightBottom = drawLogo(logos.pleito, "right", rightMax, rightMax);
+
+  // Zona central segura (entre as logos), com folga de 12pt de cada lado.
+  const safeLeft = MARGIN_X + leftMaxW + 12;
+  const safeRight = pageWidth - MARGIN_X - rightMax - 12;
+  const centerX = (safeLeft + safeRight) / 2;
+  const safeW = safeRight - safeLeft;
+
+  let ty = topY + 13;
+  doc.setTextColor(20);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.text("SEV SINDSERM", centerX, ty, { align: "center" });
+  ty += 14;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(90);
+  for (const ln of doc.splitTextToSize(opts.subtitulo, safeW) as string[]) {
+    doc.text(ln, centerX, ty, { align: "center" });
+    ty += 11;
+  }
+  doc.setTextColor(20);
+  for (const ln of doc.splitTextToSize(opts.titulo, safeW) as string[]) {
+    doc.text(ln, centerX, ty, { align: "center" });
+    ty += 11;
+  }
+  if (opts.geradoEm) {
+    doc.setFontSize(8.5);
+    doc.setTextColor(120);
+    doc.text(opts.geradoEm, centerX, ty, { align: "center" });
+    doc.setTextColor(20);
+    ty += 11;
+  }
+
+  // O conteúdo começa abaixo do mais baixo entre texto e logos.
+  const y = Math.max(ty, leftBottom, rightBottom) + 14;
+  doc.setDrawColor(210);
+  doc.line(MARGIN_X, y, pageWidth - MARGIN_X, y);
+  return y + 22;
+}
+
+/** Kit de desenho com cursor `y` compartilhado (evita repetir helpers). */
+function pdfToolkit(doc: jsPDF, startY: number) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const bottom = pageHeight - 48;
+  const larguraUtil = pageWidth - MARGIN_X * 2;
+  const s = { y: startY };
+
+  const ensureSpace = (need: number) => {
+    if (s.y + need > bottom) {
+      doc.addPage();
+      s.y = 56;
+    }
+  };
+  const tituloSecao = (t: string, cor: [number, number, number]) => {
+    ensureSpace(34);
+    doc.setFillColor(cor[0], cor[1], cor[2]);
+    doc.roundedRect(MARGIN_X, s.y - 12, larguraUtil, 22, 4, 4, "F");
+    doc.setTextColor(255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text(t, MARGIN_X + 10, s.y + 3);
+    doc.setTextColor(20);
+    s.y += 28;
+  };
+  const linha = (label: string, valor: string) => {
+    ensureSpace(16);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10.5);
+    doc.text(label, MARGIN_X + 4, s.y);
+    doc.setFont("helvetica", "bold");
+    doc.text(valor, pageWidth - MARGIN_X - 4, s.y, { align: "right" });
+    s.y += 15;
+  };
+  const paragrafo = (t: string, size = 9.5, cor = 70) => {
+    for (const ln of doc.splitTextToSize(t, larguraUtil - 8) as string[]) {
+      ensureSpace(13);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(size);
+      doc.setTextColor(cor);
+      doc.text(ln, MARGIN_X + 4, s.y);
+      s.y += 12;
+    }
+    doc.setTextColor(20);
+    s.y += 4;
+  };
+  const barra = (label: string, valor: number, max: number) => {
+    ensureSpace(24);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.text((doc.splitTextToSize(label, larguraUtil - 70) as string[])[0], MARGIN_X + 4, s.y);
+    doc.setFont("helvetica", "bold");
+    doc.text(String(valor), pageWidth - MARGIN_X - 4, s.y, { align: "right" });
+    s.y += 4;
+    const w = max > 0 ? Math.max(2, (valor / max) * larguraUtil) : 0;
+    doc.setFillColor(226, 232, 240);
+    doc.roundedRect(MARGIN_X + 4, s.y, larguraUtil - 8, 5, 2, 2, "F");
+    doc.setFillColor(16, 122, 76);
+    doc.roundedRect(MARGIN_X + 4, s.y, Math.min(larguraUtil - 8, w), 5, 2, 2, "F");
+    s.y += 14;
+  };
+  // Caixa de destaque (verde = ok, vermelho = alerta) para a reconciliação.
+  const callout = (ok: boolean, titulo: string, texto: string) => {
+    const linhas = doc.splitTextToSize(texto, larguraUtil - 24) as string[];
+    const altura = 30 + linhas.length * 11;
+    ensureSpace(altura + 6);
+    if (ok) {
+      doc.setFillColor(236, 253, 245);
+      doc.setDrawColor(16, 122, 76);
+    } else {
+      doc.setFillColor(254, 242, 242);
+      doc.setDrawColor(190, 40, 40);
+    }
+    doc.roundedRect(MARGIN_X, s.y, larguraUtil, altura, 6, 6, "FD");
+    let iy = s.y + 18;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(ok ? 16 : 150, ok ? 100 : 30, ok ? 64 : 30);
+    doc.text(titulo, MARGIN_X + 12, iy);
+    iy += 15;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor(60);
+    for (const ln of linhas) {
+      doc.text(ln, MARGIN_X + 12, iy);
+      iy += 11;
+    }
+    doc.setTextColor(20);
+    s.y += altura + 12;
+  };
+
+  return { pageWidth, bottom, larguraUtil, s, ensureSpace, tituloSecao, linha, paragrafo, barra, callout };
+}
+
+/**
+ * PDF público de Eleitos e Suplentes de UM local. Cabeçalho oficial, dados do
+ * local (com a rodada quando é suplementar) e as listas com os votos.
  */
 export async function downloadResultadoPdf(
   resultado: ResultadoLocal,
@@ -49,124 +239,78 @@ export async function downloadResultadoPdf(
 ) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const marginX = 48;
-  const bottom = pageHeight - 48;
-
-  const [sindsermData, pleitoData] = await Promise.all([
-    fetchPngDataUrl(pleito.logoSindserm),
-    pleito.logoPleito ? fetchPngDataUrl(pleito.logoPleito) : null,
-  ]);
-
-  const drawLogo = (
-    dataUrl: string,
-    side: "left" | "right",
-    maxW: number,
-    maxH: number,
-  ) => {
-    try {
-      const props = doc.getImageProperties(dataUrl);
-      const scale = Math.min(maxW / props.width, maxH / props.height);
-      const w = props.width * scale;
-      const h = props.height * scale;
-      const x = side === "left" ? marginX : pageWidth - marginX - w;
-      doc.addImage(dataUrl, x, 38 + (maxH - h) / 2, w, h);
-    } catch {
-      /* ignora imagem inválida (ex.: SVG) */
-    }
-  };
-  if (sindsermData) drawLogo(sindsermData, "left", 140, 44);
-  if (pleitoData) drawLogo(pleitoData, "right", 50, 50);
-
-  const centerX = pageWidth / 2;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text("SEV SINDSERM", centerX, 56, { align: "center" });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
-  doc.text("Portal da Transparência · Sistema Eletrônico de Votação do SINDSERM", centerX, 70, { align: "center" });
-  doc.setFontSize(9.5);
-  doc.text(doc.splitTextToSize(pleito.titulo, pageWidth - marginX * 2), centerX, 84, { align: "center" });
-
-  let y = 108;
-  doc.setDrawColor(210);
-  doc.line(marginX, y, pageWidth - marginX, y);
-  y += 24;
+  const logos = await loadLogos(pleito);
+  const startY = drawPdfHeader(doc, logos, {
+    titulo: pleito.titulo,
+    subtitulo: "Portal da Transparência · Resultado do Local",
+  });
+  const kit = pdfToolkit(doc, startY);
+  const { pageWidth, s } = kit;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(15);
-  doc.text(doc.splitTextToSize(resultado.nome, pageWidth - marginX * 2), marginX, y);
-  y += 20;
+  doc.text(doc.splitTextToSize(resultado.nome, pageWidth - MARGIN_X * 2), MARGIN_X, s.y);
+  s.y += 20;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(90);
-  doc.text(`${resultado.orgao} · Zona ${resultado.zona}`, marginX, y);
-  y += 14;
-  // Local sem janela agendada não tem data de encerramento para imprimir.
+  doc.text(`${resultado.orgao} · Zona ${resultado.zona}`, MARGIN_X, s.y);
+  s.y += 14;
   const encerramento = resultado.dataFim
     ? `Encerrada em ${formatData(resultado.dataFim)}`
     : "Votação ainda não agendada";
+  const rodadaTxt =
+    resultado.rodadaAtual > 1 ? ` · ${resultado.rodadaAtual}ª rodada (suplementar)` : "";
   doc.text(
-    `${encerramento} · ${resultado.vagas} vaga(s) · ${resultado.totalVotantes} votante(s) · ${resultado.totalCandidatos} candidato(s)`,
-    marginX,
-    y,
+    `${encerramento} · ${resultado.vagas} vaga(s) · ${resultado.totalVotantes} votante(s) · ${resultado.totalCandidatos} candidato(s)${rodadaTxt}`,
+    MARGIN_X,
+    s.y,
   );
   doc.setTextColor(20);
-  y += 22;
-
-  const ensureSpace = (need: number) => {
-    if (y + need > bottom) {
-      doc.addPage();
-      y = 56;
-    }
-  };
+  s.y += 22;
 
   const secao = (
     titulo: string,
-    itens: { nome: string; votos: number }[],
+    itens: { nome: string; votos: number; preservado?: boolean }[],
     cor: [number, number, number],
   ) => {
-    ensureSpace(30);
-    doc.setFillColor(cor[0], cor[1], cor[2]);
-    doc.roundedRect(marginX, y - 12, pageWidth - marginX * 2, 22, 4, 4, "F");
-    doc.setTextColor(255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text(`${titulo} (${itens.length})`, marginX + 10, y + 3);
-    doc.setTextColor(20);
-    y += 26;
-
+    kit.tituloSecao(`${titulo} (${itens.length})`, cor);
     if (itens.length === 0) {
       doc.setFont("helvetica", "italic");
       doc.setFontSize(10);
       doc.setTextColor(120);
-      doc.text("Nenhum.", marginX + 4, y);
+      kit.ensureSpace(16);
+      doc.text("Nenhum.", MARGIN_X + 4, s.y);
       doc.setTextColor(20);
-      y += 18;
+      s.y += 18;
       return;
     }
     doc.setFontSize(10.5);
     itens.forEach((c, i) => {
-      ensureSpace(18);
+      kit.ensureSpace(16);
       doc.setFont("helvetica", "normal");
-      doc.text(`${i + 1}. ${c.nome}`, marginX + 4, y);
+      const sufixo = c.preservado ? "  (eleito na rodada anterior)" : "";
+      doc.text(
+        (doc.splitTextToSize(`${i + 1}. ${c.nome}${sufixo}`, kit.larguraUtil - 80) as string[])[0],
+        MARGIN_X + 4,
+        s.y,
+      );
       doc.setFont("helvetica", "bold");
-      doc.text(`${c.votos} voto(s)`, pageWidth - marginX - 4, y, { align: "right" });
-      y += 16;
+      doc.text(`${c.votos} voto(s)`, pageWidth - MARGIN_X - 4, s.y, { align: "right" });
+      s.y += 16;
     });
-    y += 8;
+    s.y += 8;
   };
 
   secao("ELEITOS (TITULARES)", resultado.eleitos, [16, 122, 76]);
   secao("SUPLENTES", resultado.suplentes, [100, 116, 139]);
 
   if (resultado.semVotos > 0) {
-    ensureSpace(18);
+    kit.ensureSpace(16);
     doc.setFont("helvetica", "italic");
     doc.setFontSize(9.5);
     doc.setTextColor(120);
-    doc.text(`+ ${resultado.semVotos} candidato(s) sem votos.`, marginX + 4, y);
+    doc.text(`+ ${resultado.semVotos} candidato(s) sem votos.`, MARGIN_X + 4, s.y);
     doc.setTextColor(20);
   }
 
@@ -176,62 +320,26 @@ export async function downloadResultadoPdf(
 }
 
 /**
- * Gera (no cliente) o PDF do RELATÓRIO GERAL do pleito: todos os eleitos
- * (titulares) dos locais ENCERRADOS, agrupados por local, com cabeçalho oficial.
- * Mesmos dados do CSV — versão pronta para imprimir/arquivar.
+ * RELATÓRIO GERAL do pleito — versão AUTOEXPLICATIVA e persuasiva (não só a lista
+ * crua): cabeçalho oficial + resumo + reconciliação (a prova anti-fraude) +
+ * eleitos por local + como foi apurado + LGPD + COMO CONTESTAR. Dá ao filiado o
+ * contexto e os argumentos para conferir e, se precisar, contestar.
  */
-export async function downloadRelatorioGeralPdf(
-  data: { ano: number; rows: EleitoRow[] },
-  pleito: PdfPleito,
-) {
+export async function downloadRelatorioGeralPdf(data: RelatorioTransparencia) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const marginX = 48;
-  const bottom = pageHeight - 48;
+  const logos = await loadLogos(data.pleito);
+  const startY = drawPdfHeader(doc, logos, {
+    titulo: data.pleito.titulo,
+    subtitulo: "Portal da Transparência · Relatório Geral de Eleitos",
+    geradoEm: `Gerado em ${data.geradoEm} · dados públicos e auditáveis`,
+  });
+  const kit = pdfToolkit(doc, startY);
+  const { pageWidth, s } = kit;
 
-  const [sindsermData, pleitoData] = await Promise.all([
-    fetchPngDataUrl(pleito.logoSindserm),
-    pleito.logoPleito ? fetchPngDataUrl(pleito.logoPleito) : null,
-  ]);
-  const drawLogo = (
-    dataUrl: string,
-    side: "left" | "right",
-    maxW: number,
-    maxH: number,
-  ) => {
-    try {
-      const props = doc.getImageProperties(dataUrl);
-      const scale = Math.min(maxW / props.width, maxH / props.height);
-      const w = props.width * scale;
-      const h = props.height * scale;
-      const x = side === "left" ? marginX : pageWidth - marginX - w;
-      doc.addImage(dataUrl, x, 38 + (maxH - h) / 2, w, h);
-    } catch {
-      /* ignora imagem inválida (ex.: SVG) */
-    }
-  };
-  if (sindsermData) drawLogo(sindsermData, "left", 140, 44);
-  if (pleitoData) drawLogo(pleitoData, "right", 50, 50);
-
-  const centerX = pageWidth / 2;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text("SEV SINDSERM", centerX, 56, { align: "center" });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
-  doc.text("Portal da Transparência · Relatório Geral de Eleitos", centerX, 70, { align: "center" });
-  doc.text(doc.splitTextToSize(pleito.titulo, pageWidth - marginX * 2), centerX, 84, { align: "center" });
-
-  let y = 108;
-  doc.setDrawColor(210);
-  doc.line(marginX, y, pageWidth - marginX, y);
-  y += 22;
-
-  // Agrupa por local preservando a ordem (rows já vêm ordenadas por nome).
-  const grupos: { local: string; orgao: string; zona: string; eleitos: EleitoRow[] }[] = [];
-  for (const r of data.rows) {
+  // Agrupa por local (rows já vêm ordenadas por nome).
+  const grupos: { local: string; orgao: string; zona: string; eleitos: typeof data.eleitos }[] = [];
+  for (const r of data.eleitos) {
     let g = grupos.find((x) => x.local === r.local);
     if (!g) {
       g = { local: r.local, orgao: r.orgao, zona: r.zona, eleitos: [] };
@@ -240,72 +348,118 @@ export async function downloadRelatorioGeralPdf(
     g.eleitos.push(r);
   }
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(90);
-  doc.text(
-    `${data.rows.length} eleito(s) em ${grupos.length} local(is) encerrado(s).`,
-    marginX,
-    y,
+  // Abertura (o que é este documento).
+  kit.paragrafo(
+    `Este é o resultado oficial da ${data.pleito.titulo}. Reúne os representantes eleitos ` +
+      `nos locais já encerrados, com o número de votos de cada um. Todos os dados aqui são ` +
+      `públicos e auditáveis: qualquer filiado pode conferir e, se encontrar algo estranho, contestar.`,
+    10,
+    40,
   );
-  doc.setTextColor(20);
-  y += 22;
 
-  const ensureSpace = (need: number) => {
-    if (y + need > bottom) {
-      doc.addPage();
-      y = 56;
-    }
-  };
-
-  if (grupos.length === 0) {
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(11);
-    doc.setTextColor(120);
-    doc.text("Ainda não há eleitos consolidados neste pleito.", marginX, y);
+  // Resumo.
+  kit.tituloSecao("RESUMO", [30, 41, 59]);
+  kit.linha("Eleitos consolidados", nf(data.eleitos.length));
+  kit.linha("Locais encerrados (com eleitos)", nf(grupos.length));
+  kit.linha("Total de votantes (comparecimento)", nf(data.kpis.votantes));
+  kit.linha("Vagas no pleito", nf(data.kpis.vagas));
+  if (data.kpis.suplementares > 0) {
+    kit.linha("Locais em eleição suplementar", nf(data.kpis.suplementares));
   }
+  s.y += 6;
 
+  // Reconciliação — a "prova" anti-fraude, com argumento claro.
+  kit.tituloSecao("INTEGRIDADE DA URNA", [16, 122, 76]);
+  kit.callout(
+    data.integridade.confere,
+    data.integridade.confere
+      ? "Os números conferem — urna reconciliada"
+      : "Atenção: os números NÃO conferem",
+    data.integridade.confere
+      ? `${nf(data.integridade.votantes)} pessoas compareceram e foram registrados ` +
+          `${nf(data.integridade.votos)} votos. Como cada pessoa vota exatamente uma vez por rodada, ` +
+          `os dois totais batem — sinal de que nenhum voto foi inserido ou perdido.`
+      : `${nf(data.integridade.votantes)} pessoas compareceram, mas há ${nf(data.integridade.votos)} ` +
+          `votos registrados. Uma divergência aqui indica anomalia e deve ser investigada/contestada.`,
+  );
+
+  // Eleitos por local.
+  kit.tituloSecao("ELEITOS POR LOCAL", [16, 122, 76]);
+  if (grupos.length === 0) {
+    kit.paragrafo("Ainda não há eleitos consolidados neste pleito.");
+  }
   for (const g of grupos) {
-    ensureSpace(46);
-    // Cabeçalho do local.
+    kit.ensureSpace(46);
     doc.setFillColor(16, 122, 76);
-    doc.roundedRect(marginX, y - 12, pageWidth - marginX * 2, 22, 4, 4, "F");
+    doc.roundedRect(MARGIN_X, s.y - 12, kit.larguraUtil, 22, 4, 4, "F");
     doc.setTextColor(255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10.5);
     doc.text(
-      doc.splitTextToSize(g.local, pageWidth - marginX * 2 - 90)[0],
-      marginX + 10,
-      y + 3,
+      (doc.splitTextToSize(g.local, kit.larguraUtil - 90) as string[])[0],
+      MARGIN_X + 10,
+      s.y + 3,
     );
-    doc.text(`${g.eleitos.length} eleito(s)`, pageWidth - marginX - 10, y + 3, {
+    doc.text(`${g.eleitos.length} eleito(s)`, pageWidth - MARGIN_X - 10, s.y + 3, {
       align: "right",
     });
     doc.setTextColor(120);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    y += 22;
-    doc.text(`${g.orgao} · Zona ${g.zona}`, marginX + 4, y);
+    s.y += 22;
+    doc.text(`${g.orgao} · Zona ${g.zona}`, MARGIN_X + 4, s.y);
     doc.setTextColor(20);
-    y += 16;
+    s.y += 16;
 
     doc.setFontSize(10.5);
     g.eleitos.forEach((c, i) => {
-      ensureSpace(16);
+      kit.ensureSpace(15);
       doc.setFont("helvetica", "normal");
       doc.text(
-        doc.splitTextToSize(`${i + 1}. ${c.eleito}`, pageWidth - marginX * 2 - 80)[0],
-        marginX + 4,
-        y,
+        (doc.splitTextToSize(`${i + 1}. ${c.eleito}`, kit.larguraUtil - 80) as string[])[0],
+        MARGIN_X + 4,
+        s.y,
       );
       doc.setFont("helvetica", "bold");
-      doc.text(`${c.votos} voto(s)`, pageWidth - marginX - 4, y, { align: "right" });
-      y += 15;
+      doc.text(`${c.votos} voto(s)`, pageWidth - MARGIN_X - 4, s.y, { align: "right" });
+      s.y += 15;
     });
-    y += 12;
+    s.y += 12;
   }
 
-  doc.save(`relatorio-geral-eleitos-pleito-${data.ano}.pdf`);
+  // Como foi apurado + LGPD.
+  kit.tituloSecao("COMO ISSO FOI APURADO", [100, 116, 139]);
+  kit.paragrafo(
+    "Vagas por local: o número de representantes de cada local depende do total de candidatos, " +
+      "por uma regra pública de progressão. Os mais votados ocupam as vagas; quem não assume dá lugar " +
+      "ao próximo suplente; empate na linha de corte é resolvido conforme o estatuto/assembleia.",
+  );
+  kit.paragrafo(
+    "Sigilo do voto: o sistema não guarda qualquer ligação entre o voto e a pessoa que votou, nem o " +
+      "horário do voto. É impossível descobrir em quem alguém votou.",
+  );
+  kit.paragrafo(
+    "LGPD: este relatório traz só dados de interesse coletivo (nomes de candidatos, votos e participação). " +
+      "Dados pessoais (CPF, matrícula, telefone, e-mail) nunca são divulgados — servem apenas para impedir voto duplicado.",
+  );
+
+  // Como contestar — o caminho prático.
+  kit.tituloSecao("ENCONTROU ALGO ESTRANHO? COMO CONTESTAR", [180, 83, 9]);
+  kit.paragrafo(
+    "Qualquer filiado pode contestar um resultado. Reúna estas informações e envie à diretoria pelo canal oficial:",
+    10,
+    40,
+  );
+  kit.paragrafo("1) Nome do local de votação.");
+  kit.paragrafo("2) Protocolo do seu comprovante de votação (se tiver).");
+  kit.paragrafo("3) O que quer contestar ou esclarecer, com o máximo de detalhe.");
+  if (data.pleito.emailOficial) {
+    kit.paragrafo(`Canal oficial: ${data.pleito.emailOficial}`, 10, 20);
+  } else {
+    kit.paragrafo("Canal oficial: procure a diretoria do SINDSERM.", 10, 20);
+  }
+
+  doc.save(`relatorio-geral-eleitos-pleito-${data.pleito.ano}.pdf`);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -332,197 +486,97 @@ export async function downloadRelatorioPersonalizado(
 ) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const marginX = 48;
-  const bottom = pageHeight - 48;
-  const larguraUtil = pageWidth - marginX * 2;
-
-  const [sindsermData, pleitoData] = await Promise.all([
-    fetchPngDataUrl(data.pleito.logoSindserm),
-    data.pleito.logoPleito ? fetchPngDataUrl(data.pleito.logoPleito) : null,
-  ]);
-  const drawLogo = (
-    dataUrl: string,
-    side: "left" | "right",
-    maxW: number,
-    maxH: number,
-  ) => {
-    try {
-      const props = doc.getImageProperties(dataUrl);
-      const scale = Math.min(maxW / props.width, maxH / props.height);
-      const w = props.width * scale;
-      const h = props.height * scale;
-      const x = side === "left" ? marginX : pageWidth - marginX - w;
-      doc.addImage(dataUrl, x, 38 + (maxH - h) / 2, w, h);
-    } catch {
-      /* ignora imagem inválida (ex.: SVG) */
-    }
-  };
-  if (sindsermData) drawLogo(sindsermData, "left", 140, 44);
-  if (pleitoData) drawLogo(pleitoData, "right", 50, 50);
-
-  const centerX = pageWidth / 2;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text("SEV SINDSERM", centerX, 56, { align: "center" });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
-  doc.text(
-    "Portal da Transparência · Relatório do Filiado",
-    centerX,
-    70,
-    { align: "center" },
-  );
-  doc.text(doc.splitTextToSize(data.pleito.titulo, larguraUtil), centerX, 84, {
-    align: "center",
+  const logos = await loadLogos(data.pleito);
+  const startY = drawPdfHeader(doc, logos, {
+    titulo: data.pleito.titulo,
+    subtitulo: "Portal da Transparência · Relatório do Filiado",
+    geradoEm: `Gerado em ${data.geradoEm} · dados públicos e auditáveis`,
   });
-
-  let y = 104;
-  doc.setFontSize(8.5);
-  doc.setTextColor(120);
-  doc.text(`Gerado em ${data.geradoEm} · dados públicos e auditáveis`, centerX, y, {
-    align: "center",
-  });
-  doc.setTextColor(20);
-  y += 12;
-  doc.setDrawColor(210);
-  doc.line(marginX, y, pageWidth - marginX, y);
-  y += 22;
-
-  const ensureSpace = (need: number) => {
-    if (y + need > bottom) {
-      doc.addPage();
-      y = 56;
-    }
-  };
-  const tituloSecao = (t: string, cor: [number, number, number]) => {
-    ensureSpace(34);
-    doc.setFillColor(cor[0], cor[1], cor[2]);
-    doc.roundedRect(marginX, y - 12, larguraUtil, 22, 4, 4, "F");
-    doc.setTextColor(255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text(t, marginX + 10, y + 3);
-    doc.setTextColor(20);
-    y += 28;
-  };
-  const linha = (label: string, valor: string) => {
-    ensureSpace(16);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10.5);
-    doc.text(label, marginX + 4, y);
-    doc.setFont("helvetica", "bold");
-    doc.text(valor, pageWidth - marginX - 4, y, { align: "right" });
-    y += 15;
-  };
-  // Barra horizontal (para participação por zona/órgão).
-  const barra = (label: string, valor: number, max: number) => {
-    ensureSpace(24);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
-    doc.text(doc.splitTextToSize(label, larguraUtil - 70)[0], marginX + 4, y);
-    doc.setFont("helvetica", "bold");
-    doc.text(String(valor), pageWidth - marginX - 4, y, { align: "right" });
-    y += 4;
-    const w = max > 0 ? Math.max(2, (valor / max) * larguraUtil) : 0;
-    doc.setFillColor(226, 232, 240);
-    doc.roundedRect(marginX + 4, y, larguraUtil - 8, 5, 2, 2, "F");
-    doc.setFillColor(16, 122, 76);
-    doc.roundedRect(marginX + 4, y, Math.min(larguraUtil - 8, w), 5, 2, 2, "F");
-    y += 14;
-  };
-  const paragrafo = (t: string) => {
-    const linhas = doc.splitTextToSize(t, larguraUtil - 8) as string[];
-    for (const ln of linhas) {
-      ensureSpace(13);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9.5);
-      doc.setTextColor(70);
-      doc.text(ln, marginX + 4, y);
-      y += 12;
-    }
-    doc.setTextColor(20);
-    y += 4;
-  };
+  const kit = pdfToolkit(doc, startY);
+  const { pageWidth, s } = kit;
 
   if (secoes.resumo) {
-    tituloSecao("RESUMO DO PLEITO", [30, 41, 59]);
-    linha("Locais de votação", data.kpis.locais.toLocaleString("pt-BR"));
-    linha("Total de votantes (comparecimento)", data.kpis.votantes.toLocaleString("pt-BR"));
-    linha("Vagas no pleito", data.kpis.vagas.toLocaleString("pt-BR"));
-    linha("Eleitos definidos", data.kpis.eleitos.toLocaleString("pt-BR"));
-    linha("Votações em andamento", data.kpis.abertas.toLocaleString("pt-BR"));
-    linha("Votações encerradas", data.kpis.encerradas.toLocaleString("pt-BR"));
-    y += 6;
+    kit.tituloSecao("RESUMO DO PLEITO", [30, 41, 59]);
+    kit.linha("Locais de votação", nf(data.kpis.locais));
+    kit.linha("Total de votantes (comparecimento)", nf(data.kpis.votantes));
+    kit.linha("Vagas no pleito", nf(data.kpis.vagas));
+    kit.linha("Eleitos definidos", nf(data.kpis.eleitos));
+    kit.linha("Votações em andamento", nf(data.kpis.abertas));
+    kit.linha("Votações encerradas", nf(data.kpis.encerradas));
+    if (data.kpis.suplementares > 0) {
+      kit.linha("Locais em eleição suplementar", nf(data.kpis.suplementares));
+    }
+    s.y += 6;
   }
 
   if (secoes.integridade) {
-    tituloSecao("INTEGRIDADE (RECONCILIAÇÃO)", [16, 122, 76]);
-    linha("Pessoas que votaram", data.integridade.votantes.toLocaleString("pt-BR"));
-    linha("Votos registrados na urna", data.integridade.votos.toLocaleString("pt-BR"));
-    paragrafo(
+    kit.tituloSecao("INTEGRIDADE (RECONCILIAÇÃO)", [16, 122, 76]);
+    kit.callout(
+      data.integridade.confere,
       data.integridade.confere
-        ? "Os dois números conferem: cada pessoa registra exatamente 1 voto. Nenhuma divergência encontrada."
-        : "ATENÇÃO: os números não conferem — recomenda-se investigação/contestação.",
+        ? "Os números conferem"
+        : "Atenção: os números não conferem",
+      data.integridade.confere
+        ? `${nf(data.integridade.votantes)} pessoas votaram e ${nf(data.integridade.votos)} votos foram ` +
+            `registrados. Cada pessoa vota uma vez por rodada — nenhuma divergência encontrada.`
+        : `${nf(data.integridade.votantes)} votantes x ${nf(data.integridade.votos)} votos: recomenda-se investigação/contestação.`,
     );
   }
 
   if (secoes.zona && data.porZona.length > 0) {
-    tituloSecao("PARTICIPAÇÃO POR ZONA", [37, 99, 235]);
+    kit.tituloSecao("PARTICIPAÇÃO POR ZONA", [37, 99, 235]);
     const max = Math.max(...data.porZona.map((z) => z.votantes), 1);
-    for (const z of data.porZona) barra(z.zona, z.votantes, max);
-    y += 6;
+    for (const z of data.porZona) kit.barra(z.zona, z.votantes, max);
+    s.y += 6;
   }
 
   if (secoes.orgao && data.porOrgao.length > 0) {
-    tituloSecao("PARTICIPAÇÃO POR ÓRGÃO", [37, 99, 235]);
+    kit.tituloSecao("PARTICIPAÇÃO POR ÓRGÃO", [37, 99, 235]);
     const max = Math.max(...data.porOrgao.map((o) => o.votantes), 1);
-    for (const o of data.porOrgao.slice(0, 40)) barra(o.orgao, o.votantes, max);
-    y += 6;
+    for (const o of data.porOrgao.slice(0, 40)) kit.barra(o.orgao, o.votantes, max);
+    s.y += 6;
   }
 
   if (secoes.eleitos) {
-    tituloSecao("ELEITOS POR LOCAL (ENCERRADOS)", [16, 122, 76]);
+    kit.tituloSecao("ELEITOS POR LOCAL (ENCERRADOS)", [16, 122, 76]);
     if (data.eleitos.length === 0) {
-      paragrafo("Nenhum eleito consolidado ainda.");
+      kit.paragrafo("Nenhum eleito consolidado ainda.");
     } else {
-      // Agrupa por local (rows já ordenadas por nome do local).
       let localAtual = "";
       for (const r of data.eleitos) {
         if (r.local !== localAtual) {
           localAtual = r.local;
-          ensureSpace(18);
+          kit.ensureSpace(18);
           doc.setFont("helvetica", "bold");
           doc.setFontSize(10);
           doc.text(
-            doc.splitTextToSize(`${r.local} — ${r.orgao} · Zona ${r.zona}`, larguraUtil)[0],
-            marginX + 2,
-            y,
+            (doc.splitTextToSize(`${r.local} — ${r.orgao} · Zona ${r.zona}`, kit.larguraUtil) as string[])[0],
+            MARGIN_X + 2,
+            s.y,
           );
-          y += 14;
+          s.y += 14;
         }
-        ensureSpace(14);
+        kit.ensureSpace(14);
         doc.setFont("helvetica", "normal");
         doc.setFontSize(10);
-        doc.text(`• ${r.eleito}`, marginX + 10, y);
+        doc.text(`• ${r.eleito}`, MARGIN_X + 10, s.y);
         doc.setFont("helvetica", "bold");
-        doc.text(`${r.votos} voto(s)`, pageWidth - marginX - 4, y, { align: "right" });
-        y += 13;
+        doc.text(`${r.votos} voto(s)`, pageWidth - MARGIN_X - 4, s.y, { align: "right" });
+        s.y += 13;
       }
-      y += 6;
+      s.y += 6;
     }
   }
 
   if (secoes.metodologia) {
-    tituloSecao("METODOLOGIA E PRIVACIDADE (LGPD)", [100, 116, 139]);
-    paragrafo(
+    kit.tituloSecao("METODOLOGIA E PRIVACIDADE (LGPD)", [100, 116, 139]);
+    kit.paragrafo(
       "Apuração: o número de vagas de cada local depende do total de candidatos (regra pública de progressão). Os mais votados ocupam as vagas; empate na linha de corte exige desempate pelo estatuto/assembleia; quem não assume dá lugar ao próximo suplente.",
     );
-    paragrafo(
+    kit.paragrafo(
       "Sigilo do voto: não há qualquer vínculo entre o voto e a pessoa que votou, nem registro de horário do voto — é impossível saber em quem alguém votou.",
     );
-    paragrafo(
+    kit.paragrafo(
       "LGPD: este relatório traz apenas dados de interesse coletivo (nomes de candidatos, votos e participação agregada). Dados pessoais dos votantes (CPF, matrícula, telefone, e-mail) NÃO são divulgados e servem somente para impedir voto duplicado.",
     );
   }

@@ -802,6 +802,8 @@ export type RelatorioTransparencia = {
     trienio: string;
     logoSindserm: string;
     logoPleito: string | null;
+    /** Canal oficial para contestação/atas (rodapé "como contestar"). */
+    emailOficial: string | null;
   };
   geradoEm: string;
   kpis: {
@@ -813,6 +815,8 @@ export type RelatorioTransparencia = {
     abertas: number;
     encerradas: number;
     agendadas: number;
+    /** Locais em eleição suplementar (rodada 2+). */
+    suplementares: number;
   };
   integridade: { votantes: number; votos: number; confere: boolean };
   porZona: { zona: string; votantes: number }[];
@@ -844,6 +848,7 @@ export async function getRelatorioTransparencia(
       trienio: data.pleito.trienio,
       logoSindserm: data.pleito.logoSindserm,
       logoPleito: data.pleito.logoPleito,
+      emailOficial: data.pleito.emailOficial,
     },
     geradoEm: new Intl.DateTimeFormat("pt-BR", {
       dateStyle: "short",
@@ -859,6 +864,7 @@ export async function getRelatorioTransparencia(
       abertas: data.kpis.abertas,
       encerradas: data.kpis.encerradas,
       agendadas: data.kpis.agendadas,
+      suplementares: data.kpis.suplementares,
     },
     integridade: data.integridade,
     porZona: data.votantesPorZona,

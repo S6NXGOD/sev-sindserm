@@ -153,7 +153,7 @@ export default async function TransparenciaPage({
             <div className="min-w-0 flex-1">
               <PleitoSelector pleitos={pleitos} selected={pleitoId} />
             </div>
-            <ExportButtons electionId={pleitoId} pleito={pdfPleito} />
+            <ExportButtons electionId={pleitoId} />
           </div>
         </div>
 
