@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { calcularVagas } from "@/lib/vagas";
+import { apurarEleitos, calcularVagas } from "@/lib/vagas";
 import { votingStatus, type VotingStatus } from "@/lib/voting-status";
 import type { ProximaAbertura } from "@/components/proximas-aberturas";
 
@@ -15,24 +15,6 @@ export type LocalAdesao = {
   nome: string;
   zona: string;
   votos: number;
-};
-
-/** Local de trabalho com baixa adesão (poucos votos) — painel estratégico. */
-export type LowTurnoutLocal = {
-  id: string;
-  nome: string;
-  zona: string;
-  orgao: string;
-  /** Votos válidos registrados no local (no pleito do ano). */
-  votos: number;
-  /**
-   * Limite de votos do local (Workplace.voteLimit). É o ÚNICO denominador
-   * disponível no schema — NÃO existe "total de eleitores cadastrados" por
-   * local. null = local sem limite (ilimitado).
-   */
-  limite: number | null;
-  /** Adesão = votos/limite (0–100), só quando há limite definido; senão null. */
-  adesaoPct: number | null;
 };
 
 export type DashboardData = {
@@ -81,14 +63,6 @@ export type LiderancaLocal = {
 };
 
 type RitmoRaw = { hora: number; votos: number };
-type LowTurnoutRaw = {
-  id: string;
-  nome: string;
-  zona: string;
-  orgao: string;
-  votos: number;
-  limite: number | null;
-};
 type EleitoRaw = { wid: string; cid: string; nome: string; votos: number };
 type VotedRaw = { wid: string; n: number };
 type EleitoRankedRaw = { wid: string; nome: string; votos: number; rn: number };
@@ -423,60 +397,6 @@ export async function getDashboardData(
   };
 }
 
-/**
- * Locais de trabalho com MENOR adesão (menos votos) do pleito do ano.
- *
- * Decisões de modelagem:
- * - Só considera locais cuja votação JÁ COMEÇOU (`dataInicioVotacao <= agora`).
- *   Locais "não iniciados" têm 0 votos por definição — incluí-los encheria o
- *   ranking de falsos "piores". Locais ABERTOS e ENCERRADOS entram.
- * - INCLUI locais com 0 votos (LEFT JOIN): eles são, justamente, os de menor
- *   adesão. Um `groupBy` em `votes` os deixaria de fora.
- * - LIMIT aplicado no BANCO (`ORDER BY votos ASC ... LIMIT n`): traz só os
- *   piores, nunca centenas de linhas para a dashboard.
- * - Porcentagem: o schema NÃO tem "total de eleitores" por local; o único
- *   denominador existente é `voteLimit` (teto esperado de votos). Quando ele
- *   existe, devolvemos `adesaoPct = votos/limite`; senão, só o nº absoluto.
- */
-export async function getLowTurnoutLocations(
-  anoEleicao: number,
-  limit = 5,
-): Promise<LowTurnoutLocal[]> {
-  const now = new Date();
-  // Trava de segurança: nunca deixar a dashboard pedir um volume enorme.
-  const take = Math.min(Math.max(Math.trunc(limit) || 5, 1), 20);
-
-  const rows = await prisma.$queryRaw<LowTurnoutRaw[]>(Prisma.sql`
-    SELECT w.id, w.nome, w.zona, w.orgao,
-           w."voteLimit" AS limite,
-           COUNT(v.id)::int AS votos
-    FROM workplaces w
-    LEFT JOIN votes v
-      ON v."workplaceId" = w.id AND v."anoEleicao" = ${anoEleicao}
-    WHERE w."anoEleicao" = ${anoEleicao}
-      AND w."dataInicioVotacao" <= ${now}
-    GROUP BY w.id
-    ORDER BY votos ASC, w.nome ASC
-    LIMIT ${take}
-  `);
-
-  return rows.map((r) => {
-    const votos = Number(r.votos);
-    return {
-      id: r.id,
-      nome: r.nome,
-      zona: r.zona,
-      orgao: r.orgao,
-      votos,
-      limite: r.limite,
-      adesaoPct:
-        r.limite && r.limite > 0
-          ? Math.round((votos / r.limite) * 100)
-          : null,
-    } satisfies LowTurnoutLocal;
-  });
-}
-
 export type RitmoRange =
   | "1h"
   | "12h"
@@ -784,7 +704,7 @@ export async function getMuralEleitos(
 ): Promise<MuralData> {
   const now = new Date();
 
-  const [locais, candCounts, votedCounts, preservadosRaw] = await Promise.all([
+  const [locais, candCounts, preservadosRaw] = await Promise.all([
     prisma.workplace.findMany({
       where: { anoEleicao },
       select: {
@@ -800,18 +720,6 @@ export async function getMuralEleitos(
       where: { workplace: { anoEleicao } },
       _count: { workplaceId: true },
     }),
-    // Eleitos que ASSUMEM a vaga (exclui renunciantes) — alinha o Mural à
-    // apuração real: renúncia com vaga vazia conta a menos. Conta só a RODADA
-    // ATUAL de cada local e ignora eleitos preservados (contados à parte).
-    prisma.$queryRaw<VotedRaw[]>`
-      SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
-      FROM votes v
-        JOIN candidates c ON c.id = v."candidateId"
-        JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
-      WHERE v."anoEleicao" = ${anoEleicao}
-        AND c."renunciou" = false
-        AND c."eleitoPreservado" = false
-      GROUP BY v."workplaceId"`,
     // Eleitos preservados (rodadas anteriores) — já são eleitos definitivos.
     prisma.candidate.findMany({
       where: { workplace: { anoEleicao }, eleitoPreservado: true },
@@ -823,7 +731,6 @@ export async function getMuralEleitos(
   const candMap = new Map(
     candCounts.map((c) => [c.workplaceId, c._count.workplaceId]),
   );
-  const votedMap = new Map(votedCounts.map((v) => [v.wid, v.n]));
   const preservadosByLocal = new Map<
     string,
     { nome: string; votos: number }[]
@@ -883,20 +790,21 @@ export async function getMuralEleitos(
 
   for (const l of fechados) {
     const vagas = calcularVagas(candMap.get(l.id) ?? 0);
-    // Eleitos = preservados (rodadas anteriores) + eleitos da rodada atual,
-    // estes limitados às vagas restantes.
+    // Eleitos = preservados (rodadas anteriores) + eleitos da rodada atual.
+    // Apuração CANÔNICA: empate na linha de corte NÃO elege por ordem de nome
+    // (vaga aguarda desempate) — o mural mostra só os eleitos definitivos.
     const preservados = preservadosByLocal.get(l.id) ?? [];
     const vagasRestantes = Math.max(0, vagas - preservados.length);
-    const novosCount = Math.min(vagasRestantes, votedMap.get(l.id) ?? 0);
-    const eleitosCount = preservados.length + novosCount;
+    const rankedLocal = (byLocal.get(l.id) ?? [])
+      .sort((a, b) => a.rn - b.rn)
+      .map((c) => ({ nome: c.nome, votos: c.votos, renunciou: false }));
+    const apurado = apurarEleitos(rankedLocal, vagasRestantes);
+    const novos = apurado.eleitos.map((c) => ({ nome: c.nome, votos: c.votos }));
+    const eleitosCount = preservados.length + novos.length;
     if (eleitosCount <= 0) continue;
     totalEleitos += eleitosCount;
     orgaoCount.set(l.orgao, (orgaoCount.get(l.orgao) ?? 0) + eleitosCount);
 
-    const novos = (byLocal.get(l.id) ?? [])
-      .sort((a, b) => a.rn - b.rn)
-      .slice(0, novosCount)
-      .map((c) => ({ nome: c.nome, votos: c.votos }));
     // Preservados primeiro (eleitos travados), depois os da rodada atual.
     for (const c of [...preservados, ...novos]) {
       if (eleitos.length < MURAL_DETALHE_MAX) {

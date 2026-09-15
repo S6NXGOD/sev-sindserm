@@ -4,11 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { searchScore, searchTokens } from "@/lib/slug";
 import {
   getEleitosCsv,
-  getEleitosRows,
   getLinhaTempoLocal,
   getRelatorioTransparencia,
   getResultadoLocal,
-  type EleitoRow,
   type LinhaTempoLocal,
   type RelatorioTransparencia,
   type ResultadoLocal,
@@ -92,15 +90,6 @@ export async function fetchEleitosCsv(
   const id = String(electionId ?? "").trim();
   if (!id) return null;
   return getEleitosCsv(id);
-}
-
-/** Dados estruturados dos eleitos (para gerar o PDF geral no cliente). */
-export async function fetchEleitosRows(
-  electionId: string,
-): Promise<{ ano: number; rows: EleitoRow[] } | null> {
-  const id = String(electionId ?? "").trim();
-  if (!id) return null;
-  return getEleitosRows(id);
 }
 
 /** Dataset público completo para o RELATÓRIO PERSONALIZADO em PDF do filiado. */

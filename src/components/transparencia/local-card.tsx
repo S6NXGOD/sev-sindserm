@@ -424,7 +424,12 @@ export function LocalCard({
           {/* Linha do tempo pública — cada passo do sindicato neste local +
               histórico de resultado por rodada. Sempre disponível ao expandir. */}
           <div className="mt-4">
-            <LinhaTempoLocal workplaceId={local.id} />
+            <LinhaTempoLocal
+              workplaceId={local.id}
+              orgao={local.orgao}
+              zona={local.zona}
+              pleito={pleito}
+            />
           </div>
         </div>
       )}

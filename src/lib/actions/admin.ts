@@ -13,7 +13,7 @@ import { registrarEventoLocal, registrarEventoLocalSafe } from "@/lib/eventos";
 import { notificarAdminsBg } from "@/lib/push";
 import { formatDateTime } from "@/lib/format";
 import { buildVoterWhere, type VoterFiltros } from "@/lib/voter-filters";
-import { calcularVagas } from "@/lib/vagas";
+import { apurarEleitos, calcularVagas } from "@/lib/vagas";
 import { apurarLocal } from "@/lib/apuracao";
 import { DEFAULT_LOGO } from "@/lib/logo-constants";
 import type { ActionState } from "@/lib/types";
@@ -1702,22 +1702,15 @@ export async function exportEleitosCsv(opts: {
   if (fechados.length === 0) return toCsv([header]);
   const ids = fechados.map((l) => l.id);
 
-  const [candCounts, votedCounts, ranked, preservadosRaw] = await Promise.all([
+  const [candCounts, ranked, preservadosRaw] = await Promise.all([
     prisma.candidate.groupBy({
       by: ["workplaceId"],
       where: { workplaceId: { in: ids } },
       _count: { workplaceId: true },
     }),
-    // Votos da RODADA ATUAL de cada local, sem eleitos preservados (contados à parte).
-    prisma.$queryRaw<{ wid: string; n: number }[]>(Prisma.sql`
-      SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
-      FROM votes v
-        JOIN candidates c ON c.id = v."candidateId"
-        JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
-      WHERE v."anoEleicao" = ${opts.anoEleicao}
-        AND c."eleitoPreservado" = false
-        AND v."workplaceId" IN (${Prisma.join(ids)})
-      GROUP BY v."workplaceId"`),
+    // Ranking por votos da RODADA ATUAL, EXCLUINDO renunciantes (que não assumem
+    // a vaga) e eleitos preservados (contados à parte). A seleção final e o
+    // desempate são resolvidos por apurarEleitos abaixo.
     prisma.$queryRaw<{ wid: string; nome: string; votos: number; rn: number }[]>(
       Prisma.sql`
         SELECT wid, nome, votos, rn::int AS rn FROM (
@@ -1729,6 +1722,7 @@ export async function exportEleitosCsv(opts: {
             JOIN candidates c ON c.id = v."candidateId"
             JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
           WHERE v."anoEleicao" = ${opts.anoEleicao}
+            AND c."renunciou" = false
             AND c."eleitoPreservado" = false
             AND v."workplaceId" IN (${Prisma.join(ids)})
           GROUP BY v."workplaceId", c.id, c.nome
@@ -1745,7 +1739,6 @@ export async function exportEleitosCsv(opts: {
   const candMap = new Map(
     candCounts.map((c) => [c.workplaceId, c._count.workplaceId]),
   );
-  const votedMap = new Map(votedCounts.map((v) => [v.wid, Number(v.n)]));
   const byLocal = new Map<string, { nome: string; votos: number; rn: number }[]>();
   for (const r of ranked) {
     const arr = byLocal.get(r.wid) ?? [];
@@ -1764,15 +1757,17 @@ export async function exportEleitosCsv(opts: {
     (a, b) => a.orgao.localeCompare(b.orgao) || a.nome.localeCompare(b.nome),
   )) {
     const vagas = calcularVagas(candMap.get(l.id) ?? 0);
-    // Eleitos = preservados (travados) + eleitos da rodada atual (vagas restantes).
+    // Eleitos = preservados (travados) + eleitos da rodada atual. Apuração
+    // CANÔNICA: empate na linha de corte NÃO elege por ordem de nome (aguarda
+    // desempate) — o documento oficial só lista os eleitos definitivos.
     const preservados = preservadosByLocal.get(l.id) ?? [];
     const vagasRestantes = Math.max(0, vagas - preservados.length);
-    const novosCount = Math.min(vagasRestantes, votedMap.get(l.id) ?? 0);
-    if (preservados.length + novosCount <= 0) continue;
-    const novos = (byLocal.get(l.id) ?? [])
+    const rankedLocal = (byLocal.get(l.id) ?? [])
       .sort((a, b) => a.rn - b.rn)
-      .slice(0, novosCount)
-      .map((c) => ({ nome: c.nome, votos: c.votos }));
+      .map((c) => ({ nome: c.nome, votos: c.votos, renunciou: false }));
+    const apurado = apurarEleitos(rankedLocal, vagasRestantes);
+    const novos = apurado.eleitos.map((c) => ({ nome: c.nome, votos: c.votos }));
+    if (preservados.length + novos.length <= 0) continue;
     // Preservados primeiro, depois os eleitos da rodada atual.
     [...preservados, ...novos].forEach((c, i) => {
       if (linhas.length >= REPORT_ROW_CAP) return;

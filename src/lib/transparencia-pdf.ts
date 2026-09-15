@@ -2,6 +2,7 @@ import type { jsPDF } from "jspdf";
 import type {
   RelatorioTransparencia,
   ResultadoLocal,
+  RodadaArquivada,
 } from "@/lib/transparencia";
 
 async function fetchPngDataUrl(url: string): Promise<string | null> {
@@ -332,6 +333,77 @@ export async function downloadResultadoPdf(
   doc.save(
     `eleitos-${resultado.nome.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}.pdf`,
   );
+}
+
+/**
+ * PDF de uma RODADA ARQUIVADA (histórico): o resultado oficial de uma rodada que
+ * já foi encerrada e superada por uma nova (ex.: a 1ª rodada, depois que se abriu
+ * a suplementar/nova eleição). Gerado a partir do snapshot público — permite
+ * baixar e guardar o resultado daquela rodada, detalhado, para auditoria.
+ */
+export async function downloadRodadaPdf(
+  data: { localNome: string; orgao: string; zona: string; rodada: RodadaArquivada },
+  pleito: PdfPleito,
+) {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const logos = await loadLogos(pleito);
+  const startY = drawPdfHeader(doc, logos, {
+    titulo: pleito.titulo,
+    subtitulo: `Portal da Transparência · Resultado da ${data.rodada.rodada}ª rodada (arquivado)`,
+  });
+  const kit = pdfToolkit(doc, startY);
+  const { pageWidth, s } = kit;
+  const r = data.rodada;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.text(doc.splitTextToSize(data.localNome, pageWidth - MARGIN_X * 2), MARGIN_X, s.y);
+  s.y += 20;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(90);
+  doc.text(`${data.orgao} · Zona ${data.zona}`, MARGIN_X, s.y);
+  s.y += 14;
+  doc.text(
+    `${r.rodada}ª rodada · encerrada em ${formatData(r.encerradaEm)} · ${r.vagas} vaga(s) · ${r.votantes} votante(s)`,
+    MARGIN_X,
+    s.y,
+  );
+  doc.setTextColor(20);
+  s.y += 22;
+
+  // Reconciliação daquela rodada (prova de que os números batiam).
+  kit.callout(
+    r.confere,
+    r.confere ? "Números conferem — rodada reconciliada" : "Atenção: números não batem",
+    r.confere
+      ? `${nf(r.votantes)} pessoas votaram e foram registrados ${nf(r.votos)} votos nesta rodada. Como cada pessoa vota uma vez por rodada, os totais batem.`
+      : `${nf(r.votantes)} votantes x ${nf(r.votos)} votos: houve divergência nesta rodada.`,
+  );
+
+  kit.tituloSecao(`ELEITOS DA ${r.rodada}ª RODADA (${r.eleitos.length})`, [16, 122, 76]);
+  if (r.eleitos.length === 0) {
+    kit.paragrafo("Nenhum eleito nesta rodada.");
+  } else {
+    doc.setFontSize(10.5);
+    r.eleitos.forEach((c, i) => {
+      kit.ensureSpace(16);
+      doc.setFont("helvetica", "normal");
+      const sufixo = c.preservado ? "  (eleito em rodada anterior)" : "";
+      doc.text(
+        (doc.splitTextToSize(`${i + 1}. ${c.nome}${sufixo}`, kit.larguraUtil - 80) as string[])[0],
+        MARGIN_X + 4,
+        s.y,
+      );
+      doc.setFont("helvetica", "bold");
+      doc.text(`${c.votos} voto(s)`, pageWidth - MARGIN_X - 4, s.y, { align: "right" });
+      s.y += 16;
+    });
+  }
+
+  const slug = data.localNome.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  doc.save(`rodada-${r.rodada}-${slug}.pdf`);
 }
 
 /* -------------------------------------------------------------------------- */

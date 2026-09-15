@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Clock,
+  Download,
   FilePlus2,
   Flag,
   Loader2,
@@ -17,6 +18,7 @@ import {
   UserX,
 } from "lucide-react";
 import { fetchLinhaTempoLocal } from "@/lib/actions/transparencia";
+import { downloadRodadaPdf, type PdfPleito } from "@/lib/transparencia-pdf";
 import type {
   LinhaTempoLocal as LinhaTempoData,
   RodadaArquivada,
@@ -51,8 +53,28 @@ function fmt(iso: string): string {
   }
 }
 
-function RodadaCard({ r }: { r: RodadaArquivada }) {
+function RodadaCard({
+  r,
+  ctx,
+}: {
+  r: RodadaArquivada;
+  ctx: { localNome: string; orgao: string; zona: string; pleito: PdfPleito };
+}) {
   const [aberto, setAberto] = useState(false);
+  const [baixando, setBaixando] = useState(false);
+
+  async function baixar() {
+    setBaixando(true);
+    try {
+      await downloadRodadaPdf(
+        { localNome: ctx.localNome, orgao: ctx.orgao, zona: ctx.zona, rodada: r },
+        ctx.pleito,
+      );
+    } finally {
+      setBaixando(false);
+    }
+  }
+
   return (
     <div className="rounded-xl border bg-white">
       <button
@@ -112,6 +134,19 @@ function RodadaCard({ r }: { r: RodadaArquivada }) {
               </li>
             ))}
           </ol>
+          <button
+            type="button"
+            onClick={baixar}
+            disabled={baixando}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+          >
+            {baixando ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            Baixar PDF desta rodada
+          </button>
         </div>
       )}
     </div>
@@ -159,7 +194,17 @@ function Evento({ e, ultimo }: { e: TimelineEvento; ultimo: boolean }) {
  * "Linha do tempo e histórico" de um local — cada passo oficial do sindicato +
  * o resultado arquivado de cada rodada. Lazy-load: só busca ao abrir. Público.
  */
-export function LinhaTempoLocal({ workplaceId }: { workplaceId: string }) {
+export function LinhaTempoLocal({
+  workplaceId,
+  orgao,
+  zona,
+  pleito,
+}: {
+  workplaceId: string;
+  orgao: string;
+  zona: string;
+  pleito: PdfPleito;
+}) {
   const [aberto, setAberto] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<LinhaTempoData | null>(null);
@@ -208,7 +253,11 @@ export function LinhaTempoLocal({ workplaceId }: { workplaceId: string }) {
                 Resultados por rodada
               </p>
               {data.rodadasArquivadas.map((r) => (
-                <RodadaCard key={r.rodada} r={r} />
+                <RodadaCard
+                  key={r.rodada}
+                  r={r}
+                  ctx={{ localNome: data.nome, orgao, zona, pleito }}
+                />
               ))}
             </div>
           )}
