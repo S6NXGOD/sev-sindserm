@@ -16,6 +16,7 @@ import { ProximasAberturas } from "@/components/proximas-aberturas";
 import { ApuracaoAoVivo } from "@/components/transparencia/apuracao-ao-vivo";
 import { AuditoriaLisura } from "@/components/transparencia/auditoria-lisura";
 import { SuplementarAviso } from "@/components/transparencia/suplementar-aviso";
+import { GuiaPortal } from "@/components/transparencia/guia-portal";
 import { ParticipacaoPanel } from "@/components/transparencia/participacao-panel";
 import { PleitoSelector } from "@/components/transparencia/pleito-selector";
 import { FiltrosBar } from "@/components/transparencia/filtros-bar";
@@ -146,16 +147,22 @@ export default async function TransparenciaPage({
 
       <div className="sev-stagger mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
         {/* Título do pleito selecionado (a logo já aparece no cabeçalho — evita
-            redundância). */}
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            {pleito.titulo}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Triênio {pleito.trienio}
-            {pleito.isEspecial ? " · Especial" : ""} · Dados públicos e
-            auditáveis · sem login.
-          </p>
+            redundância). O botão "Como usar" abre o guia (e ele abre sozinho na
+            1ª visita). */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+              {pleito.titulo}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Triênio {pleito.trienio}
+              {pleito.isEspecial ? " · Especial" : ""} · Dados públicos e
+              auditáveis · sem login.
+            </p>
+          </div>
+          <div className="shrink-0">
+            <GuiaPortal />
+          </div>
         </div>
 
         {/* Regimento oficial: o fundamento das regras (quem vota/concorre, como

@@ -153,6 +153,8 @@ function pdfToolkit(doc: jsPDF, startY: number) {
     }
   };
   const tituloSecao = (t: string, cor: [number, number, number]) => {
+    // Respiro antes do cabeçalho — nunca "cola" no conteúdo anterior.
+    s.y += 6;
     ensureSpace(34);
     doc.setFillColor(cor[0], cor[1], cor[2]);
     doc.roundedRect(MARGIN_X, s.y - 12, larguraUtil, 22, 4, 4, "F");
@@ -402,7 +404,7 @@ export async function downloadResultadoPdf(
     doc.setTextColor(120);
     doc.text(`+ ${resultado.semVotos} candidato(s) sem votos.`, MARGIN_X + 4, s.y);
     doc.setTextColor(20);
-    s.y += 8;
+    s.y += 18;
   }
 
   blocoGarantiasLgpd(kit);
