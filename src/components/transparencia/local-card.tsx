@@ -350,7 +350,7 @@ export function LocalCard({
                     {resultado.empate.vagasEmDisputa === 1 ? "vaga" : "vagas"}.
                     {resultado.parcial
                       ? " Pode mudar até o encerramento."
-                      : " O desempate segue o estatuto/assembleia do sindicato."}
+                      : " O desempate segue deliberação da Diretoria Colegiada (Art. 24 do Regimento), registrada em ata."}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {resultado.empate.candidatos.map((n) => (

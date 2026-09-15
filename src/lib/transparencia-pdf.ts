@@ -248,7 +248,7 @@ function blocoGarantiasLgpd(kit: PdfKit) {
     "Uma pessoa, um voto: CPF e matrícula são únicos por eleição e por rodada; a segunda tentativa é recusada pelo sistema.",
   );
   kit.paragrafo(
-    "Apuração automática: o nº de vagas de cada local segue uma regra pública (progressão pelo nº de candidatos); os mais votados ocupam as vagas; quem renuncia dá lugar ao suplente; empate na linha de corte aguarda desempate pelo estatuto/assembleia.",
+    "Apuração automática: o nº de vagas de cada local segue uma regra pública; os mais votados ocupam as vagas; quem renuncia dá lugar ao suplente; empate na linha de corte aguarda deliberação da Diretoria Colegiada (Art. 24 do Regimento), registrada em ata.",
   );
   kit.paragrafo(
     "Reconciliação: o total de votos apurados confere com o total de votantes (comparecimento) — divergência seria anomalia auditável.",
@@ -289,7 +289,7 @@ function rodapeInstitucional(
     `Documento gerado eletronicamente pelo SEV SINDSERM em ${geradoEm}. ` +
     `Confira e audite os mesmos dados, a qualquer momento, no Portal da Transparência` +
     `${origin ? `: ${origin}` : " do SINDSERM"}. ` +
-    `O processo segue o estatuto/regimento eleitoral do SINDSERM, por voto direto e secreto. ` +
+    `O processo segue o Regimento das Eleições para Representantes de Base do SINDSERM, por voto direto e secreto. ` +
     `Este relatório reflete os dados públicos no momento da geração e não substitui a ata oficial ` +
     `homologada pela comissão eleitoral. Dúvidas ou contestação: ${canal}.`;
 
@@ -596,10 +596,10 @@ export async function downloadRelatorioPersonalizado(
   if (secoes.metodologia) {
     kit.tituloSecao("METODOLOGIA E PRIVACIDADE (LGPD)", [100, 116, 139]);
     kit.paragrafo(
-      "Fundamento: eleição de representantes de base por voto direto e secreto, conforme o estatuto/regimento eleitoral do SINDSERM.",
+      "Fundamento: eleição de representantes de base por voto direto e secreto, conforme o Regimento das Eleições para Representantes de Base do SINDSERM (triênio 2026–2029).",
     );
     kit.paragrafo(
-      "Apuração: o número de vagas de cada local depende do total de candidatos (regra pública de progressão). Os mais votados ocupam as vagas; empate na linha de corte exige desempate pelo estatuto/assembleia; quem não assume dá lugar ao próximo suplente. Suplementar: nova rodada que preserva os já eleitos e disputa só as vagas restantes (ou recomeça do zero), com o resultado de cada rodada arquivado.",
+      "Apuração: o número de vagas de cada local segue a regra pública do pleito. Os mais votados ocupam as vagas; empate na linha de corte aguarda deliberação da Diretoria Colegiada (Art. 24 do Regimento); quem não assume dá lugar ao próximo suplente. Suplementar: nova rodada que preserva os já eleitos e disputa só as vagas restantes (ou recomeça do zero), com o resultado de cada rodada arquivado.",
     );
     kit.paragrafo(
       "Sigilo do voto: não há qualquer vínculo entre o voto e a pessoa que votou, nem registro de horário do voto — é impossível saber em quem alguém votou. Uma pessoa, um voto: CPF e matrícula são únicos por eleição e rodada. Reconciliação: o total de votos confere com o total de votantes.",
