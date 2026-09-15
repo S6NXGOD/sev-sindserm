@@ -1,131 +1,186 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  Activity,
-  Award,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Download,
-  HelpCircle,
-  Mail,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useCallback, useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight, HelpCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// Bump a versão para reexibir o guia a todos (ex.: mudou bastante o portal).
-const STORAGE_KEY = "sev_guia_portal_v1";
+// Bump a versão para reexibir o tour a todos (ex.: mudou bastante o portal).
+const STORAGE_KEY = "sev_tour_portal_v1";
 
 type Passo = {
-  Icon: React.ComponentType<{ className?: string }>;
-  cor: string;
+  /** Seletor do elemento real a destacar. Vazio = passo de boas-vindas (centro). */
+  sel?: string;
   titulo: string;
   texto: string;
 };
 
+// Ordem pedagógica: visão geral → regras → baixar → conferir → achar → resultado.
 const PASSOS: Passo[] = [
   {
-    Icon: Sparkles,
-    cor: "bg-primary/10 text-primary",
-    titulo: "Bem-vindo à Transparência",
+    titulo: "Bem-vindo à Transparência 👋",
     texto:
-      "Aqui você acompanha a eleição dos Representantes de Base em tempo real — sem login e sem cadastro. Tudo é público e pode ser conferido por qualquer filiado.",
+      "Vou te mostrar, em poucos passos, como acompanhar a eleição, ver os eleitos, baixar documentos e conferir que está tudo limpo. Leva 30 segundos.",
   },
   {
-    Icon: Activity,
-    cor: "bg-emerald-50 text-emerald-600",
-    titulo: "Acompanhe ao vivo",
+    sel: '[data-tour="kpis"]',
+    titulo: "A visão geral do pleito",
     texto:
-      "Os números no topo e o painel de participação mostram quantos já votaram em cada local e zona. Quando a diretoria habilita, você vê também quem está liderando — a página se atualiza sozinha.",
+      "Aqui ficam os números do momento: total de votantes, eleitos já definidos, locais em andamento e encerrados. Atualiza sozinho conforme os votos entram.",
   },
   {
-    Icon: Award,
-    cor: "bg-emerald-50 text-emerald-600",
-    titulo: "Veja eleitos e suplentes",
+    sel: '[data-tour="regimento"]',
+    titulo: "As regras oficiais",
     texto:
-      "Procure o seu local na busca lá embaixo e toque em “Ver eleitos e suplentes”. Quando a votação encerra, aparecem os eleitos, os suplentes e quem não assumiu (com o motivo).",
+      "Toque aqui para baixar o Regimento da Eleição — quem pode votar e concorrer, como se apura e o calendário. É o documento da Diretoria Colegiada.",
   },
   {
-    Icon: Clock,
-    cor: "bg-slate-100 text-slate-600",
-    titulo: "Histórico de cada local",
-    texto:
-      "Dentro do card do local, abra “Linha do tempo e histórico” para ver cada passo oficial (agendamento, encerramento, suplementar) e o resultado de cada rodada — inclusive baixar o PDF de rodadas anteriores.",
-  },
-  {
-    Icon: Download,
-    cor: "bg-sky-50 text-sky-600",
+    sel: '[data-tour="relatorio"]',
     titulo: "Baixe os relatórios",
     texto:
-      "No botão “Baixar relatório” você gera um PDF completo do pleito (ou uma planilha dos eleitos). No card de cada local, o botão “PDF” baixa o resultado daquele local. E no topo você baixa o Regimento da Eleição.",
+      "Neste botão você gera o relatório completo do pleito em PDF (ou a planilha dos eleitos). Aqui também troca o pleito, se houver mais de um.",
   },
   {
-    Icon: ShieldCheck,
-    cor: "bg-emerald-50 text-emerald-600",
+    sel: '[data-tour="auditoria"]',
     titulo: "Confira que é limpo",
     texto:
-      "No bloco “Auditoria, integridade e lisura” você confere que o total de votos bate com o de votantes (urna conferida), entende as garantias do sistema e o que é público × protegido (LGPD).",
+      "Toque para abrir a auditoria: você vê que o total de votos bate com o de votantes (urna conferida), as garantias do sistema e como contestar se algo parecer errado.",
   },
   {
-    Icon: Mail,
-    cor: "bg-amber-50 text-amber-600",
-    titulo: "Achou algo estranho? Conteste",
+    sel: '[data-tour="busca"]',
+    titulo: "Ache o seu local",
     texto:
-      "Qualquer filiado pode contestar. Reúna o nome do local, o protocolo do seu comprovante e o motivo, e use o botão de contestação (abre o e-mail oficial). A diretoria responde pelo canal oficial.",
+      "Digite o nome do seu local ou órgão, ou filtre por situação (em andamento, encerrada, agendada). É o caminho mais rápido para a sua urna.",
+  },
+  {
+    sel: '[data-tour="locais"]',
+    titulo: "Veja o resultado do local",
+    texto:
+      "Em cada card, “Ver eleitos e suplentes” abre o resultado e a linha do tempo; o botão “PDF” baixa o resultado daquele local. É aqui que a maioria vai direto.",
   },
 ];
 
+function usaMenosMovimento() {
+  try {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Guia do Portal da Transparência: um passo a passo simples e humano, que abre
- * SOZINHO na primeira visita (uma vez) e fica sempre acessível pelo botão
- * "Como usar". Ensina a acompanhar, ver eleitos, baixar, auditar e contestar.
+ * Tour do portal com HOLOFOTE: destaca cada elemento real da página e ensina
+ * onde clicar. Abre sozinho na 1ª visita (uma vez) e fica sempre no botão
+ * "Como usar". Sem biblioteca externa; mobile-first; respeita reduced-motion.
+ * Passos cujo alvo não existe na tela são pulados automaticamente.
  */
 export function GuiaPortal() {
-  const [open, setOpen] = useState(false);
-  const [passo, setPasso] = useState(0);
+  const [ativo, setAtivo] = useState(false);
+  const [passos, setPassos] = useState<Passo[]>([]);
+  const [idx, setIdx] = useState(0);
+  const [rect, setRect] = useState<DOMRect | null>(null);
 
-  // Primeira visita: abre o guia uma única vez (localStorage, à prova de erro).
-  useEffect(() => {
-    try {
-      if (!localStorage.getItem(STORAGE_KEY)) {
-        setOpen(true);
-      }
-    } catch {
-      /* modo privado / storage bloqueado: simplesmente não auto-abre */
-    }
+  const iniciar = useCallback(() => {
+    // Monta a lista só com passos cujo alvo está visível agora.
+    const visiveis = PASSOS.filter((p) => {
+      if (!p.sel) return true;
+      const el = document.querySelector(p.sel);
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+    setPassos(visiveis);
+    setIdx(0);
+    setAtivo(true);
   }, []);
 
-  function marcarVisto() {
+  const fechar = useCallback(() => {
     try {
       localStorage.setItem(STORAGE_KEY, "1");
     } catch {
       /* ignora */
     }
-  }
+    setAtivo(false);
+    setRect(null);
+  }, []);
 
-  function fechar() {
-    marcarVisto();
-    setOpen(false);
-    setPasso(0);
-  }
+  // Primeira visita: abre o tour uma única vez, após o layout assentar.
+  useEffect(() => {
+    let quer = false;
+    try {
+      quer = !localStorage.getItem(STORAGE_KEY);
+    } catch {
+      quer = false;
+    }
+    if (!quer) return;
+    const t = setTimeout(() => iniciar(), 700);
+    return () => clearTimeout(t);
+  }, [iniciar]);
 
-  function abrir() {
-    setPasso(0);
-    setOpen(true);
-  }
+  const passo = passos[idx];
 
-  const p = PASSOS[passo];
-  const ultimo = passo === PASSOS.length - 1;
-  const primeiro = passo === 0;
+  // Mede o alvo (e mantém alinhado ao rolar/redimensionar). Rola até o centro.
+  useEffect(() => {
+    if (!ativo || !passo) return;
+    if (!passo.sel) {
+      setRect(null);
+      return;
+    }
+    const el = document.querySelector(passo.sel) as HTMLElement | null;
+    if (!el) {
+      setRect(null);
+      return;
+    }
+    el.scrollIntoView({
+      behavior: usaMenosMovimento() ? "auto" : "smooth",
+      block: "center",
+    });
+    const medir = () => setRect(el.getBoundingClientRect());
+    const t = setTimeout(medir, usaMenosMovimento() ? 0 : 340);
+    window.addEventListener("resize", medir);
+    window.addEventListener("scroll", medir, true);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", medir);
+      window.removeEventListener("scroll", medir, true);
+    };
+  }, [ativo, idx, passo]);
+
+  // Teclado: setas navegam, Esc fecha.
+  useEffect(() => {
+    if (!ativo) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") fechar();
+      else if (e.key === "ArrowRight") setIdx((n) => Math.min(n + 1, passos.length - 1));
+      else if (e.key === "ArrowLeft") setIdx((n) => Math.max(n - 1, 0));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ativo, passos.length, fechar]);
+
+  const ultimo = idx === passos.length - 1;
+  const primeiro = idx === 0;
+
+  // Posição do balão: acima ou abaixo do alvo (o que couber); centro no boas-vindas.
+  const LARG = 340;
+  const GAP = 14;
+  let balao: React.CSSProperties;
+  if (!rect) {
+    balao = {
+      left: "50%",
+      top: "50%",
+      transform: "translate(-50%, -50%)",
+      width: `min(${LARG}px, calc(100vw - 32px))`,
+    };
+  } else {
+    const vw = typeof window !== "undefined" ? window.innerWidth : 400;
+    const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+    const w = Math.min(LARG, vw - 32);
+    const left = Math.max(16, Math.min(rect.left + rect.width / 2 - w / 2, vw - w - 16));
+    const acima = rect.top > vh * 0.55;
+    balao = acima
+      ? { left, bottom: vh - rect.top + GAP, width: w }
+      : { left, top: rect.bottom + GAP, width: w };
+  }
 
   return (
     <>
@@ -133,84 +188,105 @@ export function GuiaPortal() {
         type="button"
         variant="outline"
         size="sm"
-        onClick={abrir}
+        onClick={iniciar}
         className="gap-1.5"
       >
         <HelpCircle className="h-4 w-4" />
         Como usar
       </Button>
 
-      <Dialog
-        open={open}
-        onOpenChange={(o) => {
-          if (!o) fechar();
-          else setOpen(true);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <span className={`rounded-lg p-2 ${p.cor}`}>
-                <p.Icon className="h-5 w-5" />
+      {ativo && passo && (
+        <div
+          className="fixed inset-0 z-[80]"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => (ultimo ? fechar() : setIdx((n) => n + 1))}
+        >
+          {/* Holofote: recorta o alvo e escurece o resto (ou dim total no intro). */}
+          {rect ? (
+            <div
+              aria-hidden
+              className="pointer-events-none fixed rounded-xl ring-2 ring-white/90 transition-all duration-300"
+              style={{
+                left: rect.left - 6,
+                top: rect.top - 6,
+                width: rect.width + 12,
+                height: rect.height + 12,
+                boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.66)",
+              }}
+            />
+          ) : (
+            <div aria-hidden className="fixed inset-0 bg-slate-900/70" />
+          )}
+
+          {/* Balão explicativo (não fecha ao tocar nele). */}
+          <div
+            className="fixed rounded-2xl border bg-white p-4 shadow-xl"
+            style={balao}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 flex items-center gap-2">
+              {primeiro && <Sparkles className="h-4 w-4 text-primary" />}
+              <p className="text-sm font-bold">{passo.titulo}</p>
+              <span className="ml-auto text-[11px] font-medium text-muted-foreground">
+                {idx + 1}/{passos.length}
               </span>
-              {p.titulo}
-            </DialogTitle>
-          </DialogHeader>
+            </div>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {passo.texto}
+            </p>
 
-          <p className="min-h-[84px] text-sm leading-relaxed text-muted-foreground">
-            {p.texto}
-          </p>
+            {/* Progresso */}
+            <div className="mt-3 flex items-center gap-1.5">
+              {passos.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  aria-label={`Passo ${i + 1}`}
+                  onClick={() => setIdx(i)}
+                  className={`h-1.5 rounded-full transition-all ${
+                    i === idx ? "w-5 bg-primary" : "w-1.5 bg-slate-300"
+                  }`}
+                />
+              ))}
+            </div>
 
-          {/* Progresso (bolinhas) — toque para pular direto a um passo. */}
-          <div className="flex items-center justify-center gap-1.5">
-            {PASSOS.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                aria-label={`Passo ${i + 1}`}
-                onClick={() => setPasso(i)}
-                className={`h-1.5 rounded-full transition-all ${
-                  i === passo ? "w-5 bg-primary" : "w-1.5 bg-slate-300"
-                }`}
-              />
-            ))}
+            <div className="mt-3 flex items-center justify-between gap-2">
+              {primeiro ? (
+                <Button type="button" variant="ghost" size="sm" onClick={fechar}>
+                  Pular
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIdx((n) => n - 1)}
+                  className="gap-1"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Voltar
+                </Button>
+              )}
+              {ultimo ? (
+                <Button type="button" size="sm" onClick={fechar}>
+                  Entendi, explorar
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setIdx((n) => n + 1)}
+                  className="gap-1"
+                >
+                  Próximo
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
-
-          <DialogFooter className="flex-row justify-between gap-2 sm:justify-between">
-            {primeiro ? (
-              <Button type="button" variant="ghost" size="sm" onClick={fechar}>
-                Pular
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setPasso((n) => n - 1)}
-                className="gap-1"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Voltar
-              </Button>
-            )}
-            {ultimo ? (
-              <Button type="button" size="sm" onClick={fechar}>
-                Começar a explorar
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setPasso((n) => n + 1)}
-                className="gap-1"
-              >
-                Próximo
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
     </>
   );
 }

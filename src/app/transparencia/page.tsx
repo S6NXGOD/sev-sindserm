@@ -168,6 +168,7 @@ export default async function TransparenciaPage({
         {/* Regimento oficial: o fundamento das regras (quem vota/concorre, como
             se apura, datas). Fica no topo — a base de tudo, aberta a qualquer um. */}
         <a
+          data-tour="regimento"
           href="/doc/regimento_eleicao.pdf"
           target="_blank"
           rel="noopener noreferrer"
@@ -190,7 +191,10 @@ export default async function TransparenciaPage({
         </a>
 
         {/* Seletor de eleição em DESTAQUE — a primeira decisão do filiado. */}
-        <div className="rounded-2xl border-2 border-primary/20 bg-primary/5 p-4 shadow-sm sm:p-5">
+        <div
+          data-tour="relatorio"
+          className="rounded-2xl border-2 border-primary/20 bg-primary/5 p-4 shadow-sm sm:p-5"
+        >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0 flex-1">
               <PleitoSelector pleitos={pleitos} selected={pleitoId} />
@@ -200,7 +204,10 @@ export default async function TransparenciaPage({
         </div>
 
         {/* KPIs (linha cheia, responsiva) */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div
+          data-tour="kpis"
+          className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6"
+        >
           <Kpi label="Locais de votação" value={data.kpis.locais} icon={Vote} tone="blue" />
           <Kpi label="Total de votantes" value={data.kpis.votos} icon={Users} />
           <Kpi label="Eleitos definidos" value={data.kpis.eleitos} icon={Award} tone="green" />
@@ -231,11 +238,13 @@ export default async function TransparenciaPage({
 
         {/* Auditoria, integridade e lisura — prova pública de que é limpa e
             auditável, com reconciliação, como conferir/contestar e LGPD. */}
-        <AuditoriaLisura
-          integridade={data.integridade}
-          emailOficial={pleito.emailOficial}
-          tituloPleito={pleito.titulo}
-        />
+        <div data-tour="auditoria">
+          <AuditoriaLisura
+            integridade={data.integridade}
+            emailOficial={pleito.emailOficial}
+            tituloPleito={pleito.titulo}
+          />
+        </div>
 
         {/* Próximas aberturas: o filiado vê quais urnas vão abrir e quando. */}
         <ProximasAberturas
@@ -247,17 +256,19 @@ export default async function TransparenciaPage({
         />
 
         {/* Filtros */}
-        <div className="rounded-xl border bg-card p-4 shadow-sm">
+        <div data-tour="busca" className="rounded-xl border bg-card p-4 shadow-sm">
           <FiltrosBar orgaos={data.orgaos} />
         </div>
 
         {/* Resultados (cards) */}
         <div id="resultados-locais" className="scroll-mt-4" />
-        <LocaisGrid
-          locais={data.locais}
-          pleito={pdfPleito}
-          parciaisPublicas={pleito.parciaisPublicas}
-        />
+        <div data-tour="locais">
+          <LocaisGrid
+            locais={data.locais}
+            pleito={pdfPleito}
+            parciaisPublicas={pleito.parciaisPublicas}
+          />
+        </div>
 
         <footer className="border-t pt-6 text-center text-xs text-muted-foreground">
           Portal da Transparência do SEV SINDSERM · Sistema Eletrônico de Votação.
