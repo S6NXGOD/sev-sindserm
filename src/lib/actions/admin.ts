@@ -447,9 +447,16 @@ export async function updateVoteLimit(
     };
   }
 
-  // Não permite definir um limite menor que os votos já registrados.
+  // Não permite definir um limite menor que os votos já registrados. O limite
+  // vale POR RODADA (é assim que a votação o aplica), então conta a rodada atual.
   if (voteLimit !== null) {
-    const total = await prisma.vote.count({ where: { workplaceId: id } });
+    const wpLim = await prisma.workplace.findUnique({
+      where: { id },
+      select: { rodadaAtual: true },
+    });
+    const total = await prisma.vote.count({
+      where: { workplaceId: id, rodada: wpLim?.rodadaAtual ?? 1 },
+    });
     if (voteLimit < total) {
       return {
         status: "error",
@@ -673,6 +680,250 @@ export async function setVagasVaziasAceitas(
     message: aceito
       ? `"${wp.nome}" finalizado sem suplementar.`
       : `"${wp.nome}" voltou para a lista de decisão.`,
+  };
+}
+
+/**
+ * Prévia da suplementar: mostra à diretoria QUEM seria preservado (eleitos da
+ * rodada atual, travados) e QUANTAS vagas ficariam para a nova rodada — ANTES
+ * de confirmar. Só leitura; não altera nada. Local precisa estar ENCERRADO.
+ */
+export type SuplementarPreview = {
+  ok: boolean;
+  motivo?: string;
+  nome: string;
+  rodadaAtual: number;
+  vagas: number;
+  preservados: { nome: string; votos: number }[];
+  vagasRestantes: number;
+  temEmpate: boolean;
+};
+
+export async function previewSuplementar(
+  id: string,
+): Promise<SuplementarPreview> {
+  await ensureModule("locais", "VIEW");
+
+  const vazio: SuplementarPreview = {
+    ok: false,
+    nome: "",
+    rodadaAtual: 1,
+    vagas: 0,
+    preservados: [],
+    vagasRestantes: 0,
+    temEmpate: false,
+  };
+
+  const wp = await prisma.workplace.findUnique({
+    where: { id },
+    select: {
+      nome: true,
+      rodadaAtual: true,
+      dataInicioVotacao: true,
+      dataFimVotacao: true,
+    },
+  });
+  if (!wp) return { ...vazio, motivo: "Local não encontrado." };
+
+  const status = votingStatus(
+    wp.dataInicioVotacao,
+    wp.dataFimVotacao,
+    new Date(),
+  );
+  if (status !== "closed") {
+    return {
+      ...vazio,
+      nome: wp.nome,
+      rodadaAtual: wp.rodadaAtual,
+      motivo: "A votação precisa estar ENCERRADA para abrir uma suplementar.",
+    };
+  }
+
+  const apur = await apurarLocal(id);
+  const preservados = apur.eleitos.map((e) => ({ nome: e.nome, votos: e.votos }));
+  return {
+    ok: !apur.temEmpate,
+    motivo: apur.temEmpate
+      ? "Há EMPATE na linha de corte — resolva o desempate (renúncia) antes de preservar os eleitos."
+      : undefined,
+    nome: wp.nome,
+    rodadaAtual: wp.rodadaAtual,
+    vagas: apur.vagas,
+    preservados,
+    vagasRestantes: Math.max(0, apur.vagas - preservados.length),
+    temEmpate: apur.temEmpate,
+  };
+}
+
+/**
+ * Abre uma ELEIÇÃO SUPLEMENTAR (nova rodada) num local ENCERRADO.
+ *
+ * Dois modos:
+ *  - "suplementar" (padrão): PRESERVA os eleitos da rodada atual (travados como
+ *    `eleitoPreservado`, guardando `preservadoVotos`); eles NÃO aparecem na
+ *    cédula da nova rodada. Só concorrem os NÃO eleitos, disputando as vagas
+ *    restantes ("dar oportunidade a mais gente").
+ *  - "zero": NOVA eleição do zero — ninguém é preservado (todos concorrem de
+ *    novo). Zera qualquer preservação anterior.
+ *
+ * Em ambos: incrementa `rodadaAtual` (isola votos/votantes da nova rodada, sem
+ * apagar os anteriores), agenda a nova janela e limpa o rastro de encerramento.
+ */
+export async function iniciarSuplementar(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const g = await guard("locais", "EDIT");
+  if ("error" in g) return { status: "error", message: g.error };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const modo = String(formData.get("modo") ?? "suplementar").trim();
+  const novoInicioRaw = String(formData.get("novoInicio") ?? "");
+  const novoFimRaw = String(formData.get("novoFim") ?? "");
+
+  if (!id) return { status: "error", message: "Local inválido." };
+  if (modo !== "suplementar" && modo !== "zero") {
+    return { status: "error", message: "Modo de suplementar inválido." };
+  }
+
+  const novoFim = parseLocalDateTime(novoFimRaw);
+  if (!novoFim) {
+    return { status: "error", message: "Informe o término da nova rodada." };
+  }
+  if (novoFim <= new Date()) {
+    return {
+      status: "error",
+      message: "O término da nova rodada deve ser no futuro.",
+    };
+  }
+  // Início opcional: vazio = começa agora.
+  const novoInicio = novoInicioRaw ? parseLocalDateTime(novoInicioRaw) : new Date();
+  if (!novoInicio) {
+    return { status: "error", message: "Data de início inválida." };
+  }
+  if (novoFim <= novoInicio) {
+    return {
+      status: "error",
+      message: "O término deve ser depois do início da nova rodada.",
+    };
+  }
+
+  const workplace = await prisma.workplace.findUnique({
+    where: { id },
+    select: { nome: true, rodadaAtual: true, dataInicioVotacao: true, dataFimVotacao: true },
+  });
+  if (!workplace) return { status: "error", message: "Local não encontrado." };
+
+  // TRAVA: só se abre suplementar sobre uma rodada JÁ ENCERRADA.
+  const status = votingStatus(
+    workplace.dataInicioVotacao,
+    workplace.dataFimVotacao,
+    new Date(),
+  );
+  if (status !== "closed") {
+    return {
+      status: "error",
+      message: "Encerre a votação atual antes de abrir a suplementar.",
+    };
+  }
+
+  // Apura a rodada atual para saber QUEM preservar (modo suplementar).
+  const apur = await apurarLocal(id);
+  if (modo === "suplementar") {
+    if (apur.temEmpate) {
+      return {
+        status: "error",
+        message:
+          "Há empate na linha de corte. Resolva o desempate (renúncia) antes de preservar os eleitos.",
+      };
+    }
+    const vagasRestantes = Math.max(0, apur.vagas - apur.eleitos.length);
+    if (vagasRestantes <= 0) {
+      return {
+        status: "error",
+        message:
+          "Não há vagas restantes (todas preenchidas). Para recomeçar, use “Nova eleição do zero”.",
+      };
+    }
+  }
+
+  const novaRodada = workplace.rodadaAtual + 1;
+  const eleitosIds = apur.eleitos.map((e) => e.id);
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (modo === "suplementar") {
+        // Trava os eleitos atuais como PRESERVADOS (não concorrem de novo) e
+        // grava os votos com que foram eleitos (exibição na transparência).
+        for (const e of apur.eleitos) {
+          await tx.candidate.update({
+            where: { id: e.id },
+            data: { eleitoPreservado: true, preservadoVotos: e.votos },
+          });
+        }
+      } else {
+        // Nova eleição do zero: ninguém preservado (todos concorrem de novo).
+        await tx.candidate.updateMany({
+          where: { workplaceId: id },
+          data: { eleitoPreservado: false, preservadoVotos: null },
+        });
+      }
+
+      await tx.workplace.update({
+        where: { id },
+        data: {
+          rodadaAtual: novaRodada,
+          dataInicioVotacao: novoInicio,
+          dataFimVotacao: novoFim,
+          // Nova rodada em andamento: o cron volta a notificar início/fim.
+          notifStartSent: false,
+          notifCloseSent: false,
+          notifEndingSoonSent: false,
+          vagasVaziasAceitas: false,
+          agendadoPorId: g.user.id,
+          agendadoPorNome: g.user.nome,
+          agendadoEm: new Date(),
+          encerradoPorId: null,
+          encerradoPorNome: null,
+          encerradoEm: null,
+        },
+      });
+    });
+  } catch (error) {
+    console.error("Erro ao iniciar suplementar:", error);
+    return { status: "error", message: "Erro ao iniciar a eleição suplementar." };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/locais");
+  revalidatePath(`/admin/locais/${id}`);
+  revalidatePath("/admin/encerradas");
+
+  const detalhe =
+    modo === "suplementar"
+      ? `rodada ${novaRodada} · ${eleitosIds.length} eleito(s) preservado(s) · término ${formatDateTime(novoFim)}`
+      : `rodada ${novaRodada} · nova eleição do zero · término ${formatDateTime(novoFim)}`;
+  await registrarAuditoria("INICIOU_SUPLEMENTAR", {
+    alvo: workplace.nome,
+    detalhe,
+    user: g.user,
+  });
+  notificarAdminsBg(
+    {
+      title: "🗳️ Eleição suplementar aberta",
+      body: `${g.user.nome} abriu a ${novaRodada}ª rodada em "${workplace.nome}" até ${formatDateTime(novoFim)}.`,
+      url: `/admin/locais/${id}`,
+      tag: `fim-${id}`,
+    },
+    { exceptUserId: g.user.id },
+  );
+
+  return {
+    status: "success",
+    message:
+      modo === "suplementar"
+        ? `Suplementar aberta: ${eleitosIds.length} eleito(s) preservado(s), nova rodada em andamento.`
+        : "Nova eleição do zero aberta: todos os candidatos concorrem novamente.",
   };
 }
 
@@ -1341,16 +1592,22 @@ export async function exportEleitosCsv(opts: {
   if (fechados.length === 0) return toCsv([header]);
   const ids = fechados.map((l) => l.id);
 
-  const [candCounts, votedCounts, ranked] = await Promise.all([
+  const [candCounts, votedCounts, ranked, preservadosRaw] = await Promise.all([
     prisma.candidate.groupBy({
       by: ["workplaceId"],
       where: { workplaceId: { in: ids } },
       _count: { workplaceId: true },
     }),
+    // Votos da RODADA ATUAL de cada local, sem eleitos preservados (contados à parte).
     prisma.$queryRaw<{ wid: string; n: number }[]>(Prisma.sql`
-      SELECT "workplaceId" AS wid, COUNT(DISTINCT "candidateId")::int AS n
-      FROM votes WHERE "anoEleicao" = ${opts.anoEleicao}
-        AND "workplaceId" IN (${Prisma.join(ids)}) GROUP BY "workplaceId"`),
+      SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
+      FROM votes v
+        JOIN candidates c ON c.id = v."candidateId"
+        JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
+      WHERE v."anoEleicao" = ${opts.anoEleicao}
+        AND c."eleitoPreservado" = false
+        AND v."workplaceId" IN (${Prisma.join(ids)})
+      GROUP BY v."workplaceId"`),
     prisma.$queryRaw<{ wid: string; nome: string; votos: number; rn: number }[]>(
       Prisma.sql`
         SELECT wid, nome, votos, rn::int AS rn FROM (
@@ -1358,12 +1615,21 @@ export async function exportEleitosCsv(opts: {
                  ROW_NUMBER() OVER (
                    PARTITION BY v."workplaceId" ORDER BY COUNT(*) DESC, c.nome ASC
                  ) AS rn
-          FROM votes v JOIN candidates c ON c.id = v."candidateId"
+          FROM votes v
+            JOIN candidates c ON c.id = v."candidateId"
+            JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
           WHERE v."anoEleicao" = ${opts.anoEleicao}
+            AND c."eleitoPreservado" = false
             AND v."workplaceId" IN (${Prisma.join(ids)})
           GROUP BY v."workplaceId", c.id, c.nome
         ) t`,
     ),
+    // Eleitos preservados (rodadas anteriores) — entram como eleitos definitivos.
+    prisma.candidate.findMany({
+      where: { workplaceId: { in: ids }, eleitoPreservado: true },
+      select: { workplaceId: true, nome: true, preservadoVotos: true },
+      orderBy: { preservadoVotos: "desc" },
+    }),
   ]);
 
   const candMap = new Map(
@@ -1376,18 +1642,29 @@ export async function exportEleitosCsv(opts: {
     arr.push({ nome: r.nome, votos: Number(r.votos), rn: Number(r.rn) });
     byLocal.set(r.wid, arr);
   }
+  const preservadosByLocal = new Map<string, { nome: string; votos: number }[]>();
+  for (const p of preservadosRaw) {
+    const arr = preservadosByLocal.get(p.workplaceId) ?? [];
+    arr.push({ nome: p.nome, votos: p.preservadoVotos ?? 0 });
+    preservadosByLocal.set(p.workplaceId, arr);
+  }
 
   const linhas: string[][] = [];
   for (const l of fechados.sort(
     (a, b) => a.orgao.localeCompare(b.orgao) || a.nome.localeCompare(b.nome),
   )) {
     const vagas = calcularVagas(candMap.get(l.id) ?? 0);
-    const eleitosCount = Math.min(vagas, votedMap.get(l.id) ?? 0);
-    if (eleitosCount <= 0) continue;
-    const top = (byLocal.get(l.id) ?? [])
+    // Eleitos = preservados (travados) + eleitos da rodada atual (vagas restantes).
+    const preservados = preservadosByLocal.get(l.id) ?? [];
+    const vagasRestantes = Math.max(0, vagas - preservados.length);
+    const novosCount = Math.min(vagasRestantes, votedMap.get(l.id) ?? 0);
+    if (preservados.length + novosCount <= 0) continue;
+    const novos = (byLocal.get(l.id) ?? [])
       .sort((a, b) => a.rn - b.rn)
-      .slice(0, eleitosCount);
-    top.forEach((c, i) => {
+      .slice(0, novosCount)
+      .map((c) => ({ nome: c.nome, votos: c.votos }));
+    // Preservados primeiro, depois os eleitos da rodada atual.
+    [...preservados, ...novos].forEach((c, i) => {
       if (linhas.length >= REPORT_ROW_CAP) return;
       linhas.push([l.orgao, l.zona, l.nome, String(i + 1), c.nome, String(c.votos)]);
     });

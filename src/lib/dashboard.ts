@@ -334,7 +334,7 @@ export async function getDashboardData(
 
   // Representação: vagas totais do pleito e vagas efetivamente preenchidas
   // (candidatos que já receberam votos, limitado às vagas de cada local).
-  const [candPorLocal, votadosPorLocal] = await Promise.all([
+  const [candPorLocal, votadosPorLocal, preservadosPorLocal] = await Promise.all([
     prisma.candidate.groupBy({
       by: ["workplaceId"],
       where: { workplace: { anoEleicao } },
@@ -342,20 +342,39 @@ export async function getDashboardData(
     }),
     // Candidatos votados que ASSUMEM a vaga (exclui renunciantes) — assim a
     // "vaga preenchida" reflete a apuração real (renúncia com vaga vazia conta
-    // a menos, promoção normal mantém o número).
+    // a menos, promoção normal mantém o número). Conta só a RODADA ATUAL de cada
+    // local e ignora eleitos preservados (contados à parte).
     prisma.$queryRaw<{ wid: string; n: number }[]>`
       SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
-      FROM votes v JOIN candidates c ON c.id = v."candidateId"
-      WHERE v."anoEleicao" = ${anoEleicao} AND c."renunciou" = false
+      FROM votes v
+        JOIN candidates c ON c.id = v."candidateId"
+        JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
+      WHERE v."anoEleicao" = ${anoEleicao}
+        AND c."renunciou" = false
+        AND c."eleitoPreservado" = false
       GROUP BY v."workplaceId"`,
+    // Eleitos preservados (rodadas anteriores) por local — já são vaga preenchida.
+    prisma.candidate.groupBy({
+      by: ["workplaceId"],
+      where: { workplace: { anoEleicao }, eleitoPreservado: true },
+      _count: { workplaceId: true },
+    }),
   ]);
   const votadosMap = new Map(votadosPorLocal.map((r) => [r.wid, Number(r.n)]));
+  const preservadosMap = new Map(
+    preservadosPorLocal.map((p) => [p.workplaceId, p._count.workplaceId]),
+  );
   let vagasTotais = 0;
   let vagasPreenchidas = 0;
   for (const c of candPorLocal) {
     const vagasLocal = calcularVagas(c._count.workplaceId);
     vagasTotais += vagasLocal;
-    vagasPreenchidas += Math.min(vagasLocal, votadosMap.get(c.workplaceId) ?? 0);
+    // Preenchidas = preservados (travados) + votados da rodada atual, limitados
+    // às vagas restantes.
+    const presv = preservadosMap.get(c.workplaceId) ?? 0;
+    const restantes = Math.max(0, vagasLocal - presv);
+    vagasPreenchidas +=
+      presv + Math.min(restantes, votadosMap.get(c.workplaceId) ?? 0);
   }
 
   return {
@@ -561,12 +580,14 @@ export async function getLiderancaParcial(
   const ids = abertos.map((w) => w.id);
   if (ids.length === 0) return [];
 
-  const [candCounts, ranked] = await Promise.all([
+  const [candCounts, ranked, preservadosRaw] = await Promise.all([
     prisma.candidate.groupBy({
       by: ["workplaceId"],
       where: { workplaceId: { in: ids } },
       _count: { workplaceId: true },
     }),
+    // Parcial da RODADA ATUAL de cada local aberto, sem eleitos preservados
+    // (rodadas anteriores não concorrem na suplementar).
     prisma.$queryRaw<EleitoRaw[]>`
       SELECT wid, cid, nome, votos FROM (
         SELECT v."workplaceId" AS wid, c.id AS cid, c.nome AS nome,
@@ -576,15 +597,26 @@ export async function getLiderancaParcial(
                ) AS rn
         FROM votes v
         JOIN candidates c ON c.id = v."candidateId"
+        JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
         WHERE v."anoEleicao" = ${anoEleicao}
           AND c."renunciou" = false
+          AND c."eleitoPreservado" = false
           AND v."workplaceId" IN (${Prisma.join(ids)})
         GROUP BY v."workplaceId", c.id, c.nome
       ) t WHERE rn <= 60`,
+    // Eleitos preservados por local (para descontar as vagas já ocupadas).
+    prisma.candidate.groupBy({
+      by: ["workplaceId"],
+      where: { workplaceId: { in: ids }, eleitoPreservado: true },
+      _count: { workplaceId: true },
+    }),
   ]);
 
   const candCountMap = new Map(
     candCounts.map((c) => [c.workplaceId, c._count.workplaceId]),
+  );
+  const preservadosMap = new Map(
+    preservadosRaw.map((p) => [p.workplaceId, p._count.workplaceId]),
   );
   const rankedByLocal = new Map<string, { nome: string; votos: number }[]>();
   for (const r of ranked) {
@@ -597,6 +629,11 @@ export async function getLiderancaParcial(
     .map((w) => {
       const totalCandidatos = candCountMap.get(w.id) ?? 0;
       const vagas = calcularVagas(totalCandidatos);
+      // Vagas em disputa nesta rodada = total menos as já ocupadas por preservados.
+      const vagasRestantes = Math.max(
+        0,
+        vagas - (preservadosMap.get(w.id) ?? 0),
+      );
       const arr = (rankedByLocal.get(w.id) ?? []).sort(
         (a, b) => b.votos - a.votos,
       );
@@ -608,7 +645,7 @@ export async function getLiderancaParcial(
         totalCandidatos,
         vagas,
         totalVotos,
-        liderando: arr.filter((c) => c.votos > 0).slice(0, vagas),
+        liderando: arr.filter((c) => c.votos > 0).slice(0, vagasRestantes),
       };
     })
     .sort((a, b) => b.totalVotos - a.totalVotos);
@@ -624,7 +661,7 @@ export async function getPresentationData(
 ): Promise<PresentationLocal[]> {
   const now = new Date();
 
-  const [locais, votosPorLocal, candCounts, top5, votedCounts] =
+  const [locais, votosPorLocal, candCounts, top5, votedCounts, preservadosRaw] =
     await Promise.all([
       prisma.workplace.findMany({
         where: { anoEleicao },
@@ -647,7 +684,8 @@ export async function getPresentationData(
         _count: { workplaceId: true },
       }),
       // Pódio (top 5) e contagem de eleitos: só candidatos que ASSUMEM a vaga
-      // (exclui renunciantes) — o telão mostra os vencedores reais.
+      // (exclui renunciantes) — o telão mostra os vencedores reais. Conta só a
+      // RODADA ATUAL do local e ignora eleitos preservados (contados à parte).
       prisma.$queryRaw<EleitoRaw[]>`
         SELECT wid, cid, nome, votos FROM (
           SELECT v."workplaceId" AS wid, c.id AS cid, c.nome AS nome,
@@ -657,14 +695,27 @@ export async function getPresentationData(
                  ) AS rn
           FROM votes v
           JOIN candidates c ON c.id = v."candidateId"
-          WHERE v."anoEleicao" = ${anoEleicao} AND c."renunciou" = false
+          JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
+          WHERE v."anoEleicao" = ${anoEleicao}
+            AND c."renunciou" = false
+            AND c."eleitoPreservado" = false
           GROUP BY v."workplaceId", c.id, c.nome
         ) t WHERE rn <= 5`,
       prisma.$queryRaw<VotedRaw[]>`
         SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
-        FROM votes v JOIN candidates c ON c.id = v."candidateId"
-        WHERE v."anoEleicao" = ${anoEleicao} AND c."renunciou" = false
+        FROM votes v
+          JOIN candidates c ON c.id = v."candidateId"
+          JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
+        WHERE v."anoEleicao" = ${anoEleicao}
+          AND c."renunciou" = false
+          AND c."eleitoPreservado" = false
         GROUP BY v."workplaceId"`,
+      // Eleitos preservados (rodadas anteriores) por local.
+      prisma.candidate.findMany({
+        where: { workplace: { anoEleicao }, eleitoPreservado: true },
+        select: { workplaceId: true, nome: true, preservadoVotos: true },
+        orderBy: { preservadoVotos: "desc" },
+      }),
     ]);
 
   const votosMap = new Map(
@@ -674,6 +725,12 @@ export async function getPresentationData(
     candCounts.map((c) => [c.workplaceId, c._count.workplaceId]),
   );
   const votedMap = new Map(votedCounts.map((v) => [v.wid, v.n]));
+  const preservadosByLocal = new Map<string, PresentationLider[]>();
+  for (const p of preservadosRaw) {
+    const arr = preservadosByLocal.get(p.workplaceId) ?? [];
+    arr.push({ nome: p.nome, votos: p.preservadoVotos ?? 0 });
+    preservadosByLocal.set(p.workplaceId, arr);
+  }
   const topMap = new Map<string, PresentationLider[]>();
   for (const r of top5) {
     const arr = topMap.get(r.wid) ?? [];
@@ -687,7 +744,16 @@ export async function getPresentationData(
       const vagas = calcularVagas(totalCandidatos);
       const votedCount = votedMap.get(w.id) ?? 0;
       const status = votingStatus(w.dataInicioVotacao, w.dataFimVotacao, now);
-      const top = (topMap.get(w.id) ?? []).sort((a, b) => b.votos - a.votos);
+      // Eleitos = preservados (travados) + eleitos da rodada atual (vagas restantes).
+      const preservados = preservadosByLocal.get(w.id) ?? [];
+      const vagasRestantes = Math.max(0, vagas - preservados.length);
+      const eleitosCount =
+        preservados.length + Math.min(vagasRestantes, votedCount);
+      // Pódio: preservados primeiro, depois os líderes da rodada atual.
+      const top = [
+        ...preservados,
+        ...(topMap.get(w.id) ?? []).sort((a, b) => b.votos - a.votos),
+      ].slice(0, 5);
       return {
         id: w.id,
         nome: w.nome,
@@ -696,7 +762,7 @@ export async function getPresentationData(
         totalCandidatos,
         vagas,
         totalVotos: votosMap.get(w.id) ?? 0,
-        eleitosCount: Math.min(vagas, votedCount),
+        eleitosCount,
         top,
       } satisfies PresentationLocal;
     })
@@ -718,7 +784,7 @@ export async function getMuralEleitos(
 ): Promise<MuralData> {
   const now = new Date();
 
-  const [locais, candCounts, votedCounts] = await Promise.all([
+  const [locais, candCounts, votedCounts, preservadosRaw] = await Promise.all([
     prisma.workplace.findMany({
       where: { anoEleicao },
       select: {
@@ -735,18 +801,38 @@ export async function getMuralEleitos(
       _count: { workplaceId: true },
     }),
     // Eleitos que ASSUMEM a vaga (exclui renunciantes) — alinha o Mural à
-    // apuração real: renúncia com vaga vazia conta a menos.
+    // apuração real: renúncia com vaga vazia conta a menos. Conta só a RODADA
+    // ATUAL de cada local e ignora eleitos preservados (contados à parte).
     prisma.$queryRaw<VotedRaw[]>`
       SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
-      FROM votes v JOIN candidates c ON c.id = v."candidateId"
-      WHERE v."anoEleicao" = ${anoEleicao} AND c."renunciou" = false
+      FROM votes v
+        JOIN candidates c ON c.id = v."candidateId"
+        JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
+      WHERE v."anoEleicao" = ${anoEleicao}
+        AND c."renunciou" = false
+        AND c."eleitoPreservado" = false
       GROUP BY v."workplaceId"`,
+    // Eleitos preservados (rodadas anteriores) — já são eleitos definitivos.
+    prisma.candidate.findMany({
+      where: { workplace: { anoEleicao }, eleitoPreservado: true },
+      select: { workplaceId: true, nome: true, preservadoVotos: true },
+      orderBy: { preservadoVotos: "desc" },
+    }),
   ]);
 
   const candMap = new Map(
     candCounts.map((c) => [c.workplaceId, c._count.workplaceId]),
   );
   const votedMap = new Map(votedCounts.map((v) => [v.wid, v.n]));
+  const preservadosByLocal = new Map<
+    string,
+    { nome: string; votos: number }[]
+  >();
+  for (const p of preservadosRaw) {
+    const arr = preservadosByLocal.get(p.workplaceId) ?? [];
+    arr.push({ nome: p.nome, votos: p.preservadoVotos ?? 0 });
+    preservadosByLocal.set(p.workplaceId, arr);
+  }
 
   // Vagas totais do pleito (todos os locais).
   let vagasTotais = 0;
@@ -775,8 +861,10 @@ export async function getMuralEleitos(
                ) AS rn
         FROM votes v
         JOIN candidates c ON c.id = v."candidateId"
+        JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
         WHERE v."anoEleicao" = ${anoEleicao}
           AND c."renunciou" = false
+          AND c."eleitoPreservado" = false
           AND v."workplaceId" IN (${Prisma.join(fechados.map((l) => l.id))})
         GROUP BY v."workplaceId", c.id, c.nome
       ) t WHERE rn <= ${MURAL_RN_POR_LOCAL}`);
@@ -795,15 +883,22 @@ export async function getMuralEleitos(
 
   for (const l of fechados) {
     const vagas = calcularVagas(candMap.get(l.id) ?? 0);
-    const eleitosCount = Math.min(vagas, votedMap.get(l.id) ?? 0);
+    // Eleitos = preservados (rodadas anteriores) + eleitos da rodada atual,
+    // estes limitados às vagas restantes.
+    const preservados = preservadosByLocal.get(l.id) ?? [];
+    const vagasRestantes = Math.max(0, vagas - preservados.length);
+    const novosCount = Math.min(vagasRestantes, votedMap.get(l.id) ?? 0);
+    const eleitosCount = preservados.length + novosCount;
     if (eleitosCount <= 0) continue;
     totalEleitos += eleitosCount;
     orgaoCount.set(l.orgao, (orgaoCount.get(l.orgao) ?? 0) + eleitosCount);
 
-    const top = (byLocal.get(l.id) ?? [])
+    const novos = (byLocal.get(l.id) ?? [])
       .sort((a, b) => a.rn - b.rn)
-      .slice(0, eleitosCount);
-    for (const c of top) {
+      .slice(0, novosCount)
+      .map((c) => ({ nome: c.nome, votos: c.votos }));
+    // Preservados primeiro (eleitos travados), depois os da rodada atual.
+    for (const c of [...preservados, ...novos]) {
       if (eleitos.length < MURAL_DETALHE_MAX) {
         eleitos.push({
           nome: c.nome,

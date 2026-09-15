@@ -18,20 +18,39 @@ export type ApuracaoLocal = {
  * de candidatos). Retorna sinais acionáveis: `temEmpate` e `vagasVazias`.
  */
 export async function apurarLocal(workplaceId: string): Promise<ApuracaoLocal> {
+  // Rodada ATUAL do local (suplementar). A apuração conta só os votos desta
+  // rodada; os eleitos preservados de rodadas anteriores entram travados.
+  // Local inexistente cai em rodada 1 (comportamento idêntico ao histórico).
+  const wp = await prisma.workplace.findUnique({
+    where: { id: workplaceId },
+    select: { rodadaAtual: true },
+  });
+  const rodada = wp?.rodadaAtual ?? 1;
+
+  // O nº de vagas usa o TOTAL de candidatos cadastrados (inclui preservados).
   const totalCandidatos = await prisma.candidate.count({
     where: { workplaceId },
   });
   const vagas = calcularVagas(totalCandidatos);
   const takeApuracao = Math.min(Math.max(vagas + 30, 50), 500);
 
-  const [totalVotos, grupos] = await Promise.all([
-    prisma.vote.count({ where: { workplaceId } }),
+  const [totalVotos, grupos, preservadosRaw] = await Promise.all([
+    // Comparecimento/votos da RODADA ATUAL.
+    prisma.vote.count({ where: { workplaceId, rodada } }),
+    // Votos por candidato NA RODADA ATUAL, sem eleitos preservados (que não
+    // concorrem na suplementar — já estão eleitos).
     prisma.vote.groupBy({
       by: ["candidateId"],
-      where: { workplaceId },
+      where: { workplaceId, rodada, candidate: { eleitoPreservado: false } },
       _count: { candidateId: true },
       orderBy: { _count: { candidateId: "desc" } },
       take: takeApuracao,
+    }),
+    // Eleitos preservados de rodadas anteriores — sempre entram como eleitos.
+    prisma.candidate.findMany({
+      where: { workplaceId, eleitoPreservado: true },
+      select: { id: true, nome: true, preservadoVotos: true },
+      orderBy: { preservadoVotos: "desc" },
     }),
   ]);
 
@@ -51,13 +70,26 @@ export async function apurarLocal(workplaceId: string): Promise<ApuracaoLocal> {
     renunciou: metaById.get(g.candidateId)?.renunciou ?? false,
   }));
 
-  const r = apurarEleitos(ranked, vagas);
+  // Preservados travam vagas: a rodada atual disputa só as restantes.
+  const preservados = preservadosRaw.map((p) => ({
+    id: p.id,
+    nome: p.nome,
+    votos: p.preservadoVotos ?? 0,
+  }));
+  const vagasRestantes = Math.max(0, vagas - preservados.length);
+
+  const r = apurarEleitos(ranked, vagasRestantes);
   return {
     vagas,
     totalVotos,
     temEmpate: r.temEmpate,
     vagasVazias: r.vagasVazias,
-    eleitos: r.eleitos.map((e) => ({ id: e.id, nome: e.nome, votos: e.votos })),
+    // Eleitos finais = preservados (travados) + eleitos da rodada atual.
+    eleitos: [...preservados, ...r.eleitos].map((e) => ({
+      id: e.id,
+      nome: e.nome,
+      votos: e.votos,
+    })),
     semVotos: totalVotos === 0,
   };
 }

@@ -221,6 +221,11 @@ model Workplace {
   encerradoPorNome String?
   encerradoEm      DateTime?
 
+  // RODADAS (eleição suplementar): rodada de votação ATUAL do local. Começa em 1
+  // e é incrementada ao abrir uma suplementar. Votos/votantes são isolados por
+  // rodada — a apuração usa SEMPRE a rodada atual (mais os eleitos preservados).
+  rodadaAtual Int @default(1)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -246,6 +251,13 @@ model Candidate {
   // exibidos (transparência), mas o candidato não ocupa vaga.
   renunciou      Boolean @default(false)
   renunciaMotivo String?
+
+  // ELEITO PRESERVADO (eleição suplementar): candidato JÁ ELEITO numa rodada
+  // anterior. Fica TRAVADO como eleito, NÃO aparece na cédula da nova rodada e
+  // NÃO é recontado — a suplementar disputa só as vagas restantes. `preservadoVotos`
+  // guarda os votos com que foi eleito (para exibir na transparência).
+  eleitoPreservado Boolean @default(false)
+  preservadoVotos  Int?
 
   workplace Workplace @relation(fields: [workplaceId], references: [id], onDelete: Cascade)
   votes     Vote[]
@@ -276,14 +288,18 @@ model Voter {
   isFiliado   Boolean @default(false)
   // Protocolo do comprovante de votação (impresso no PDF). Não revela o voto.
   protocolo   String  @unique
+  // RODADA em que a pessoa votou (1 = eleição normal; 2+ = suplementar). A
+  // unicidade é POR rodada: a pessoa pode votar de novo na suplementar, mas só
+  // uma vez em cada rodada. Dados antigos = rodada 1.
+  rodada      Int     @default(1)
 
   // createdAt = horário do comparecimento (exibido na lista de votantes).
   createdAt DateTime @default(now())
 
   workplace Workplace @relation(fields: [workplaceId], references: [id], onDelete: Cascade)
 
-  @@unique([cpf, anoEleicao])
-  @@unique([matricula, anoEleicao])
+  @@unique([cpf, anoEleicao, rodada])
+  @@unique([matricula, anoEleicao, rodada])
   @@index([workplaceId])
   @@index([anoEleicao])
   @@map("voters")
@@ -298,12 +314,16 @@ model Vote {
   candidateId String
   workplaceId String
   anoEleicao  Int
+  // RODADA do voto (1 = eleição normal; 2+ = suplementar). A apuração conta
+  // SEMPRE a rodada atual do local. Dados antigos = rodada 1.
+  rodada      Int    @default(1)
 
   candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   workplace Workplace @relation(fields: [workplaceId], references: [id], onDelete: Cascade)
 
   @@index([candidateId])
   @@index([workplaceId])
+  @@index([workplaceId, rodada])
   @@index([anoEleicao])
   @@map("votes")
 }

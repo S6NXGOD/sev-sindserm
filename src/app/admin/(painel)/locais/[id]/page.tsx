@@ -50,6 +50,7 @@ export default async function LocalDetailPage({
       linkToken: true,
       anoEleicao: true,
       voteLimit: true,
+      rodadaAtual: true,
       dataInicioVotacao: true,
       dataFimVotacao: true,
       createdAt: true,
@@ -101,18 +102,40 @@ export default async function LocalDetailPage({
   // Quantos candidatos buscar na agregação para apurar eleitos com folga.
   const takeApuracao = Math.min(Math.max(vagas + 30, 50), 500);
 
-  const [totalVotes, grupos, candTotal, candidatesPage, votersTotal, voters] =
-    await Promise.all([
-      prisma.vote.count({ where: { workplaceId: id } }),
-      // AGREGAÇÃO no banco: contagem de votos por candidato, já ordenada.
-      prisma.vote.groupBy({
-        by: ["candidateId"],
-        where: { workplaceId: id },
-        _count: { candidateId: true },
-        orderBy: { _count: { candidateId: "desc" } },
-        take: takeApuracao,
-      }),
-      prisma.candidate.count({ where: candWhere }),
+  // Rodada ATUAL (suplementar): a apuração conta só os votos desta rodada e os
+  // eleitos preservados de rodadas anteriores entram travados. Rodada 1 sem
+  // preservados = comportamento idêntico ao histórico.
+  const rodada = workplace.rodadaAtual;
+
+  const [
+    totalVotes,
+    grupos,
+    preservadosRaw,
+    candTotal,
+    candidatesPage,
+    votersTotal,
+    voters,
+  ] = await Promise.all([
+    prisma.vote.count({ where: { workplaceId: id, rodada } }),
+    // AGREGAÇÃO no banco: votos por candidato da RODADA ATUAL, sem preservados.
+    prisma.vote.groupBy({
+      by: ["candidateId"],
+      where: {
+        workplaceId: id,
+        rodada,
+        candidate: { eleitoPreservado: false },
+      },
+      _count: { candidateId: true },
+      orderBy: { _count: { candidateId: "desc" } },
+      take: takeApuracao,
+    }),
+    // Eleitos preservados (rodadas anteriores) — sempre entram como eleitos.
+    prisma.candidate.findMany({
+      where: { workplaceId: id, eleitoPreservado: true },
+      select: { id: true, nome: true, preservadoVotos: true },
+      orderBy: { preservadoVotos: "desc" },
+    }),
+    prisma.candidate.count({ where: candWhere }),
       prisma.candidate.findMany({
         where: candWhere,
         orderBy: { nome: "asc" },
@@ -150,9 +173,22 @@ export default async function LocalDetailPage({
     };
   });
 
+  // Eleitos preservados de rodadas anteriores: travados, ocupam vagas e
+  // reduzem as vagas disputadas na rodada atual.
+  const preservados = preservadosRaw.map((p) => ({
+    id: p.id,
+    nome: p.nome,
+    votos: p.preservadoVotos ?? 0,
+  }));
+  const vagasRestantes = Math.max(0, vagas - preservados.length);
+
   // Apuração de eleitos: nº de vagas vem do total real de candidatos.
   // Candidatos que renunciaram são pulados e o suplente é promovido.
-  const resultado = apurarEleitos(ranked, vagas);
+  // A rodada atual disputa só as vagas restantes (fora as preservadas).
+  const resultado = apurarEleitos(ranked, vagasRestantes);
+
+  // Eleitos finais = preservados (travados) + eleitos da rodada atual.
+  const eleitosCombinados = [...preservados, ...resultado.eleitos];
 
   const ranking = ranked.slice(0, RANKING_SIZE).map((c) => ({
     id: c.id,
@@ -181,13 +217,14 @@ export default async function LocalDetailPage({
     voteLimit: workplace.voteLimit,
     publicUrl: `${votingBaseUrl}/votacao/${workplace.linkToken}`,
 
+    rodadaAtual: workplace.rodadaAtual,
     totalCandidatos,
     vagas,
-    eleitos: resultado.eleitos,
+    eleitos: eleitosCombinados,
     empatados: resultado.empatados,
     vagasEmDisputa: resultado.vagasEmDisputa,
     temEmpate: resultado.temEmpate,
-    eleitosIds: resultado.eleitos.map((c) => c.id),
+    eleitosIds: eleitosCombinados.map((c) => c.id),
     // Quem não assume a vaga (renúncia/desistência/desempate) + vagas vazias.
     renunciantes: resultado.renunciantes.map((c) => ({
       id: c.id,

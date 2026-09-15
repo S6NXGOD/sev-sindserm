@@ -17,13 +17,16 @@ import {
   Gauge,
   LinkIcon,
   Loader2,
+  Lock,
   Plus,
+  Repeat,
   RotateCcw,
   Search,
   Trash2,
   Undo2,
   UserX,
   Users,
+  Vote as VoteIcon,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -31,11 +34,14 @@ import {
   deleteCandidate,
   deleteWorkplace,
   encerrarVotacao,
+  iniciarSuplementar,
+  previewSuplementar,
   reopenWorkplace,
   setCandidateRenuncia,
   updateSlug,
   updateVoteLimit,
   updateWorkplaceSchedule,
+  type SuplementarPreview,
 } from "@/lib/actions/admin";
 import { initialActionState } from "@/lib/types";
 import { slugify } from "@/lib/slug";
@@ -101,6 +107,8 @@ export type ManagerData = {
   slug: string;
   /** "undefined" = sem janela agendada (Aguardando Diretoria). */
   status: VotingStatus;
+  /** Rodada atual (1 = normal; 2+ = suplementar). */
+  rodadaAtual: number;
   /** "" quando não há data (input datetime-local em branco). */
   inicioLocal: string;
   fimLocal: string;
@@ -481,6 +489,261 @@ function ReopenForm({ data }: { data: ManagerData }) {
           </DialogContent>
         </Dialog>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Abre uma ELEIÇÃO SUPLEMENTAR (nova rodada) num local ENCERRADO.
+ * Dois modos: "suplementar" (preserva os eleitos, só concorrem os demais pelas
+ * vagas restantes) ou "zero" (todos concorrem de novo). Mostra uma PRÉVIA de
+ * quem seria preservado antes de confirmar.
+ */
+function SuplementarForm({ data }: { data: ManagerData }) {
+  const [state, formAction] = useFormState(
+    iniciarSuplementar,
+    initialActionState,
+  );
+  const [open, setOpen] = useState(false);
+  const [modo, setModo] = useState<"suplementar" | "zero">("suplementar");
+  const [novoInicio, setNovoInicio] = useState("");
+  const [novoFim, setNovoFim] = useState("");
+  const [preview, setPreview] = useState<SuplementarPreview | null>(null);
+  const [loadingPreview, startPreview] = useTransition();
+  useToastState(state);
+
+  useEffect(() => {
+    if (state.status === "success") setOpen(false);
+  }, [state]);
+
+  // Carrega a prévia (quem seria preservado) ao abrir o bloco / ao voltar do modo.
+  const carregarPreview = () => {
+    startPreview(async () => {
+      const p = await previewSuplementar(data.id);
+      setPreview(p);
+    });
+  };
+
+  useEffect(() => {
+    carregarPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const preservados = preview?.preservados ?? [];
+  const vagasRestantes = preview?.vagasRestantes ?? 0;
+  const bloqueadoEmpate = preview?.temEmpate ?? false;
+  // No modo suplementar precisamos de vagas restantes e sem empate.
+  const podeSuplementar = !bloqueadoEmpate && vagasRestantes > 0;
+  const confirmavel =
+    Boolean(novoFim) && (modo === "zero" || podeSuplementar);
+
+  return (
+    <div className="rounded-md border border-violet-200 bg-violet-50 p-4">
+      <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-violet-900">
+        <Repeat className="h-4 w-4" />
+        Eleição suplementar
+        <Badge variant="secondary" className="ml-auto gap-1 bg-white">
+          <VoteIcon className="h-3 w-3" />
+          {data.rodadaAtual}ª rodada atual
+        </Badge>
+      </div>
+      <p className="mb-3 text-xs text-violet-800">
+        Abra uma nova rodada de votação neste local. Escolha se os eleitos atuais
+        ficam <strong>preservados</strong> (e a disputa é só pelas vagas
+        restantes) ou se é uma <strong>nova eleição do zero</strong>.
+      </p>
+
+      {/* Escolha do modo (mobile-first: empilha; 2 colunas no desktop) */}
+      <div className="mb-3 grid gap-2 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => setModo("suplementar")}
+          className={`rounded-md border p-3 text-left text-xs transition ${
+            modo === "suplementar"
+              ? "border-violet-500 bg-white ring-1 ring-violet-500"
+              : "border-violet-200 bg-white/60 hover:bg-white"
+          }`}
+        >
+          <div className="mb-1 flex items-center gap-1.5 font-semibold text-violet-900">
+            <Lock className="h-3.5 w-3.5" />
+            Suplementar
+          </div>
+          <span className="text-muted-foreground">
+            Preserva os eleitos. Só concorrem os demais, pelas vagas restantes.
+            Dá oportunidade a mais gente.
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setModo("zero")}
+          className={`rounded-md border p-3 text-left text-xs transition ${
+            modo === "zero"
+              ? "border-violet-500 bg-white ring-1 ring-violet-500"
+              : "border-violet-200 bg-white/60 hover:bg-white"
+          }`}
+        >
+          <div className="mb-1 flex items-center gap-1.5 font-semibold text-violet-900">
+            <RotateCcw className="h-3.5 w-3.5" />
+            Nova eleição do zero
+          </div>
+          <span className="text-muted-foreground">
+            Ninguém é preservado. Todos os candidatos concorrem novamente, do
+            começo.
+          </span>
+        </button>
+      </div>
+
+      {/* Prévia de quem seria preservado / vagas restantes */}
+      <div className="mb-3 rounded-md border border-violet-200 bg-white p-3 text-xs">
+        {loadingPreview ? (
+          <span className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Calculando a apuração atual…
+          </span>
+        ) : !preview ? (
+          <span className="text-muted-foreground">Prévia indisponível.</span>
+        ) : preview.motivo && !preview.ok ? (
+          <span className="flex items-start gap-2 text-amber-700">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            {preview.motivo}
+          </span>
+        ) : modo === "suplementar" ? (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-medium text-violet-900">
+              <span>Vagas do local: {preview.vagas}</span>
+              <span>Preservados: {preservados.length}</span>
+              <span
+                className={
+                  vagasRestantes > 0 ? "text-emerald-700" : "text-amber-700"
+                }
+              >
+                Vagas restantes: {vagasRestantes}
+              </span>
+            </div>
+            {preservados.length > 0 ? (
+              <div>
+                <p className="mb-1 text-muted-foreground">
+                  Ficam eleitos (não concorrem de novo):
+                </p>
+                <ul className="space-y-0.5">
+                  {preservados.map((p) => (
+                    <li
+                      key={p.nome}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Lock className="h-3 w-3 text-violet-500" />
+                        {p.nome}
+                      </span>
+                      <span className="tabular-nums text-muted-foreground">
+                        {p.votos} voto{p.votos === 1 ? "" : "s"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="text-muted-foreground">
+                Nenhum eleito a preservar ainda.
+              </p>
+            )}
+            {vagasRestantes <= 0 && (
+              <p className="flex items-start gap-2 text-amber-700">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                Todas as vagas já estão preenchidas. Para recomeçar, use “Nova
+                eleição do zero”.
+              </p>
+            )}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">
+            Todos os {data.totalCandidatos} candidatos concorrerão novamente. Os
+            votos das rodadas anteriores ficam guardados no histórico.
+          </span>
+        )}
+      </div>
+
+      {/* Janela da nova rodada */}
+      <div className="mb-3 grid gap-2 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="supInicio" className="text-xs">
+            Início (opcional — vazio = agora)
+          </Label>
+          <Input
+            id="supInicio"
+            type="datetime-local"
+            value={novoInicio}
+            onChange={(e) => setNovoInicio(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="supFim" className="text-xs">
+            Término da nova rodada
+          </Label>
+          <Input
+            id="supFim"
+            type="datetime-local"
+            value={novoFim}
+            onChange={(e) => setNovoFim(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button type="button" size="sm" disabled={!confirmavel}>
+            <Repeat className="mr-2 h-4 w-4" />
+            Abrir {modo === "zero" ? "nova eleição" : "suplementar"}
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Abrir a {data.rodadaAtual + 1}ª rodada em {data.nome}?
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2">
+                {modo === "suplementar" ? (
+                  <p>
+                    Os <strong>{preservados.length} eleito(s)</strong> atuais
+                    ficam <strong>preservados</strong> (não aparecem na cédula) e
+                    a disputa será pelas{" "}
+                    <strong>{vagasRestantes} vaga(s) restante(s)</strong>. A
+                    votação passa a aceitar votos até o novo término.
+                  </p>
+                ) : (
+                  <p>
+                    Será uma <strong>nova eleição do zero</strong>: nenhum
+                    candidato fica preservado e{" "}
+                    <strong>todos concorrem novamente</strong>. Os votos das
+                    rodadas anteriores permanecem no histórico.
+                  </p>
+                )}
+                <p className="text-xs">
+                  Eleitores podem votar de novo nesta rodada. A mudança fica
+                  visível na transparência pública.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <form action={formAction}>
+              <input type="hidden" name="id" value={data.id} />
+              <input type="hidden" name="modo" value={modo} />
+              <input type="hidden" name="novoInicio" value={novoInicio} />
+              <input type="hidden" name="novoFim" value={novoFim} />
+              <PendingButton type="submit">Confirmar e abrir</PendingButton>
+            </form>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1093,7 +1356,10 @@ export function WorkplaceManager({ data }: { data: ManagerData }) {
             <VoteLimitForm data={data} />
             <Separator />
             {data.status === "closed" ? (
-              <ReopenForm data={data} />
+              <div className="space-y-3">
+                <ReopenForm data={data} />
+                <SuplementarForm data={data} />
+              </div>
             ) : naoAgendado ? (
               // Sem janela agendada não há o que encerrar — a urna nunca abriu.
               <p className="text-xs text-muted-foreground">

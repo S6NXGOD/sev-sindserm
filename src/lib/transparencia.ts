@@ -181,32 +181,48 @@ export async function getTransparenciaData(
   // UMA consulta indexada por ano traz todos os locais com os _count (votantes
   // e candidatos). KPIs vêm do conjunto completo; os cards são filtrados.
   // A contagem de eleitos por local (locais ENCERRADOS) usa COUNT(DISTINCT).
-  const [locaisRaw, votedCounts, totalVotosReais] = await Promise.all([
-    prisma.workplace.findMany({
-      where: { anoEleicao: ano },
-      select: {
-        id: true,
-        nome: true,
-        orgao: true,
-        zona: true,
-        dataInicioVotacao: true,
-        dataFimVotacao: true,
-        _count: { select: { voters: true, candidates: true } },
-      },
-      orderBy: { nome: "asc" },
-    }),
-    // Eleitos = candidatos votados que ASSUMEM a vaga (exclui renunciantes).
-    prisma.$queryRaw<{ wid: string; n: number }[]>`
-      SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
-      FROM votes v JOIN candidates c ON c.id = v."candidateId"
-      WHERE v."anoEleicao" = ${ano} AND c."renunciou" = false
-      GROUP BY v."workplaceId"`,
-    // RECONCILIAÇÃO: total de VOTOS na urna (deve casar com o comparecimento —
-    // cada votante registra exatamente 1 voto). Divergência = anomalia auditável.
-    prisma.vote.count({ where: { anoEleicao: ano } }),
-  ]);
+  const [locaisRaw, votedCounts, totalVotosReais, preservadosCounts] =
+    await Promise.all([
+      prisma.workplace.findMany({
+        where: { anoEleicao: ano },
+        select: {
+          id: true,
+          nome: true,
+          orgao: true,
+          zona: true,
+          rodadaAtual: true,
+          dataInicioVotacao: true,
+          dataFimVotacao: true,
+          _count: { select: { voters: true, candidates: true } },
+        },
+        orderBy: { nome: "asc" },
+      }),
+      // Votados na RODADA ATUAL que ASSUMEM a vaga (exclui renunciantes e os
+      // eleitos preservados, que não concorrem na rodada corrente).
+      prisma.$queryRaw<{ wid: string; n: number }[]>`
+        SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
+        FROM votes v
+        JOIN candidates c ON c.id = v."candidateId"
+        JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
+        WHERE v."anoEleicao" = ${ano} AND c."renunciou" = false
+          AND c."eleitoPreservado" = false
+        GROUP BY v."workplaceId"`,
+      // RECONCILIAÇÃO: total de VOTOS na urna (todas as rodadas) — deve casar com
+      // o comparecimento (cada votante registra 1 voto por rodada). Divergência =
+      // anomalia auditável.
+      prisma.vote.count({ where: { anoEleicao: ano } }),
+      // Eleitos preservados (rodadas anteriores) por local — contam como eleitos.
+      prisma.candidate.groupBy({
+        by: ["workplaceId"],
+        where: { workplace: { anoEleicao: ano }, eleitoPreservado: true },
+        _count: { workplaceId: true },
+      }),
+    ]);
 
   const votedMap = new Map(votedCounts.map((v) => [v.wid, v.n]));
+  const preservadosMap = new Map(
+    preservadosCounts.map((p) => [p.workplaceId, p._count.workplaceId]),
+  );
 
   const todos: TransparenciaLocal[] = locaisRaw.map((w) => ({
     id: w.id,
@@ -236,7 +252,10 @@ export async function getTransparenciaData(
     if (l.status === "open") abertas += 1;
     else if (l.status === "closed") {
       encerradas += 1;
-      eleitos += Math.min(l.vagas, votedMap.get(l.id) ?? 0);
+      // Eleitos = preservados (rodadas anteriores) + eleitos da rodada atual.
+      const presv = preservadosMap.get(l.id) ?? 0;
+      const restantes = Math.max(0, l.vagas - presv);
+      eleitos += presv + Math.min(restantes, votedMap.get(l.id) ?? 0);
     } else if (l.status === "upcoming") naoIniciadas += 1;
     else naoDefinidas += 1;
   }
@@ -303,9 +322,12 @@ export async function getTransparenciaData(
                ROW_NUMBER() OVER (
                  PARTITION BY v."workplaceId" ORDER BY COUNT(*) DESC, c.nome ASC
                ) AS rn
-        FROM votes v JOIN candidates c ON c.id = v."candidateId"
+        FROM votes v
+        JOIN candidates c ON c.id = v."candidateId"
+        JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
         WHERE v."anoEleicao" = ${ano}
           AND c."renunciou" = false
+          AND c."eleitoPreservado" = false
           AND v."workplaceId" IN (${Prisma.join(abertos.map((l) => l.id))})
         GROUP BY v."workplaceId", c.id, c.nome
       ) t WHERE rn <= ${LIDERES_PREVIA}
@@ -411,7 +433,12 @@ export async function getTransparenciaData(
 /*                  Resultado de UM local (eleitos/suplentes)                 */
 /* -------------------------------------------------------------------------- */
 
-export type CandidatoResultado = { nome: string; votos: number };
+export type CandidatoResultado = {
+  nome: string;
+  votos: number;
+  /** true = eleito PRESERVADO de uma rodada anterior (não concorreu na atual). */
+  preservado?: boolean;
+};
 export type ResultadoLocal = {
   id: string;
   nome: string;
@@ -424,6 +451,8 @@ export type ResultadoLocal = {
   vagas: number;
   totalCandidatos: number;
   totalVotantes: number;
+  /** Rodada de votação atual (1 = normal; 2+ = suplementar). */
+  rodadaAtual: number;
   eleitos: CandidatoResultado[];
   suplentes: CandidatoResultado[];
   /**
@@ -455,6 +484,7 @@ export async function getResultadoLocal(
       orgao: true,
       zona: true,
       anoEleicao: true,
+      rodadaAtual: true,
       dataInicioVotacao: true,
       dataFimVotacao: true,
       _count: { select: { voters: true, candidates: true } },
@@ -495,6 +525,7 @@ export async function getResultadoLocal(
     vagas,
     totalCandidatos,
     totalVotantes: wp._count.voters,
+    rodadaAtual: wp.rodadaAtual,
   };
   if (!revelar) {
     return {
@@ -507,10 +538,24 @@ export async function getResultadoLocal(
     };
   }
 
-  // Ranking por votos (agregado no banco, ordenado e limitado).
+  // ELEITOS PRESERVADOS (rodadas anteriores): já travados, não concorrem na
+  // rodada atual e ocupam vagas. Em rodada 1 normal, esta lista é vazia.
+  const preservadosRaw = await prisma.candidate.findMany({
+    where: { workplaceId, eleitoPreservado: true },
+    select: { nome: true, preservadoVotos: true },
+    orderBy: { preservadoVotos: "desc" },
+  });
+  const preservados: CandidatoResultado[] = preservadosRaw.map((p) => ({
+    nome: p.nome,
+    votos: p.preservadoVotos ?? 0,
+    preservado: true,
+  }));
+  const vagasRestantes = Math.max(0, vagas - preservados.length);
+
+  // Ranking por votos DA RODADA ATUAL (agregado no banco, ordenado e limitado).
   const grupos = await prisma.vote.groupBy({
     by: ["candidateId"],
-    where: { workplaceId },
+    where: { workplaceId, rodada: wp.rodadaAtual },
     _count: { candidateId: true },
     orderBy: { _count: { candidateId: "desc" } },
     take: RESULTADO_CAP,
@@ -519,12 +564,20 @@ export async function getResultadoLocal(
   const nomes = ids.length
     ? await prisma.candidate.findMany({
         where: { id: { in: ids } },
-        select: { id: true, nome: true, renunciou: true, renunciaMotivo: true },
+        select: {
+          id: true,
+          nome: true,
+          renunciou: true,
+          renunciaMotivo: true,
+          eleitoPreservado: true,
+        },
       })
     : [];
   const metaById = new Map(nomes.map((c) => [c.id, c]));
 
   const ranked = grupos
+    // Preservados não concorrem na rodada atual (defensivo — não teriam votos aqui).
+    .filter((g) => !metaById.get(g.candidateId)?.eleitoPreservado)
     .map((g) => {
       const m = metaById.get(g.candidateId);
       return {
@@ -542,14 +595,16 @@ export async function getResultadoLocal(
   const renunciantes = ranked
     .filter((c) => c.renunciou)
     .map((c) => ({ nome: c.nome, votos: c.votos, motivo: c.motivo }));
-  const assentos = Math.min(vagas, elegiveis.length);
-  const eleitos: CandidatoResultado[] = elegiveis
+  const assentos = Math.min(vagasRestantes, elegiveis.length);
+  const eleitosNovos: CandidatoResultado[] = elegiveis
     .slice(0, assentos)
     .map((c) => ({ nome: c.nome, votos: c.votos }));
   const suplentes: CandidatoResultado[] = elegiveis
     .slice(assentos)
     .map((c) => ({ nome: c.nome, votos: c.votos }));
-  const semVotos = Math.max(0, totalCandidatos - ranked.length);
+  // Eleitos finais = preservados (travados) + eleitos da rodada atual.
+  const eleitos: CandidatoResultado[] = [...preservados, ...eleitosNovos];
+  const semVotos = Math.max(0, totalCandidatos - ranked.length - preservados.length);
 
   return {
     ...baseVazia,
@@ -591,7 +646,7 @@ export async function getEleitosRows(
   const ano = election.ano;
   const now = new Date();
 
-  const [locais, candCounts, votedCounts] = await Promise.all([
+  const [locais, candCounts, votedCounts, preservadosRaw] = await Promise.all([
     prisma.workplace.findMany({
       where: { anoEleicao: ano },
       select: {
@@ -599,6 +654,7 @@ export async function getEleitosRows(
         nome: true,
         orgao: true,
         zona: true,
+        rodadaAtual: true,
         dataInicioVotacao: true,
         dataFimVotacao: true,
       },
@@ -608,22 +664,42 @@ export async function getEleitosRows(
       where: { workplace: { anoEleicao: ano } },
       _count: { workplaceId: true },
     }),
+    // Votados na RODADA ATUAL de cada local (join p/ comparar v.rodada = w.rodadaAtual),
+    // excluindo renunciantes e eleitos preservados (que não concorrem na rodada).
     prisma.$queryRaw<{ wid: string; n: number }[]>`
       SELECT v."workplaceId" AS wid, COUNT(DISTINCT v."candidateId")::int AS n
-      FROM votes v JOIN candidates c ON c.id = v."candidateId"
+      FROM votes v
+      JOIN candidates c ON c.id = v."candidateId"
+      JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
       WHERE v."anoEleicao" = ${ano} AND c."renunciou" = false
+        AND c."eleitoPreservado" = false
       GROUP BY v."workplaceId"`,
+    // Eleitos preservados (rodadas anteriores) — sempre entram como eleitos.
+    prisma.candidate.findMany({
+      where: { workplace: { anoEleicao: ano }, eleitoPreservado: true },
+      select: { workplaceId: true, nome: true, preservadoVotos: true },
+      orderBy: { preservadoVotos: "desc" },
+    }),
   ]);
   const candMap = new Map(
     candCounts.map((c) => [c.workplaceId, c._count.workplaceId]),
   );
   const votedMap = new Map(votedCounts.map((v) => [v.wid, v.n]));
+  const preservadosByLocal = new Map<
+    string,
+    { nome: string; votos: number }[]
+  >();
+  for (const p of preservadosRaw) {
+    const arr = preservadosByLocal.get(p.workplaceId) ?? [];
+    arr.push({ nome: p.nome, votos: p.preservadoVotos ?? 0 });
+    preservadosByLocal.set(p.workplaceId, arr);
+  }
 
   const fechados = locais.filter(
     (l) => votingStatus(l.dataInicioVotacao, l.dataFimVotacao, now) === "closed",
   );
 
-  // Top por local (apenas encerrados), via janela em SQL filtrada por IDs.
+  // Top por local (apenas encerrados) DA RODADA ATUAL, via janela em SQL.
   let ranked: { wid: string; nome: string; votos: number; rn: number }[] = [];
   if (fechados.length > 0) {
     ranked = await prisma.$queryRaw<typeof ranked>(Prisma.sql`
@@ -632,9 +708,12 @@ export async function getEleitosRows(
                ROW_NUMBER() OVER (
                  PARTITION BY v."workplaceId" ORDER BY COUNT(*) DESC, c.nome ASC
                ) AS rn
-        FROM votes v JOIN candidates c ON c.id = v."candidateId"
+        FROM votes v
+        JOIN candidates c ON c.id = v."candidateId"
+        JOIN workplaces w ON w.id = v."workplaceId" AND v."rodada" = w."rodadaAtual"
         WHERE v."anoEleicao" = ${ano}
           AND c."renunciou" = false
+          AND c."eleitoPreservado" = false
           AND v."workplaceId" IN (${Prisma.join(fechados.map((l) => l.id))})
         GROUP BY v."workplaceId", c.id, c.nome
       ) t`);
@@ -650,13 +729,16 @@ export async function getEleitosRows(
   const metaById = new Map(fechados.map((l) => [l.id, l]));
   for (const l of fechados.sort((a, b) => a.nome.localeCompare(b.nome))) {
     const vagas = calcularVagas(candMap.get(l.id) ?? 0);
-    const eleitosCount = Math.min(vagas, votedMap.get(l.id) ?? 0);
-    if (eleitosCount <= 0) continue;
-    const top = (byLocal.get(l.id) ?? [])
-      .sort((a, b) => a.rn - b.rn)
-      .slice(0, eleitosCount);
     const meta = metaById.get(l.id)!;
-    for (const c of top) {
+    const preservados = preservadosByLocal.get(l.id) ?? [];
+    const vagasRestantes = Math.max(0, vagas - preservados.length);
+    const eleitosNovosCount = Math.min(vagasRestantes, votedMap.get(l.id) ?? 0);
+    const novos = (byLocal.get(l.id) ?? [])
+      .sort((a, b) => a.rn - b.rn)
+      .slice(0, eleitosNovosCount)
+      .map((c) => ({ nome: c.nome, votos: c.votos }));
+    // Eleitos = preservados (rodadas anteriores) + eleitos da rodada atual.
+    for (const c of [...preservados, ...novos]) {
       if (rows.length >= CSV_CAP) break;
       rows.push({
         local: meta.nome,

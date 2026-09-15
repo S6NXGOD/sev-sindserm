@@ -86,7 +86,9 @@ function comparar(sort: ApuracaoSort) {
  */
 function ApuracaoCard({ a }: { a: Apuracao }) {
   const [aberto, setAberto] = useState(false);
-  const semVotos = a.totalVotos === 0;
+  // "Sem votos" só quando não há votos NEM eleitos preservados (suplementar
+  // recém-aberta ainda mostra os eleitos travados de rodadas anteriores).
+  const semVotos = a.totalVotos === 0 && a.eleitos.length === 0;
   const eleitosMostrados = a.eleitos.slice(0, MAX_ELEITOS_NOMES);
   const eleitosRestantes = a.eleitos.length - eleitosMostrados.length;
   const empatadosMostrados = a.empatados.slice(0, MAX_ELEITOS_NOMES);
@@ -103,9 +105,16 @@ function ApuracaoCard({ a }: { a: Apuracao }) {
               {a.orgao} · Zona {a.zona}
             </p>
           </div>
-          <Badge variant={STATUS_VARIANT[a.status]} className="shrink-0">
-            {STATUS_LABEL[a.status]}
-          </Badge>
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+            {a.rodadaAtual > 1 && (
+              <Badge className="bg-violet-600 hover:bg-violet-600">
+                {a.rodadaAtual}ª rodada
+              </Badge>
+            )}
+            <Badge variant={STATUS_VARIANT[a.status]}>
+              {STATUS_LABEL[a.status]}
+            </Badge>
+          </div>
         </div>
         <p className="text-xs text-muted-foreground">
           Janela: {a.inicioDisplay} até {a.fimDisplay} · {a.totalCandidatos}{" "}
@@ -197,6 +206,10 @@ function ApuracaoCard({ a }: { a: Apuracao }) {
                             className="border-slate-300 text-slate-500"
                           >
                             Não assumiu
+                          </Badge>
+                        ) : c.preservado ? (
+                          <Badge className="bg-violet-600 hover:bg-violet-600">
+                            Eleito (rodada anterior)
                           </Badge>
                         ) : c.eleito ? (
                           <Badge variant="success">Eleito</Badge>

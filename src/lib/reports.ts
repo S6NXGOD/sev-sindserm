@@ -14,6 +14,8 @@ export type ApuracaoCandidato = {
   eleito: boolean;
   /** Não assume a vaga (renúncia/desistência/desempate). */
   renunciou: boolean;
+  /** Eleito PRESERVADO de rodada anterior (não concorreu na suplementar). */
+  preservado?: boolean;
 };
 
 export type Apuracao = {
@@ -22,6 +24,8 @@ export type Apuracao = {
   orgao: string;
   zona: string;
   status: ApuracaoStatus;
+  /** Rodada atual do local (1 = normal; 2+ = suplementar). */
+  rodadaAtual: number;
   inicioDisplay: string;
   fimDisplay: string;
   /** Timestamps (ms) para ORDENAR por ciclo de vida; null = sem janela. */
@@ -118,6 +122,7 @@ export async function getReportData(opts: {
       dataInicioVotacao: true,
       dataFimVotacao: true,
       vagasVaziasAceitas: true,
+      rodadaAtual: true,
     },
   });
 
@@ -132,20 +137,57 @@ export async function getReportData(opts: {
   const ids = scoped.map((w) => w.id);
   if (ids.length === 0) return emptyReport();
 
+  // Agrupa os locais por rodada atual (normalmente só "1") para filtrar os
+  // votos da rodada corrente de cada um — sem SQL bruto, sem N consultas.
+  // Em rodada 1 sem eleitos preservados, tudo produz o resultado histórico.
+  const idsByRodada = new Map<number, string[]>();
+  for (const w of scoped) {
+    const arr = idsByRodada.get(w.rodadaAtual) ?? [];
+    arr.push(w.id);
+    idsByRodada.set(w.rodadaAtual, arr);
+  }
+
   // AGREGAÇÃO no banco: contagem de candidatos por local e votos por
   // (local, candidato). Nada de "dados brutos" de milhares de candidatos.
-  const [candCounts, voteGroups] = await Promise.all([
+  // Os votos são contados SÓ da rodada atual do local e SEM eleitos
+  // preservados (rodadas anteriores) — que entram travados como eleitos.
+  const [candCounts, voteGroupsByRodada, preservadosRaw] = await Promise.all([
     prisma.candidate.groupBy({
       by: ["workplaceId"],
       where: { workplaceId: { in: ids } },
       _count: { workplaceId: true },
     }),
-    prisma.vote.groupBy({
-      by: ["workplaceId", "candidateId"],
-      where: { workplaceId: { in: ids } },
-      _count: { candidateId: true },
+    Promise.all(
+      [...idsByRodada.entries()].map(([rodada, rodadaIds]) =>
+        prisma.vote.groupBy({
+          by: ["workplaceId", "candidateId"],
+          where: {
+            workplaceId: { in: rodadaIds },
+            rodada,
+            candidate: { eleitoPreservado: false },
+          },
+          _count: { candidateId: true },
+        }),
+      ),
+    ),
+    prisma.candidate.findMany({
+      where: { workplaceId: { in: ids }, eleitoPreservado: true },
+      select: { workplaceId: true, nome: true, preservadoVotos: true },
+      orderBy: { preservadoVotos: "desc" },
     }),
   ]);
+  const voteGroups = voteGroupsByRodada.flat();
+
+  // Eleitos preservados (rodadas anteriores) por local — sempre eleitos.
+  const preservadosByLocal = new Map<
+    string,
+    { nome: string; votos: number }[]
+  >();
+  for (const p of preservadosRaw) {
+    const arr = preservadosByLocal.get(p.workplaceId) ?? [];
+    arr.push({ nome: p.nome, votos: p.preservadoVotos ?? 0 });
+    preservadosByLocal.set(p.workplaceId, arr);
+  }
 
   const votedIds = [...new Set(voteGroups.map((g) => g.candidateId))];
   const nomes = votedIds.length
@@ -192,10 +234,25 @@ export async function getReportData(opts: {
     );
     const totalVotos = votados.reduce((s, c) => s + c.votos, 0);
 
-    const resultado = apurarEleitos(votados, vagas);
+    // Eleitos preservados de rodadas anteriores (suplementar): travados como
+    // eleitos, ocupam vagas e reduzem as vagas disputadas na rodada atual.
+    const preservados = preservadosByLocal.get(w.id) ?? [];
+    const vagasRestantes = Math.max(0, vagas - preservados.length);
+
+    // A apuração da rodada atual disputa APENAS as vagas restantes.
+    const resultado = apurarEleitos(votados, vagasRestantes);
     const eleitosSet = new Set(resultado.eleitos.map((c) => c.id));
 
-    const ranking: ApuracaoCandidato[] = votados
+    // Ranking: preservados no topo (marcados) + candidatos da rodada atual.
+    const rankingPreservados: ApuracaoCandidato[] = preservados.map((p) => ({
+      nome: p.nome,
+      votos: p.votos,
+      pct: 0, // votos de outra rodada — não compõem o total da rodada atual.
+      eleito: true,
+      renunciou: false,
+      preservado: true,
+    }));
+    const rankingAtual: ApuracaoCandidato[] = votados
       .slice(0, RANKING_CAP)
       .map((c) => ({
         nome: c.nome,
@@ -204,6 +261,16 @@ export async function getReportData(opts: {
         eleito: eleitosSet.has(c.id),
         renunciou: c.renunciou,
       }));
+    const ranking: ApuracaoCandidato[] = [
+      ...rankingPreservados,
+      ...rankingAtual,
+    ];
+
+    // Eleitos finais = preservados (travados) + eleitos da rodada atual.
+    const eleitosNomes = [
+      ...preservados.map((p) => p.nome),
+      ...resultado.eleitos.map((c) => c.nome),
+    ];
 
     return {
       id: w.id,
@@ -211,6 +278,7 @@ export async function getReportData(opts: {
       orgao: w.orgao,
       zona: w.zona,
       status: w.status,
+      rodadaAtual: w.rodadaAtual,
       // Sem janela agendada: "—" (não há data para exibir no relatório).
       inicioDisplay: w.dataInicioVotacao
         ? formatDateTime(w.dataInicioVotacao)
@@ -224,7 +292,7 @@ export async function getReportData(opts: {
       vagas,
       ranking,
       votadosCount: votados.length,
-      eleitos: resultado.eleitos.map((c) => c.nome),
+      eleitos: eleitosNomes,
       empatados: resultado.empatados.map((c) => c.nome),
       empatadosVotos: resultado.empatados[0]?.votos ?? null,
       vagasEmDisputa: resultado.vagasEmDisputa,

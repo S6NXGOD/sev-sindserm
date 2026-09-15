@@ -87,6 +87,7 @@ export async function castVote(
       orgao: true,
       zona: true,
       voteLimit: true,
+      rodadaAtual: true,
       dataInicioVotacao: true,
       dataFimVotacao: true,
     },
@@ -155,10 +156,10 @@ export async function castVote(
     };
   }
 
-  // O candidato escolhido deve pertencer ao Local de Trabalho do link.
-  // Consulta direcionada (índice em workplaceId) — não carrega a lista inteira.
+  // O candidato escolhido deve pertencer ao Local e CONCORRER na rodada atual
+  // (eleitos preservados de rodadas anteriores não recebem votos na suplementar).
   const candidato = await prisma.candidate.findFirst({
-    where: { id: candidateId, workplaceId: workplace.id },
+    where: { id: candidateId, workplaceId: workplace.id, eleitoPreservado: false },
     select: { id: true },
   });
   if (!candidato) {
@@ -181,17 +182,18 @@ export async function castVote(
   // 4. Persistência: Voter + Vote em transação (sem FK entre eles -> sigilo).
   try {
     await prisma.$transaction(async (tx) => {
-      // 4a. Limite de votos do local (null = ilimitado).
+      // 4a. Limite de votos do local NA RODADA ATUAL (null = ilimitado).
       if (workplace.voteLimit !== null) {
         const total = await tx.vote.count({
-          where: { workplaceId: workplace.id },
+          where: { workplaceId: workplace.id, rodada: workplace.rodadaAtual },
         });
         if (total >= workplace.voteLimit) {
           throw new VoteLimitReachedError();
         }
       }
 
-      // 4b. Eleitor: a checagem de unicidade é POR ano (cpf+ano / matricula+ano).
+      // 4b. Eleitor: unicidade POR ano E RODADA (cpf+ano+rodada). Assim a pessoa
+      // pode votar de novo numa suplementar (rodada 2+), mas só uma vez por rodada.
       // workplaceId registra apenas ONDE votou (comparecimento), nunca EM QUEM.
       await tx.voter.create({
         data: {
@@ -202,17 +204,19 @@ export async function castVote(
           email: email || null,
           workplaceId: workplace.id,
           anoEleicao,
+          rodada: workplace.rodadaAtual,
           isFiliado: filiacao === "sim",
           protocolo,
         },
       });
 
-      // 4c. Voto, de forma ANÔNIMA (nenhuma referência ao eleitor).
+      // 4c. Voto, de forma ANÔNIMA (nenhuma referência ao eleitor), na rodada atual.
       await tx.vote.create({
         data: {
           candidateId,
           workplaceId: workplace.id,
           anoEleicao,
+          rodada: workplace.rodadaAtual,
         },
       });
     });
@@ -285,10 +289,11 @@ export async function searchCandidates(
 
   const termo = normalizeForSearch(search ?? "");
 
-  // Sem termo: devolve os 20 primeiros (ordem alfabética).
+  // Sem termo: devolve os 20 primeiros (ordem alfabética). Eleitos preservados
+  // (rodada anterior) NÃO entram na cédula da suplementar.
   if (!termo) {
     return prisma.candidate.findMany({
-      where: { workplaceId: workplace.id },
+      where: { workplaceId: workplace.id, eleitoPreservado: false },
       select: { id: true, nome: true },
       orderBy: { nome: "asc" },
       take: 20,
@@ -300,7 +305,7 @@ export async function searchCandidates(
   // do local (universo de UM local) e filtramos em memória com o mesmo
   // normalizador (acento- e caixa-insensível). Leve mesmo com milhares de nomes.
   const candidatos = await prisma.candidate.findMany({
-    where: { workplaceId: workplace.id },
+    where: { workplaceId: workplace.id, eleitoPreservado: false },
     select: { id: true, nome: true },
     orderBy: { nome: "asc" },
   });

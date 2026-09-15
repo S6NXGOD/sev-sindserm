@@ -8,7 +8,9 @@ import {
   Download,
   FileText,
   Loader2,
+  Lock,
   MapPin,
+  Repeat,
   Users,
 } from "lucide-react";
 import { fetchResultadoLocal } from "@/lib/actions/transparencia";
@@ -59,32 +61,42 @@ function ListaCandidatos({
       : "Suplente";
   return (
     <ol className="space-y-1.5">
-      {visiveis.map((c, i) => (
-        <li
-          key={`${c.nome}-${i}`}
-          className="flex items-center justify-between gap-2 rounded-md border bg-white px-3 py-2 text-sm"
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="w-6 shrink-0 text-xs font-semibold text-muted-foreground">
-              {i + 1}º
+      {visiveis.map((c, i) => {
+        // Preservado = eleito numa rodada anterior (não concorreu na suplementar).
+        const preservado = eleito && c.preservado;
+        return (
+          <li
+            key={`${c.nome}-${i}`}
+            className="flex items-center justify-between gap-2 rounded-md border bg-white px-3 py-2 text-sm"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="w-6 shrink-0 text-xs font-semibold text-muted-foreground">
+                {i + 1}º
+              </span>
+              <span className="truncate font-medium">{c.nome}</span>
+              <Badge
+                className={
+                  eleito
+                    ? preservado
+                      ? "shrink-0 gap-1 bg-violet-600 hover:bg-violet-600"
+                      : "shrink-0 gap-1 bg-emerald-600 hover:bg-emerald-600"
+                    : "shrink-0 bg-slate-400 hover:bg-slate-400"
+                }
+              >
+                {preservado ? (
+                  <Lock className="h-3 w-3" />
+                ) : (
+                  eleito && <Award className="h-3 w-3" />
+                )}
+                {preservado ? "Eleito (rodada anterior)" : rotulo}
+              </Badge>
             </span>
-            <span className="truncate font-medium">{c.nome}</span>
-            <Badge
-              className={
-                eleito
-                  ? "shrink-0 gap-1 bg-emerald-600 hover:bg-emerald-600"
-                  : "shrink-0 bg-slate-400 hover:bg-slate-400"
-              }
-            >
-              {eleito && <Award className="h-3 w-3" />}
-              {rotulo}
-            </Badge>
-          </span>
-          <span className="shrink-0 font-semibold tabular-nums">
-            {c.votos} {c.votos === 1 ? "voto" : "votos"}
-          </span>
-        </li>
-      ))}
+            <span className="shrink-0 font-semibold tabular-nums">
+              {c.votos} {c.votos === 1 ? "voto" : "votos"}
+            </span>
+          </li>
+        );
+      })}
       {shown < itens.length && (
         <li>
           <Button variant="ghost" size="sm" className="w-full" onClick={onMore}>
@@ -250,6 +262,17 @@ export function LocalCard({
                   <span>
                     PARCIAL · votação em andamento — os números mudam a cada voto
                     e o resultado só é oficial quando encerrar.
+                  </span>
+                </p>
+              )}
+              {/* Rodada suplementar: deixa claro que há eleitos preservados. */}
+              {resultado.rodadaAtual > 1 && (
+                <p className="flex items-start gap-2 rounded-md border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-medium text-violet-800">
+                  <Repeat className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {resultado.rodadaAtual}ª rodada (eleição suplementar). Os
+                    eleitos das rodadas anteriores estão preservados e marcados
+                    como “Eleito (rodada anterior)”.
                   </span>
                 </p>
               )}
