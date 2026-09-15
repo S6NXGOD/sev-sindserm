@@ -6,6 +6,7 @@ import {
 import { ProximasAberturas } from "@/components/proximas-aberturas";
 import { ApuracaoAoVivo } from "@/components/transparencia/apuracao-ao-vivo";
 import { AuditoriaLisura } from "@/components/transparencia/auditoria-lisura";
+import { SuplementarAviso } from "@/components/transparencia/suplementar-aviso";
 import { ParticipacaoPanel } from "@/components/transparencia/participacao-panel";
 import { PleitoSelector } from "@/components/transparencia/pleito-selector";
 import { FiltrosBar } from "@/components/transparencia/filtros-bar";
@@ -87,7 +88,9 @@ export default async function TransparenciaPage({
     q: searchParams.q,
     orgao: searchParams.orgao,
     status:
-      searchParams.status === "open" || searchParams.status === "closed"
+      searchParams.status === "open" ||
+      searchParams.status === "closed" ||
+      searchParams.status === "suplementar"
         ? searchParams.status
         : "todos",
   });
@@ -164,6 +167,10 @@ export default async function TransparenciaPage({
           <Kpi label="Encerradas" value={data.kpis.encerradas} icon={CheckCircle2} tone="green" />
         </div>
 
+        {/* Aviso de eleição suplementar (aparece só quando há rodada 2+): explica
+            a lisura e leva o filiado aos locais em suplementar. */}
+        <SuplementarAviso total={data.kpis.suplementares} />
+
         {/* Apuração ao vivo: votações em andamento agora (participação + líder
             parcial quando a diretoria habilita). Some quando não há nada aberto. */}
         <ApuracaoAoVivo
@@ -203,6 +210,7 @@ export default async function TransparenciaPage({
         </div>
 
         {/* Resultados (cards) */}
+        <div id="resultados-locais" className="scroll-mt-4" />
         <LocaisGrid
           locais={data.locais}
           pleito={pdfPleito}

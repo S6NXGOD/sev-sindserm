@@ -173,11 +173,19 @@ export function LocalCard({
               {local.orgao} · Zona {local.zona}
             </p>
           </div>
-          <span
-            className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}
-          >
-            {st.label}
-          </span>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}
+            >
+              {st.label}
+            </span>
+            {local.rodadaAtual > 1 && (
+              <span className="flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-700">
+                <Repeat className="h-3 w-3" />
+                Suplementar · {local.rodadaAtual}ª rodada
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 text-sm">

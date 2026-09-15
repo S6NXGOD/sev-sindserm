@@ -57,7 +57,7 @@ export async function getPleitosPublicos(): Promise<{
 export type TransparenciaFiltros = {
   q?: string;
   orgao?: string;
-  status?: "todos" | "open" | "closed";
+  status?: "todos" | "open" | "closed" | "suplementar";
 };
 
 export type TransparenciaLocal = {
@@ -69,6 +69,8 @@ export type TransparenciaLocal = {
   totalVotantes: number;
   totalCandidatos: number;
   vagas: number;
+  /** Rodada de votação atual (1 = normal; 2+ = eleição suplementar). */
+  rodadaAtual: number;
   /** null quando a votação ainda não foi agendada (status "undefined"). */
   dataInicio: string | null;
   dataFim: string | null;
@@ -119,6 +121,8 @@ export type TransparenciaData = {
     encerradas: number;
     /** Agendadas (vão abrir) — alimenta o card "Próximas aberturas". */
     agendadas: number;
+    /** Locais em eleição suplementar (rodada 2+). Alimenta o aviso do portal. */
+    suplementares: number;
   };
   statusPie: { status: string; valor: number }[];
   /** Locais agendados que abrem primeiro (limitado para render). */
@@ -155,6 +159,7 @@ const EMPTY: TransparenciaData = {
     abertas: 0,
     encerradas: 0,
     agendadas: 0,
+    suplementares: 0,
   },
   statusPie: [],
   proximasAberturas: [],
@@ -233,6 +238,7 @@ export async function getTransparenciaData(
     totalVotantes: w._count.voters,
     totalCandidatos: w._count.candidates,
     vagas: calcularVagas(w._count.candidates),
+    rodadaAtual: w.rodadaAtual,
     dataInicio: w.dataInicioVotacao?.toISOString() ?? null,
     dataFim: w.dataFimVotacao?.toISOString() ?? null,
   }));
@@ -246,9 +252,11 @@ export async function getTransparenciaData(
   let encerradas = 0;
   let naoIniciadas = 0;
   let naoDefinidas = 0;
+  let suplementares = 0;
   for (const l of todos) {
     votos += l.totalVotantes; // voter 1:1 voto
     vagas += l.vagas;
+    if (l.rodadaAtual > 1) suplementares += 1;
     if (l.status === "open") abertas += 1;
     else if (l.status === "closed") {
       encerradas += 1;
@@ -358,6 +366,7 @@ export async function getTransparenciaData(
     if (filtros.orgao && l.orgao !== filtros.orgao) return false;
     if (filtros.status === "open" && l.status !== "open") return false;
     if (filtros.status === "closed" && l.status !== "closed") return false;
+    if (filtros.status === "suplementar" && l.rodadaAtual <= 1) return false;
     if (
       q &&
       !l.nome.toLowerCase().includes(q) &&
@@ -412,6 +421,7 @@ export async function getTransparenciaData(
       abertas,
       encerradas,
       agendadas: naoIniciadas,
+      suplementares,
     },
     statusPie: [
       { status: "Aguardando Diretoria", valor: naoDefinidas },

@@ -109,6 +109,7 @@ export function FiltrosBar({ orgaos }: { orgaos: string[] }) {
             <SelectItem value="todos">Todos</SelectItem>
             <SelectItem value="open">Votação em Andamento</SelectItem>
             <SelectItem value="closed">Votação Encerrada</SelectItem>
+            <SelectItem value="suplementar">Em Suplementar (2ª rodada)</SelectItem>
           </SelectContent>
         </Select>
       </div>
