@@ -12,6 +12,7 @@ import {
   Lock,
   MapPin,
   Repeat,
+  Scale,
   TriangleAlert,
   Users,
 } from "lucide-react";
@@ -333,6 +334,36 @@ export function LocalCard({
                   onMore={() => setEleitosShown((n) => n + PAGE)}
                 />
               </div>
+
+              {/* EMPATE na linha de corte — transparência do que falta decidir. */}
+              {resultado.empate && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+                  <p className="flex items-center gap-1.5 text-sm font-bold text-amber-800">
+                    <Scale className="h-4 w-4" />
+                    Empate na linha de corte
+                    {resultado.parcial ? " (parcial)" : " — aguardando desempate"}
+                  </p>
+                  <p className="mt-0.5 text-xs text-amber-800">
+                    {resultado.empate.candidatos.length} candidato(s) empatados com{" "}
+                    <strong>{resultado.empate.votos}</strong> voto(s), disputando{" "}
+                    <strong>{resultado.empate.vagasEmDisputa}</strong>{" "}
+                    {resultado.empate.vagasEmDisputa === 1 ? "vaga" : "vagas"}.
+                    {resultado.parcial
+                      ? " Pode mudar até o encerramento."
+                      : " O desempate segue o estatuto/assembleia do sindicato."}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {resultado.empate.candidatos.map((n) => (
+                      <span
+                        key={n}
+                        className="rounded-full border border-amber-300 bg-white px-2 py-0.5 text-xs font-medium text-amber-800"
+                      >
+                        {n}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {resultado.suplentes.length > 0 && (
                 <div>

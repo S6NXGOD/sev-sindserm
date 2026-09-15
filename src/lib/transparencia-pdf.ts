@@ -303,6 +303,21 @@ export async function downloadResultadoPdf(
   };
 
   secao("ELEITOS (TITULARES)", resultado.eleitos, [16, 122, 76]);
+
+  // Empate na linha de corte (aguardando desempate) — transparência pública.
+  if (resultado.empate) {
+    kit.tituloSecao(
+      `EMPATE NA LINHA DE CORTE — ${resultado.empate.vagasEmDisputa} vaga(s) em disputa`,
+      [180, 83, 9],
+    );
+    kit.paragrafo(
+      `${resultado.empate.candidatos.length} candidato(s) empatados com ${resultado.empate.votos} voto(s), ` +
+        `aguardando desempate pelo estatuto/assembleia: ${resultado.empate.candidatos.join(", ")}.`,
+      10,
+      40,
+    );
+  }
+
   secao("SUPLENTES", resultado.suplentes, [100, 116, 139]);
 
   if (resultado.semVotos > 0) {
@@ -317,149 +332,6 @@ export async function downloadResultadoPdf(
   doc.save(
     `eleitos-${resultado.nome.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}.pdf`,
   );
-}
-
-/**
- * RELATÓRIO GERAL do pleito — versão AUTOEXPLICATIVA e persuasiva (não só a lista
- * crua): cabeçalho oficial + resumo + reconciliação (a prova anti-fraude) +
- * eleitos por local + como foi apurado + LGPD + COMO CONTESTAR. Dá ao filiado o
- * contexto e os argumentos para conferir e, se precisar, contestar.
- */
-export async function downloadRelatorioGeralPdf(data: RelatorioTransparencia) {
-  const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
-  const logos = await loadLogos(data.pleito);
-  const startY = drawPdfHeader(doc, logos, {
-    titulo: data.pleito.titulo,
-    subtitulo: "Portal da Transparência · Relatório Geral de Eleitos",
-    geradoEm: `Gerado em ${data.geradoEm} · dados públicos e auditáveis`,
-  });
-  const kit = pdfToolkit(doc, startY);
-  const { pageWidth, s } = kit;
-
-  // Agrupa por local (rows já vêm ordenadas por nome).
-  const grupos: { local: string; orgao: string; zona: string; eleitos: typeof data.eleitos }[] = [];
-  for (const r of data.eleitos) {
-    let g = grupos.find((x) => x.local === r.local);
-    if (!g) {
-      g = { local: r.local, orgao: r.orgao, zona: r.zona, eleitos: [] };
-      grupos.push(g);
-    }
-    g.eleitos.push(r);
-  }
-
-  // Abertura (o que é este documento).
-  kit.paragrafo(
-    `Este é o resultado oficial da ${data.pleito.titulo}. Reúne os representantes eleitos ` +
-      `nos locais já encerrados, com o número de votos de cada um. Todos os dados aqui são ` +
-      `públicos e auditáveis: qualquer filiado pode conferir e, se encontrar algo estranho, contestar.`,
-    10,
-    40,
-  );
-
-  // Resumo.
-  kit.tituloSecao("RESUMO", [30, 41, 59]);
-  kit.linha("Eleitos consolidados", nf(data.eleitos.length));
-  kit.linha("Locais encerrados (com eleitos)", nf(grupos.length));
-  kit.linha("Total de votantes (comparecimento)", nf(data.kpis.votantes));
-  kit.linha("Vagas no pleito", nf(data.kpis.vagas));
-  if (data.kpis.suplementares > 0) {
-    kit.linha("Locais em eleição suplementar", nf(data.kpis.suplementares));
-  }
-  s.y += 6;
-
-  // Reconciliação — a "prova" anti-fraude, com argumento claro.
-  kit.tituloSecao("INTEGRIDADE DA URNA", [16, 122, 76]);
-  kit.callout(
-    data.integridade.confere,
-    data.integridade.confere
-      ? "Os números conferem — urna reconciliada"
-      : "Atenção: os números NÃO conferem",
-    data.integridade.confere
-      ? `${nf(data.integridade.votantes)} pessoas compareceram e foram registrados ` +
-          `${nf(data.integridade.votos)} votos. Como cada pessoa vota exatamente uma vez por rodada, ` +
-          `os dois totais batem — sinal de que nenhum voto foi inserido ou perdido.`
-      : `${nf(data.integridade.votantes)} pessoas compareceram, mas há ${nf(data.integridade.votos)} ` +
-          `votos registrados. Uma divergência aqui indica anomalia e deve ser investigada/contestada.`,
-  );
-
-  // Eleitos por local.
-  kit.tituloSecao("ELEITOS POR LOCAL", [16, 122, 76]);
-  if (grupos.length === 0) {
-    kit.paragrafo("Ainda não há eleitos consolidados neste pleito.");
-  }
-  for (const g of grupos) {
-    kit.ensureSpace(46);
-    doc.setFillColor(16, 122, 76);
-    doc.roundedRect(MARGIN_X, s.y - 12, kit.larguraUtil, 22, 4, 4, "F");
-    doc.setTextColor(255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.5);
-    doc.text(
-      (doc.splitTextToSize(g.local, kit.larguraUtil - 90) as string[])[0],
-      MARGIN_X + 10,
-      s.y + 3,
-    );
-    doc.text(`${g.eleitos.length} eleito(s)`, pageWidth - MARGIN_X - 10, s.y + 3, {
-      align: "right",
-    });
-    doc.setTextColor(120);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    s.y += 22;
-    doc.text(`${g.orgao} · Zona ${g.zona}`, MARGIN_X + 4, s.y);
-    doc.setTextColor(20);
-    s.y += 16;
-
-    doc.setFontSize(10.5);
-    g.eleitos.forEach((c, i) => {
-      kit.ensureSpace(15);
-      doc.setFont("helvetica", "normal");
-      doc.text(
-        (doc.splitTextToSize(`${i + 1}. ${c.eleito}`, kit.larguraUtil - 80) as string[])[0],
-        MARGIN_X + 4,
-        s.y,
-      );
-      doc.setFont("helvetica", "bold");
-      doc.text(`${c.votos} voto(s)`, pageWidth - MARGIN_X - 4, s.y, { align: "right" });
-      s.y += 15;
-    });
-    s.y += 12;
-  }
-
-  // Como foi apurado + LGPD.
-  kit.tituloSecao("COMO ISSO FOI APURADO", [100, 116, 139]);
-  kit.paragrafo(
-    "Vagas por local: o número de representantes de cada local depende do total de candidatos, " +
-      "por uma regra pública de progressão. Os mais votados ocupam as vagas; quem não assume dá lugar " +
-      "ao próximo suplente; empate na linha de corte é resolvido conforme o estatuto/assembleia.",
-  );
-  kit.paragrafo(
-    "Sigilo do voto: o sistema não guarda qualquer ligação entre o voto e a pessoa que votou, nem o " +
-      "horário do voto. É impossível descobrir em quem alguém votou.",
-  );
-  kit.paragrafo(
-    "LGPD: este relatório traz só dados de interesse coletivo (nomes de candidatos, votos e participação). " +
-      "Dados pessoais (CPF, matrícula, telefone, e-mail) nunca são divulgados — servem apenas para impedir voto duplicado.",
-  );
-
-  // Como contestar — o caminho prático.
-  kit.tituloSecao("ENCONTROU ALGO ESTRANHO? COMO CONTESTAR", [180, 83, 9]);
-  kit.paragrafo(
-    "Qualquer filiado pode contestar um resultado. Reúna estas informações e envie à diretoria pelo canal oficial:",
-    10,
-    40,
-  );
-  kit.paragrafo("1) Nome do local de votação.");
-  kit.paragrafo("2) Protocolo do seu comprovante de votação (se tiver).");
-  kit.paragrafo("3) O que quer contestar ou esclarecer, com o máximo de detalhe.");
-  if (data.pleito.emailOficial) {
-    kit.paragrafo(`Canal oficial: ${data.pleito.emailOficial}`, 10, 20);
-  } else {
-    kit.paragrafo("Canal oficial: procure a diretoria do SINDSERM.", 10, 20);
-  }
-
-  doc.save(`relatorio-geral-eleitos-pleito-${data.pleito.ano}.pdf`);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -578,6 +450,18 @@ export async function downloadRelatorioPersonalizado(
     );
     kit.paragrafo(
       "LGPD: este relatório traz apenas dados de interesse coletivo (nomes de candidatos, votos e participação agregada). Dados pessoais dos votantes (CPF, matrícula, telefone, e-mail) NÃO são divulgados e servem somente para impedir voto duplicado.",
+    );
+    // Como contestar — o caminho prático para o filiado.
+    kit.paragrafo(
+      "Como contestar: qualquer filiado pode contestar um resultado. Reúna (1) o nome do local, " +
+        "(2) o protocolo do seu comprovante de votação, se tiver, e (3) o que quer contestar, e envie ao canal oficial.",
+    );
+    kit.paragrafo(
+      data.pleito.emailOficial
+        ? `Canal oficial: ${data.pleito.emailOficial}`
+        : "Canal oficial: procure a diretoria do SINDSERM.",
+      9.5,
+      20,
     );
   }
 

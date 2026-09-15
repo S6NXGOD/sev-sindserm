@@ -12,7 +12,7 @@ import { PleitoSelector } from "@/components/transparencia/pleito-selector";
 import { FiltrosBar } from "@/components/transparencia/filtros-bar";
 import { BuscaUrnaFloat } from "@/components/transparencia/busca-urna-float";
 import { LocaisGrid } from "@/components/transparencia/locais-grid";
-import { ExportButtons } from "@/components/transparencia/export-csv-button";
+import { RelatorioBuilder } from "@/components/transparencia/relatorio-builder";
 import { NovoResultadoSom } from "@/components/transparencia/novo-resultado-som";
 
 export const dynamic = "force-dynamic";
@@ -153,7 +153,7 @@ export default async function TransparenciaPage({
             <div className="min-w-0 flex-1">
               <PleitoSelector pleitos={pleitos} selected={pleitoId} />
             </div>
-            <ExportButtons electionId={pleitoId} />
+            <RelatorioBuilder electionId={pleitoId} />
           </div>
         </div>
 

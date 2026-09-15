@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { calcularVagas } from "@/lib/vagas";
+import { apurarEleitos, calcularVagas } from "@/lib/vagas";
 import { votingStatus, type VotingStatus } from "@/lib/voting-status";
 import type { ProximaAbertura } from "@/components/proximas-aberturas";
 import {
@@ -472,6 +472,11 @@ export type ResultadoLocal = {
    * MOTIVO — transparência pública da decisão tomada no pleito.
    */
   renunciantes: { nome: string; votos: number; motivo: string | null }[];
+  /**
+   * EMPATE na linha de corte (mais elegíveis empatados do que vagas restantes):
+   * a(s) vaga(s) aguarda(m) desempate pelo estatuto/assembleia. null = sem empate.
+   */
+  empate: { votos: number; vagasEmDisputa: number; candidatos: string[] } | null;
   /** Candidatos sem nenhum voto (não listados, apenas contados). */
   semVotos: number;
   /**
@@ -557,6 +562,7 @@ export async function getResultadoLocal(
       eleitos: [],
       suplentes: [],
       renunciantes: [],
+      empate: null,
       semVotos: 0,
       parcial: false,
     };
@@ -613,28 +619,49 @@ export async function getResultadoLocal(
     })
     .sort((a, b) => b.votos - a.votos || a.nome.localeCompare(b.nome));
 
-  // Renúncia: quem não assume sai da fila de eleitos/suplentes e é listado à
-  // parte (com o motivo); a vaga passa automaticamente ao próximo elegível.
+  // Apuração pela função CANÔNICA (mesma do admin) — portal e painel nunca
+  // divergem. Renunciantes saem da fila; empate na linha de corte fica retido
+  // (não é decidido por ordem de nome) e é exposto para o portal avisar.
   const elegiveis = ranked.filter((c) => !c.renunciou);
-  const renunciantes = ranked
-    .filter((c) => c.renunciou)
-    .map((c) => ({ nome: c.nome, votos: c.votos, motivo: c.motivo }));
-  const assentos = Math.min(vagasRestantes, elegiveis.length);
-  const eleitosNovos: CandidatoResultado[] = elegiveis
-    .slice(0, assentos)
-    .map((c) => ({ nome: c.nome, votos: c.votos }));
+  const r = apurarEleitos(ranked, vagasRestantes);
+  const eleitosSet = new Set(r.eleitos);
+  const empatadosSet = new Set(r.empatados);
+
+  const eleitosNovos: CandidatoResultado[] = r.eleitos.map((c) => ({
+    nome: c.nome,
+    votos: c.votos,
+  }));
+  // Suplentes = elegíveis que não foram eleitos nem estão empatados na linha de corte.
   const suplentes: CandidatoResultado[] = elegiveis
-    .slice(assentos)
+    .filter((c) => !eleitosSet.has(c) && !empatadosSet.has(c))
     .map((c) => ({ nome: c.nome, votos: c.votos }));
+  const renunciantes = r.renunciantes.map((c) => ({
+    nome: c.nome,
+    votos: c.votos,
+    motivo: c.motivo,
+  }));
+
+  // Empate na linha de corte: transparência pública do que aguarda desempate.
+  const empate = r.temEmpate
+    ? {
+        votos: r.empatados[0]?.votos ?? 0,
+        vagasEmDisputa: r.vagasEmDisputa,
+        candidatos: r.empatados.map((c) => c.nome),
+      }
+    : null;
+
   // Eleitos finais = preservados (travados) + eleitos da rodada atual.
   const eleitos: CandidatoResultado[] = [...preservados, ...eleitosNovos];
-  const semVotos = Math.max(0, totalCandidatos - ranked.length - preservados.length);
+  const contados =
+    r.eleitos.length + r.empatados.length + suplentes.length + renunciantes.length;
+  const semVotos = Math.max(0, totalCandidatos - contados - preservados.length);
 
   return {
     ...baseVazia,
     eleitos,
     suplentes,
     renunciantes,
+    empate,
     semVotos,
     parcial,
   };
