@@ -204,6 +204,11 @@ export function LocalCard({
                 Empate a resolver
               </span>
             )}
+            {local.semRepresentacao && (
+              <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                Sem representação
+              </span>
+            )}
           </div>
         </div>
 

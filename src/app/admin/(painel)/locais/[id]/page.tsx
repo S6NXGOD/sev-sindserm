@@ -51,6 +51,8 @@ export default async function LocalDetailPage({
       anoEleicao: true,
       voteLimit: true,
       rodadaAtual: true,
+      semRepresentacao: true,
+      semRepresentacaoMotivo: true,
       dataInicioVotacao: true,
       dataFimVotacao: true,
       createdAt: true,
@@ -218,6 +220,8 @@ export default async function LocalDetailPage({
     publicUrl: `${votingBaseUrl}/votacao/${workplace.linkToken}`,
 
     rodadaAtual: workplace.rodadaAtual,
+    semRepresentacao: workplace.semRepresentacao,
+    semRepresentacaoMotivo: workplace.semRepresentacaoMotivo,
     totalCandidatos,
     vagas,
     eleitos: eleitosCombinados,

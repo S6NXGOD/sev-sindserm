@@ -88,6 +88,7 @@ export async function castVote(
       zona: true,
       voteLimit: true,
       rodadaAtual: true,
+      semRepresentacao: true,
       dataInicioVotacao: true,
       dataFimVotacao: true,
     },
@@ -95,6 +96,15 @@ export async function castVote(
 
   if (!workplace) {
     return { status: "error", message: "Local de votação não encontrado." };
+  }
+
+  // Local dispensado pela diretoria (sem representação por decisão) não vota.
+  if (workplace.semRepresentacao) {
+    return {
+      status: "error",
+      message:
+        "Este local foi definido pela diretoria como sem representação — a votação não está disponível.",
+    };
   }
 
   // 2. Validação da janela de votação (data/hora atual).

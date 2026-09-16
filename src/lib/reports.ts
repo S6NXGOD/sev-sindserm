@@ -54,6 +54,8 @@ export type Apuracao = {
   vagasVazias: number;
   /** A diretoria já aceitou as vagas vazias (finalizado sem suplementar)? */
   vagasVaziasAceitas: boolean;
+  /** Local dispensado pela diretoria (sem representação por decisão). */
+  semRepresentacao: boolean;
 };
 
 export type ReportSummary = {
@@ -122,6 +124,7 @@ export async function getReportData(opts: {
       dataInicioVotacao: true,
       dataFimVotacao: true,
       vagasVaziasAceitas: true,
+      semRepresentacao: true,
       rodadaAtual: true,
     },
   });
@@ -304,6 +307,7 @@ export async function getReportData(opts: {
       })),
       vagasVazias: resultado.vagasVazias,
       vagasVaziasAceitas: w.vagasVaziasAceitas,
+      semRepresentacao: w.semRepresentacao,
     };
   });
 

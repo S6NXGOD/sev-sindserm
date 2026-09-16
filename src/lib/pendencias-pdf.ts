@@ -54,7 +54,11 @@ export async function downloadRelatorioPendencias(
     header.logoPleito ? fetchPngDataUrl(header.logoPleito) : null,
   ]);
 
-  const encerrados = data.apuracoes.filter((a) => a.status === "closed");
+  // Locais encerrados; dispensados (sem representação por decisão) saem das
+  // pendências — a diretoria já decidiu não ter representante ali.
+  const encerrados = data.apuracoes.filter(
+    (a) => a.status === "closed" && !a.semRepresentacao,
+  );
   const ord = (a: Item, b: Item) =>
     a.orgao.localeCompare(b.orgao) || a.nome.localeCompare(b.nome);
   const empates = encerrados.filter((a) => a.temEmpate).sort(ord);
@@ -80,6 +84,7 @@ export async function downloadRelatorioPendencias(
     )
     .sort(ord);
   const resolvidos = encerrados.filter((a) => a.vagasVaziasAceitas).length;
+  const dispensados = data.apuracoes.filter((a) => a.semRepresentacao).length;
   const totalPend =
     empates.length + semVoto.length + semEleitoComVoto.length + vagaParcial.length;
 
@@ -171,7 +176,8 @@ export async function downloadRelatorioPendencias(
   doc.setFontSize(9);
   doc.setTextColor(...SLATE);
   doc.text(
-    `${encerrados.length} locais encerrados · ${totalPend} pendência(s) · ${resolvidos} já resolvido(s)`,
+    `${encerrados.length} locais encerrados · ${totalPend} pendência(s) · ${resolvidos} já resolvido(s)` +
+      (dispensados > 0 ? ` · ${dispensados} sem representação` : ""),
     M,
     s.y,
   );

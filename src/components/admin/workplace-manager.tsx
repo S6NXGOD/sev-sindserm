@@ -39,6 +39,7 @@ import {
   previewSuplementar,
   reopenWorkplace,
   setCandidateRenuncia,
+  setSemRepresentacao,
   updateSlug,
   updateVoteLimit,
   updateWorkplaceSchedule,
@@ -110,6 +111,9 @@ export type ManagerData = {
   status: VotingStatus;
   /** Rodada atual (1 = normal; 2+ = suplementar). */
   rodadaAtual: number;
+  /** Local dispensado pela diretoria (sem representação por decisão). */
+  semRepresentacao: boolean;
+  semRepresentacaoMotivo: string | null;
   /** "" quando não há data (input datetime-local em branco). */
   inicioLocal: string;
   fimLocal: string;
@@ -826,6 +830,108 @@ function ClosedLocalActions({ data }: { data: ManagerData }) {
   );
 }
 
+/**
+ * Dispensa (opt-out): a diretoria declara que o local NÃO terá representação
+ * (não será visitado / os servidores não querem o sindicato ali). Sai das
+ * pendências e não recebe votos. Reversível, com motivo público.
+ */
+function DispensarLocalForm({ data }: { data: ManagerData }) {
+  const [state, formAction] = useFormState(
+    setSemRepresentacao,
+    initialActionState,
+  );
+  const [open, setOpen] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  useToastState(state);
+
+  useEffect(() => {
+    if (state.status === "success") setOpen(false);
+  }, [state]);
+
+  if (data.semRepresentacao) {
+    // Já dispensado: mostra o estado + reverter (clique direto).
+    return (
+      <div className="rounded-lg border border-slate-300 bg-slate-50 p-4">
+        <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-800">
+          <Ban className="h-4 w-4" />
+          Local sem representação (dispensado)
+        </div>
+        <p className="mb-3 text-xs text-muted-foreground">
+          {data.semRepresentacaoMotivo
+            ? `Motivo: ${data.semRepresentacaoMotivo}`
+            : "A diretoria definiu que este local não terá representante."}{" "}
+          Ele não aparece nas pendências e não recebe votos.
+        </p>
+        <form action={formAction}>
+          <input type="hidden" name="id" value={data.id} />
+          <input type="hidden" name="dispensar" value="false" />
+          <PendingButton type="submit" size="sm" variant="outline">
+            <Undo2 className="mr-2 h-4 w-4" />
+            Voltar ao processo normal
+          </PendingButton>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+      <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700">
+        <Ban className="h-4 w-4" />
+        Sem representação (dispensar local)
+      </div>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Use quando este local <strong>não será visitado</strong> ou os servidores
+        optaram por <strong>não ter representante</strong> do sindicato. O local
+        sai das pendências e não recebe votos. É reversível.
+      </p>
+      <div className="space-y-2">
+        <Label htmlFor="dispMotivo" className="text-xs">
+          Motivo (aparece no histórico público)
+        </Label>
+        <textarea
+          id="dispMotivo"
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          rows={2}
+          maxLength={300}
+          placeholder="Ex.: Servidores optaram por não ter representante; local não será visitado nesta gestão."
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-slate-400"
+        />
+      </div>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button type="button" size="sm" variant="outline" className="mt-2">
+            <Ban className="mr-2 h-4 w-4" />
+            Marcar como sem representação
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Dispensar {data.nome}?</DialogTitle>
+            <DialogDescription>
+              O local será marcado como <strong>sem representação</strong>: sai
+              das pendências, não recebe votos e aparece assim na transparência.
+              Você pode reverter a qualquer momento.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <form action={formAction}>
+              <input type="hidden" name="id" value={data.id} />
+              <input type="hidden" name="dispensar" value="true" />
+              <input type="hidden" name="motivo" value={motivo} />
+              <PendingButton type="submit">Confirmar dispensa</PendingButton>
+            </form>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 function CandidateRow({
   candidate,
   eleito,
@@ -1453,6 +1559,8 @@ export function WorkplaceManager({ data }: { data: ManagerData }) {
                 <EncerrarVotacaoButton data={data} />
               </div>
             )}
+            <Separator />
+            <DispensarLocalForm data={data} />
           </CardContent>
         </Card>
 

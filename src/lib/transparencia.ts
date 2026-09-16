@@ -73,6 +73,8 @@ export type TransparenciaLocal = {
   rodadaAtual: number;
   /** true = encerrado COM empate na linha de corte (aguarda desempate). */
   temEmpate: boolean;
+  /** true = local dispensado pela diretoria (sem representação por decisão). */
+  semRepresentacao: boolean;
   /** null quando a votação ainda não foi agendada (status "undefined"). */
   dataInicio: string | null;
   dataFim: string | null;
@@ -198,6 +200,7 @@ export async function getTransparenciaData(
           orgao: true,
           zona: true,
           rodadaAtual: true,
+          semRepresentacao: true,
           dataInicioVotacao: true,
           dataFimVotacao: true,
           _count: { select: { voters: true, candidates: true } },
@@ -255,6 +258,7 @@ export async function getTransparenciaData(
     vagas: calcularVagas(w._count.candidates),
     rodadaAtual: w.rodadaAtual,
     temEmpate: false,
+    semRepresentacao: w.semRepresentacao,
     dataInicio: w.dataInicioVotacao?.toISOString() ?? null,
     dataFim: w.dataFimVotacao?.toISOString() ?? null,
   }));

@@ -93,7 +93,10 @@ export default async function EncerradasPage({
 
   const totalEleitos = data.apuracoes.reduce((s, a) => s + a.eleitos.length, 0);
   const totalVotos = data.apuracoes.reduce((s, a) => s + a.totalVotos, 0);
-  const empates = data.apuracoes.filter((a) => a.temEmpate);
+  // Locais dispensados (sem representação por decisão) saem dos painéis de
+  // pendência — a diretoria já decidiu não ter representante ali.
+  const pendentesBase = data.apuracoes.filter((a) => !a.semRepresentacao);
+  const empates = pendentesBase.filter((a) => a.temEmpate);
   // Vagas sem eleito: separa o que ainda precisa de DECISÃO do que já foi
   // finalizado (aceito) — vaga vazia costuma ser natural, não obriga suplementar.
   const toVagaItem = (a: (typeof data.apuracoes)[number]) => ({
@@ -107,10 +110,10 @@ export default async function EncerradasPage({
     semEleito: a.eleitos.length === 0,
     totalVotos: a.totalVotos,
   });
-  const vagaVaziaPendentes = data.apuracoes
+  const vagaVaziaPendentes = pendentesBase
     .filter((a) => a.vagasVazias > 0 && !a.vagasVaziasAceitas)
     .map(toVagaItem);
-  const vagaVaziaAceitas = data.apuracoes
+  const vagaVaziaAceitas = pendentesBase
     .filter((a) => a.vagasVazias > 0 && a.vagasVaziasAceitas)
     .map(toVagaItem);
   // Encerrados SEM NENHUM eleito ainda pendentes de decisão (para o botão fácil).

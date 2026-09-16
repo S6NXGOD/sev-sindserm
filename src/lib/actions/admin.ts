@@ -716,6 +716,70 @@ export async function setVagasVaziasAceitas(
 }
 
 /**
+ * DISPENSA (opt-out) de um local: a diretoria declara que ele NÃO terá
+ * representação (não será visitado / os servidores optaram por não ter
+ * representante do sindicato ali). O local sai das pendências/alertas e não
+ * recebe votos. Reversível; registrado na auditoria e na linha do tempo.
+ */
+export async function setSemRepresentacao(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const g = await guard("locais", "EDIT");
+  if ("error" in g) return { status: "error", message: g.error };
+
+  const id = String(formData.get("id") ?? "").trim();
+  const dispensar = String(formData.get("dispensar") ?? "") === "true";
+  const motivo = String(formData.get("motivo") ?? "").trim().slice(0, 300);
+  if (!id) return { status: "error", message: "Local inválido." };
+
+  const wp = await prisma.workplace.findUnique({
+    where: { id },
+    select: { nome: true, anoEleicao: true, rodadaAtual: true },
+  });
+  if (!wp) return { status: "error", message: "Local não encontrado." };
+
+  await prisma.workplace.update({
+    where: { id },
+    data: {
+      semRepresentacao: dispensar,
+      semRepresentacaoMotivo: dispensar ? motivo || null : null,
+    },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/locais");
+  revalidatePath(`/admin/locais/${id}`);
+  revalidatePath("/admin/encerradas");
+  await registrarAuditoria(
+    dispensar ? "DISPENSOU_LOCAL" : "REVERTEU_DISPENSA",
+    { alvo: wp.nome, detalhe: dispensar ? motivo || undefined : undefined, user: g.user },
+  );
+  await registrarEventoLocalSafe(prisma, {
+    workplaceId: id,
+    anoEleicao: wp.anoEleicao,
+    rodada: wp.rodadaAtual,
+    tipo: "DISPENSA",
+    titulo: dispensar
+      ? "Local dispensado (sem representação)"
+      : "Dispensa revertida",
+    detalhe: dispensar
+      ? motivo
+        ? `Motivo: ${motivo}`
+        : "Sem motivo informado."
+      : "O local volta ao processo normal.",
+    autorNome: g.user.nome,
+  });
+
+  return {
+    status: "success",
+    message: dispensar
+      ? `"${wp.nome}" marcado como SEM representação.`
+      : `"${wp.nome}" voltou ao processo normal.`,
+  };
+}
+
+/**
  * Prévia da suplementar: mostra à diretoria QUEM seria preservado (eleitos da
  * rodada atual, travados) e QUANTAS vagas ficariam para a nova rodada — ANTES
  * de confirmar. Só leitura; não altera nada. Local precisa estar ENCERRADO.

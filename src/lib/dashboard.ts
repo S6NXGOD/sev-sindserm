@@ -196,7 +196,7 @@ export async function getDashboardData(
       select: { id: true, nome: true, zona: true },
     }),
     prisma.workplace.findMany({
-      where: { anoEleicao, candidates: { none: {} } },
+      where: { anoEleicao, semRepresentacao: false, candidates: { none: {} } },
       select: { id: true, nome: true },
       take: 50,
     }),

@@ -208,6 +208,13 @@ model Workplace {
   // aceita, o local some do painel "Vagas sem eleito". Reset ao reabrir.
   vagasVaziasAceitas Boolean @default(false)
 
+  // DISPENSA (opt-out): a diretoria declarou que este local NÃO terá
+  // representação — não será visitado ou os servidores optaram por não ter
+  // representante do sindicato ali. Some das pendências/alertas e não recebe
+  // votos. `semRepresentacaoMotivo` guarda a justificativa (pública). Reversível.
+  semRepresentacao       Boolean @default(false)
+  semRepresentacaoMotivo String?
+
   // RASTRO DE AÇÕES (denormalizado, para mostrar "quem fez" direto no local):
   // guarda o AUTOR e o HORÁRIO das ações que definem o estado do local. O nome é
   // desnormalizado (sobrevive à exclusão do usuário); o id serve para buscar a

@@ -21,7 +21,8 @@ export type TipoEvento =
   | "REABERTURA"
   | "SUPLEMENTAR"
   | "RENUNCIA"
-  | "RODADA_ENCERRADA";
+  | "RODADA_ENCERRADA"
+  | "DISPENSA";
 
 type EventoInput = {
   workplaceId: string;
