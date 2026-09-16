@@ -17,21 +17,25 @@ async function fetchPngDataUrl(url: string): Promise<string | null> {
   }
 }
 
-const RED: [number, number, number] = [193, 39, 45];
-const AMBER: [number, number, number] = [180, 83, 9];
-const ROSE: [number, number, number] = [190, 40, 40];
-const SLATE: [number, number, number] = [100, 116, 139];
-const GREEN: [number, number, number] = [16, 122, 76];
+type RGB = [number, number, number];
+const RED: RGB = [193, 39, 45];
+const AMBER: RGB = [180, 83, 9];
+const AMBER_SOFT: RGB = [254, 243, 219];
+const ROSE: RGB = [190, 40, 40];
+const ROSE_SOFT: RGB = [253, 232, 232];
+const SLATE: RGB = [71, 85, 105];
+const SLATE_SOFT: RGB = [241, 245, 249];
+const GREEN: RGB = [16, 122, 76];
+const INK: RGB = [30, 41, 59];
 
-// Limite de itens listados por seção (evita PDF gigante).
-const CAP = 300;
+const CAP = 400;
 
 type Item = Apuracao;
 
 /**
- * RELATÓRIO DE PENDÊNCIAS E AJUSTES (para a diretoria decidir). Agrupa os locais
- * ENCERRADOS que precisam de decisão — empates, sem votação, sem eleito e vaga
- * parcial — com a AÇÃO RECOMENDADA de cada caso. Gera 100% no cliente (jsPDF).
+ * RELATÓRIO DE PENDÊNCIAS E AJUSTES — redesenhado para SCANNABILIDADE: um painel
+ * de resumo com contadores coloridos, e cada categoria com a AÇÃO uma única vez
+ * + a lista dos locais em linhas alternadas (zebra). Gera 100% no cliente.
  */
 export async function downloadRelatorioPendencias(
   data: ReportData,
@@ -41,20 +45,18 @@ export async function downloadRelatorioPendencias(
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const marginX = 44;
-  const bottom = pageHeight - 54;
-  const contentW = pageWidth - marginX * 2;
+  const M = 44;
+  const bottom = pageHeight - 52;
+  const W = pageWidth - M * 2;
 
   const [logoSind, logoPleito] = await Promise.all([
     fetchPngDataUrl(header.logoSindserm),
     header.logoPleito ? fetchPngDataUrl(header.logoPleito) : null,
   ]);
 
-  // ---- BUCKETS (só encerrados; exclui os já resolvidos onde faz sentido) ------
   const encerrados = data.apuracoes.filter((a) => a.status === "closed");
   const ord = (a: Item, b: Item) =>
     a.orgao.localeCompare(b.orgao) || a.nome.localeCompare(b.nome);
-
   const empates = encerrados.filter((a) => a.temEmpate).sort(ord);
   const semVoto = encerrados
     .filter((a) => !a.temEmpate && a.totalVotos === 0 && !a.vagasVaziasAceitas)
@@ -78,35 +80,29 @@ export async function downloadRelatorioPendencias(
     )
     .sort(ord);
   const resolvidos = encerrados.filter((a) => a.vagasVaziasAceitas).length;
-  const pendencias =
+  const totalPend =
     empates.length + semVoto.length + semEleitoComVoto.length + vagaParcial.length;
 
-  // ---- Cabeçalho institucional (faixa vermelha + logos) -----------------------
-  const desenharTopo = () => {
-    doc.setFillColor(RED[0], RED[1], RED[2]);
+  // ---------------------------- Cabeçalho -----------------------------------
+  const topo = () => {
+    doc.setFillColor(...RED);
     doc.rect(0, 0, pageWidth, 92, "F");
-    const drawLogo = (
-      dataUrl: string,
-      x: number,
-      maxW: number,
-      maxH: number,
-      rightAlign = false,
-    ) => {
+    const logo = (u: string, x: number, mw: number, mh: number, right = false) => {
       try {
-        const props = doc.getImageProperties(dataUrl);
-        const scale = Math.min(maxW / props.width, maxH / props.height);
-        const w = props.width * scale;
-        const h = props.height * scale;
-        const px = rightAlign ? x - w : x;
+        const p = doc.getImageProperties(u);
+        const sc = Math.min(mw / p.width, mh / p.height);
+        const w = p.width * sc;
+        const h = p.height * sc;
+        const px = right ? x - w : x;
         doc.setFillColor(255, 255, 255);
-        doc.roundedRect(px - 6, 20 - 6 + (maxH - h) / 2, w + 12, h + 12, 6, 6, "F");
-        doc.addImage(dataUrl, px, 20 + (maxH - h) / 2, w, h);
+        doc.roundedRect(px - 6, 20 - 6 + (mh - h) / 2, w + 12, h + 12, 6, 6, "F");
+        doc.addImage(u, px, 20 + (mh - h) / 2, w, h);
       } catch {
-        /* logo inválida: ignora */
+        /* ignora */
       }
     };
-    if (logoSind) drawLogo(logoSind, marginX, 120, 52);
-    if (logoPleito) drawLogo(logoPleito, pageWidth - marginX, 48, 48, true);
+    if (logoSind) logo(logoSind, M, 120, 52);
+    if (logoPleito) logo(logoPleito, pageWidth - M, 48, 48, true);
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
@@ -120,206 +116,252 @@ export async function downloadRelatorioPendencias(
     doc.text(`Gerado em ${header.geradoEm}`, pageWidth / 2, 74, {
       align: "center",
     });
-    doc.setTextColor(20);
+    doc.setTextColor(...INK);
   };
-  desenharTopo();
+  topo();
 
   const s = { y: 112 };
-  const ensureSpace = (need: number) => {
+  const ensure = (need: number) => {
     if (s.y + need > bottom) {
       doc.addPage();
-      desenharTopo();
+      topo();
       s.y = 112;
     }
   };
-  const par = (t: string, size = 9.5, cor = 70, x = marginX, indent = 0) => {
-    for (const ln of doc.splitTextToSize(t, contentW - indent) as string[]) {
-      ensureSpace(13);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(size);
-      doc.setTextColor(cor);
-      doc.text(ln, x + indent, s.y);
-      s.y += 12;
-    }
-    doc.setTextColor(20);
+  const wrap = (t: string, size: number, maxW: number): string[] => {
+    doc.setFontSize(size);
+    return doc.splitTextToSize(t, maxW) as string[];
   };
+
+  // Título do pleito + intro curta.
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12.5);
+  doc.setTextColor(...INK);
+  for (const ln of wrap(header.tituloPleito, 12.5, W)) {
+    doc.text(ln, M, s.y);
+    s.y += 15;
+  }
+  s.y += 2;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(90);
+  for (const ln of wrap(
+    "Locais ENCERRADOS que precisam de decisão da diretoria. Cada categoria traz a ação recomendada uma vez, seguida dos locais. Registre as decisões em ata.",
+    9,
+    W,
+  )) {
+    doc.text(ln, M, s.y);
+    s.y += 11;
+  }
+  s.y += 8;
+
+  // ---------------------- Painel de resumo (stat cards) ----------------------
+  const stats: { n: number; label: string; cor: RGB; soft: RGB }[] = [
+    { n: empates.length, label: "Empates", cor: AMBER, soft: AMBER_SOFT },
+    { n: semVoto.length, label: "Sem votação", cor: ROSE, soft: ROSE_SOFT },
+    { n: semEleitoComVoto.length, label: "Votos, sem eleito", cor: ROSE, soft: ROSE_SOFT },
+    { n: vagaParcial.length, label: "Vaga parcial", cor: SLATE, soft: SLATE_SOFT },
+  ];
+  const gap = 10;
+  const cw = (W - gap * 3) / 4;
+  const ch = 52;
+  ensure(ch + 26);
+  // Faixa de contexto.
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(...SLATE);
+  doc.text(
+    `${encerrados.length} locais encerrados · ${totalPend} pendência(s) · ${resolvidos} já resolvido(s)`,
+    M,
+    s.y,
+  );
+  s.y += 10;
+  stats.forEach((st, i) => {
+    const x = M + i * (cw + gap);
+    doc.setFillColor(...st.soft);
+    doc.roundedRect(x, s.y, cw, ch, 6, 6, "F");
+    doc.setFillColor(...st.cor);
+    doc.roundedRect(x, s.y, 4, ch, 2, 2, "F"); // faixa lateral colorida
+    doc.setTextColor(...st.cor);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text(String(st.n), x + 12, s.y + 26);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...INK);
+    for (const [j, ln] of (doc.splitTextToSize(st.label, cw - 18) as string[])
+      .slice(0, 2)
+      .entries()) {
+      doc.text(ln, x + 12, s.y + 38 + j * 9);
+    }
+  });
+  s.y += ch + 14;
+  doc.setTextColor(...INK);
+
+  // --------------------------- Renderer de seção -----------------------------
   const secao = (
     titulo: string,
-    cor: [number, number, number],
-    qtd: number,
+    cor: RGB,
+    soft: RGB,
+    itens: Item[],
+    acaoTexto: string,
+    linha: (a: Item) => { diag: string },
   ) => {
-    s.y += 8;
-    ensureSpace(30);
-    doc.setFillColor(cor[0], cor[1], cor[2]);
-    doc.roundedRect(marginX, s.y - 12, contentW, 22, 4, 4, "F");
+    s.y += 10;
+    ensure(30);
+    // Cabeçalho da seção (barra colorida).
+    doc.setFillColor(...cor);
+    doc.roundedRect(M, s.y - 12, W, 22, 4, 4, "F");
     doc.setTextColor(255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
-    doc.text(`${titulo} (${qtd})`, marginX + 10, s.y + 3);
-    doc.setTextColor(20);
-    s.y += 26;
-  };
-  const localHead = (a: Item) => {
-    ensureSpace(28);
+    doc.text(`${titulo}`, M + 10, s.y + 3);
+    doc.text(`${itens.length}`, pageWidth - M - 10, s.y + 3, { align: "right" });
+    doc.setTextColor(...INK);
+    s.y += 24;
+
+    if (itens.length === 0) {
+      ensure(16);
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(9.5);
+      doc.setTextColor(...GREEN);
+      doc.text("Nenhum — tudo certo aqui.", M + 2, s.y);
+      doc.setTextColor(...INK);
+      s.y += 16;
+      return;
+    }
+
+    // AÇÃO — uma única vez, em caixa suave (não repete por local).
+    const acaoLns = wrap(acaoTexto, 9, W - 24);
+    const acaoH = 16 + acaoLns.length * 11;
+    ensure(acaoH + 6);
+    doc.setFillColor(...soft);
+    doc.roundedRect(M, s.y, W, acaoH, 5, 5, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.5);
-    doc.setTextColor(20);
-    doc.text(
-      (doc.splitTextToSize(a.nome, contentW) as string[])[0],
-      marginX,
-      s.y,
-    );
-    s.y += 13;
+    doc.setFontSize(8.5);
+    doc.setTextColor(...cor);
+    doc.text("O QUE FAZER", M + 12, s.y + 13);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    doc.setTextColor(SLATE[0], SLATE[1], SLATE[2]);
-    doc.text(
-      `${a.orgao} · Zona ${a.zona}${a.rodadaAtual > 1 ? ` · ${a.rodadaAtual}ª rodada` : ""}`,
-      marginX,
-      s.y,
-    );
-    doc.setTextColor(20);
-    s.y += 13;
-  };
-  const acao = (t: string) => {
-    ensureSpace(14);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(GREEN[0], GREEN[1], GREEN[2]);
-    doc.text("Ação recomendada:", marginX, s.y);
-    doc.setTextColor(20);
-    s.y += 11;
-    par(t, 9, 70, marginX, 0);
-    s.y += 4;
-  };
-  const vazio = () => {
-    ensureSpace(14);
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(9.5);
-    doc.setTextColor(GREEN[0], GREEN[1], GREEN[2]);
-    doc.text("Nenhum — tudo certo aqui.", marginX + 2, s.y);
-    doc.setTextColor(20);
-    s.y += 16;
+    doc.setTextColor(60);
+    let ay = s.y + 25;
+    for (const ln of acaoLns) {
+      doc.text(ln, M + 12, ay);
+      ay += 11;
+    }
+    doc.setTextColor(...INK);
+    s.y += acaoH + 10;
+
+    // Lista dos locais (zebra).
+    itens.slice(0, CAP).forEach((a, i) => {
+      const meta = `${a.orgao} · Zona ${a.zona}${a.rodadaAtual > 1 ? ` · ${a.rodadaAtual}ª rodada` : ""}`;
+      const diag = linha(a).diag;
+      const diagLns = wrap(diag, 8.5, W - 24);
+      const rowH = 26 + diagLns.length * 10;
+      ensure(rowH + 2);
+      if (i % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(M, s.y - 2, W, rowH, 3, 3, "F");
+      }
+      // acento lateral
+      doc.setFillColor(...cor);
+      doc.roundedRect(M, s.y - 1, 3, rowH - 2, 1.5, 1.5, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(...INK);
+      doc.text(wrap(a.nome, 10, W - 24)[0], M + 12, s.y + 10);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(...SLATE);
+      doc.text(meta, M + 12, s.y + 20);
+      doc.setFontSize(8.5);
+      doc.setTextColor(70);
+      let dy = s.y + 30;
+      for (const ln of diagLns) {
+        doc.text(ln, M + 12, dy);
+        dy += 10;
+      }
+      doc.setTextColor(...INK);
+      s.y += rowH + 3;
+    });
+    if (itens.length > CAP) {
+      ensure(12);
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8.5);
+      doc.setTextColor(...SLATE);
+      doc.text(`+ ${itens.length - CAP} local(is) não listado(s).`, M + 12, s.y);
+      doc.setTextColor(...INK);
+      s.y += 12;
+    }
   };
 
-  // ---- Abertura + resumo ------------------------------------------------------
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.text(
-    doc.splitTextToSize(header.tituloPleito, contentW) as string[],
-    marginX,
-    s.y,
+  // ------------------------------ Seções -------------------------------------
+  secao(
+    "EMPATES A DESEMPATAR",
+    AMBER,
+    AMBER_SOFT,
+    empates,
+    "Desempate pela Diretoria Colegiada (Art. 24 do Regimento), registrado em ata. Depois, no sistema, abra o local e marque quem NÃO assume (motivo: Desempate) — o suplente é promovido automaticamente.",
+    (a) => ({
+      diag: `${a.empatados.length} empatados com ${a.empatadosVotos ?? 0} voto(s) cada, por ${a.vagasEmDisputa} vaga(s): ${a.empatados.join(", ")}.`,
+    }),
   );
-  s.y += 18;
-  par(
-    "Este relatório reúne os locais de votação JÁ ENCERRADOS que precisam de uma decisão da diretoria, " +
-      "agrupados por tipo, com a ação recomendada para cada caso. Serve de base para deliberação e registro em ata.",
-    9.5,
-    70,
+
+  secao(
+    "ENCERRADOS SEM NENHUMA VOTAÇÃO",
+    ROSE,
+    ROSE_SOFT,
+    semVoto,
+    "Sem votos. Avalie: reabrir/abrir suplementar com nova convocação; eleição por aclamação no local (Art. 9º-b), com ata; ou manter sem representante, registrando a decisão.",
+    (a) => ({
+      diag:
+        a.totalCandidatos === 0
+          ? "Sem candidatos cadastrados e sem votos."
+          : `${a.totalCandidatos} candidato(s), mas nenhum voto registrado.`,
+    }),
   );
-  s.y += 4;
 
-  secao("RESUMO", [30, 41, 59], pendencias);
-  const linhaResumo = (label: string, n: number) => {
-    ensureSpace(15);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(label, marginX + 4, s.y);
-    doc.setFont("helvetica", "bold");
-    doc.text(String(n), pageWidth - marginX - 4, s.y, { align: "right" });
-    s.y += 14;
-  };
-  linhaResumo("Locais encerrados", encerrados.length);
-  linhaResumo("Empates a desempatar", empates.length);
-  linhaResumo("Encerrados sem nenhuma votação", semVoto.length);
-  linhaResumo("Encerrados com votos, mas sem eleito", semEleitoComVoto.length);
-  linhaResumo("Com vaga(s) sem eleito (parcial)", vagaParcial.length);
-  linhaResumo("Já resolvidos (vagas vazias aceitas)", resolvidos);
-  s.y += 2;
+  secao(
+    "ENCERRADOS COM VOTOS, MAS SEM ELEITO",
+    ROSE,
+    ROSE_SOFT,
+    semEleitoComVoto,
+    "Houve votos, mas ninguém assumiu (renúncias). Avalie abrir suplementar ou registrar a decisão de manter sem representante.",
+    (a) => ({
+      diag: `${a.totalVotos} voto(s); nenhum candidato assumiu.${a.renunciantes.length ? ` Não assumiram: ${a.renunciantes.map((r) => r.nome).join(", ")}.` : ""}`,
+    }),
+  );
 
-  // ---- 1) Empates -------------------------------------------------------------
-  secao("EMPATES A DESEMPATAR", AMBER, empates.length);
-  if (empates.length === 0) vazio();
-  empates.slice(0, CAP).forEach((a) => {
-    localHead(a);
-    const nomes = a.empatados.join(", ");
-    par(
-      `${a.empatados.length} candidato(s) empatados com ${a.empatadosVotos ?? 0} voto(s) cada, ` +
-        `disputando ${a.vagasEmDisputa} vaga(s): ${nomes}.`,
-      9.5,
-      40,
-    );
-    acao(
-      "Desempate conforme o estatuto/Art. 24 do Regimento (Diretoria Colegiada), registrado em ata. " +
-        "Depois, abra o local e marque quem NÃO assume (motivo: Desempate) — o suplente é promovido automaticamente.",
-    );
-  });
+  secao(
+    "COM VAGA(S) SEM ELEITO (PARCIAL)",
+    SLATE,
+    SLATE_SOFT,
+    vagaParcial,
+    "Vaga vazia costuma ser natural (menos candidatos/votos que vagas). Avalie abrir suplementar para as restantes OU aceitar as vagas vazias (finaliza) — a decisão fica registrada.",
+    (a) => ({
+      diag: `Elegeu ${a.eleitos.length} de ${a.vagas} vaga(s); ${a.vagasVazias} sem eleito. Eleitos: ${a.eleitos.slice(0, 6).join(", ")}${a.eleitos.length > 6 ? "…" : ""}.`,
+    }),
+  );
 
-  // ---- 2) Sem votação ---------------------------------------------------------
-  secao("ENCERRADOS SEM NENHUMA VOTAÇÃO", ROSE, semVoto.length);
-  if (semVoto.length === 0) vazio();
-  semVoto.slice(0, CAP).forEach((a) => {
-    localHead(a);
-    par(
-      a.totalCandidatos === 0
-        ? "Encerrou sem candidatos cadastrados e sem votos."
-        : `${a.totalCandidatos} candidato(s) cadastrado(s), mas nenhum voto foi registrado.`,
-      9.5,
-      40,
-    );
-    acao(
-      "Sem votos. Avalie: (a) reabrir/abrir nova rodada (suplementar) com nova convocação; " +
-        "(b) eleição por aclamação no local de trabalho (Art. 9º-b), com ata; ou (c) manter sem representante, registrando a decisão.",
-    );
-  });
-
-  // ---- 3) Com votos, sem eleito ----------------------------------------------
-  secao("ENCERRADOS COM VOTOS, MAS SEM ELEITO", ROSE, semEleitoComVoto.length);
-  if (semEleitoComVoto.length === 0) vazio();
-  semEleitoComVoto.slice(0, CAP).forEach((a) => {
-    localHead(a);
-    const renunc = a.renunciantes.length
-      ? ` Não assumiram: ${a.renunciantes.map((r) => r.nome).join(", ")}.`
-      : "";
-    par(
-      `Houve ${a.totalVotos} voto(s), mas nenhum candidato assumiu a vaga.${renunc}`,
-      9.5,
-      40,
-    );
-    acao(
-      "Avalie abrir uma suplementar (nova rodada) para preencher a(s) vaga(s), ou registrar a decisão de manter sem representante.",
-    );
-  });
-
-  // ---- 4) Vaga parcial --------------------------------------------------------
-  secao("COM VAGA(S) SEM ELEITO (PARCIAL)", SLATE, vagaParcial.length);
-  if (vagaParcial.length === 0) vazio();
-  vagaParcial.slice(0, CAP).forEach((a) => {
-    localHead(a);
-    par(
-      `Elegeu ${a.eleitos.length} de ${a.vagas} vaga(s); ${a.vagasVazias} vaga(s) sem eleito. ` +
-        `Eleitos: ${a.eleitos.slice(0, 8).join(", ")}${a.eleitos.length > 8 ? "…" : ""}.`,
-      9.5,
-      40,
-    );
-    acao(
-      "Vaga vazia costuma ser natural (menos candidatos/votos que vagas). Avalie abrir suplementar para as vagas restantes " +
-        "OU aceitar as vagas vazias (finaliza sem suplementar) — a decisão fica registrada.",
-    );
-  });
-
-  // ---- Rodapé institucional ---------------------------------------------------
-  s.y += 8;
-  ensureSpace(24);
+  // ------------------------------ Rodapé -------------------------------------
+  s.y += 10;
+  ensure(24);
   doc.setDrawColor(210);
-  doc.line(marginX, s.y, pageWidth - marginX, s.y);
+  doc.line(M, s.y, pageWidth - M, s.y);
   s.y += 12;
-  par(
-    "Documento interno de apoio à decisão da Diretoria Colegiada do SINDSERM. Reflete os dados no momento da geração e " +
-      "não substitui a ata oficial da comissão eleitoral. As decisões tomadas devem ser registradas em ata.",
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(120);
+  for (const ln of wrap(
+    "Documento interno de apoio à decisão da Diretoria Colegiada do SINDSERM. Reflete os dados no momento da geração e não substitui a ata oficial da comissão eleitoral. As decisões devem ser registradas em ata.",
     8,
-    120,
-  );
+    W,
+  )) {
+    ensure(11);
+    doc.text(ln, M, s.y);
+    s.y += 10;
+  }
+  doc.setTextColor(...INK);
 
   doc.save(
     `pendencias-pleito-${header.tituloPleito.match(/\d{4}/)?.[0] ?? "sindserm"}.pdf`,

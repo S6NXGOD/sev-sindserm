@@ -58,7 +58,7 @@ function LocalInfo({ item }: { item: VagaVaziaItem }) {
       <p className="flex flex-wrap items-center gap-2 font-semibold leading-tight">
         <span>{item.nome}</span>
         {item.semEleito && (
-          <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+          <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700">
             Nenhum eleito
           </span>
         )}
@@ -178,71 +178,74 @@ export function VagasVaziasPanel({
   return (
     <section
       id="vagas-sem-eleito"
-      className="scroll-mt-20 rounded-xl border-2 border-amber-300 bg-amber-50 shadow-sm"
+      className="sev-rise scroll-mt-20 overflow-hidden rounded-2xl border bg-card shadow-sm"
     >
-      <div className="flex flex-wrap items-center gap-2 border-b border-amber-200 p-4">
-        <Scale className="h-5 w-5 shrink-0 text-amber-600" />
-        <h2 className="text-base font-bold text-amber-900">Vagas sem eleito</h2>
-        {pendentes.length > 0 && (
-          <span className="rounded-full border border-amber-400 bg-white px-2 py-0.5 text-xs font-semibold text-amber-800">
-            {pendentes.length} a decidir
+      <div className="border-b bg-amber-50/70 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+            <Scale className="h-5 w-5" />
           </span>
-        )}
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-bold text-amber-900">Vagas sem eleito</h2>
+            <p className="text-xs text-amber-700">
+              {pendentes.length > 0
+                ? `${pendentes.length} a decidir`
+                : "Nenhuma decisão pendente"}
+            </p>
+          </div>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-amber-800">
+          Estes locais encerraram com menos eleitos que vagas — muitas vezes é{" "}
+          <strong>natural</strong>. Para cada um:{" "}
+          <strong>Manter assim</strong> (finaliza) ou{" "}
+          <strong>Agendar suplementar</strong> (cadastre novos candidatos e
+          reabra a votação para as vagas restantes).
+        </p>
       </div>
 
       {pendentes.length > 0 ? (
-        <>
-          <p className="px-4 pt-3 text-xs text-amber-800">
-            Estes locais encerraram com menos eleitos que vagas — muitas vezes é{" "}
-            <strong>natural</strong> (menos candidatos ou votos que vagas). Para
-            cada um, decida:
-          </p>
-          <ul className="divide-y divide-amber-200">
-            {pendentesOrdenados.map((item) => (
-              <li key={item.id} className="p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <LocalInfo item={item} />
-                  <div className="flex flex-col gap-2 sm:flex-row sm:shrink-0">
-                    <ManterAssimDialog item={item} />
-                    <Button
-                      asChild
-                      size="sm"
-                      variant="outline"
-                      className="w-full sm:w-auto"
-                    >
-                      <Link href={`/admin/locais/${item.id}`}>
-                        <CalendarPlus className="mr-2 h-4 w-4" />
-                        Agendar suplementar
-                      </Link>
-                    </Button>
-                  </div>
+        <ul className="sev-stagger divide-y">
+          {pendentesOrdenados.map((item) => (
+            <li
+              key={item.id}
+              className={`p-4 ${item.semEleito ? "border-l-4 border-l-rose-400" : "border-l-4 border-l-amber-300"}`}
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <LocalInfo item={item} />
+                <div className="flex flex-col gap-2 sm:flex-row sm:shrink-0">
+                  <ManterAssimDialog item={item} />
+                  <Button
+                    asChild
+                    size="sm"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                  >
+                    <Link href={`/admin/locais/${item.id}`}>
+                      <CalendarPlus className="mr-2 h-4 w-4" />
+                      Agendar suplementar
+                    </Link>
+                  </Button>
                 </div>
-              </li>
-            ))}
-          </ul>
-          <p className="border-t border-amber-200 p-4 text-xs text-amber-800">
-            <strong>Agendar suplementar</strong> só é necessário quando você quer
-            preencher as vagas que sobraram: cadastre novos candidatos no local e
-            reabra/reagende a votação.
-          </p>
-        </>
+              </div>
+            </li>
+          ))}
+        </ul>
       ) : (
-        <p className="p-4 text-sm text-amber-800">
-          Nenhuma decisão pendente — todos os locais com vaga sem eleito já foram
-          finalizados.
+        <p className="p-4 text-sm text-muted-foreground">
+          Todos os locais com vaga sem eleito já foram finalizados.
         </p>
       )}
 
       {/* Finalizados sem suplementar (recolhível, reversível). */}
       {aceitas.length > 0 && (
-        <div className="border-t border-amber-200">
+        <div className="border-t bg-slate-50/60">
           <button
             type="button"
             onClick={() => setVerAceitas((v) => !v)}
-            className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-xs font-semibold text-amber-900 hover:bg-amber-100/50"
+            className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100/60"
           >
             <span className="flex items-center gap-1.5">
-              <Check className="h-4 w-4" />
+              <Check className="h-4 w-4 text-emerald-600" />
               {aceitas.length} finalizado(s) sem suplementar
             </span>
             {verAceitas ? (
@@ -252,7 +255,7 @@ export function VagasVaziasPanel({
             )}
           </button>
           {verAceitas && (
-            <ul className="divide-y divide-amber-200 border-t border-amber-200">
+            <ul className="divide-y border-t">
               {aceitas.map((item) => (
                 <li key={item.id} className="p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
