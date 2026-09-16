@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ApuracoesList } from "@/components/admin/apuracoes-list";
 import { ApuracaoPdfButton } from "@/components/admin/apuracao-pdf-button";
+import { RelatorioPendenciasButton } from "@/components/admin/relatorio-pendencias-button";
 import { EmpatesPanel } from "@/components/admin/empates-panel";
 import { VagasVaziasPanel } from "@/components/admin/vagas-vazias-panel";
 import { ExportEleitosButton } from "@/components/admin/export-eleitos-button";
@@ -204,6 +205,9 @@ export default async function EncerradasPage({
         <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:flex-wrap sm:items-center">
           {data.apuracoes.length > 0 && (
             <ApuracaoPdfButton data={data} header={pdfHeader} />
+          )}
+          {data.apuracoes.length > 0 && (
+            <RelatorioPendenciasButton data={data} header={pdfHeader} />
           )}
           <ExportEleitosButton ano={ano} />
           <Button asChild variant="outline" className="w-full sm:w-auto">
