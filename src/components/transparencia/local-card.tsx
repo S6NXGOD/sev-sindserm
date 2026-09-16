@@ -5,8 +5,8 @@ import {
   Award,
   CheckCircle2,
   ChevronDown,
-  ChevronUp,
   Download,
+  Eye,
   FileText,
   Loader2,
   Lock,
@@ -16,6 +16,14 @@ import {
   TriangleAlert,
   Users,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { fetchResultadoLocal } from "@/lib/actions/transparencia";
 import { downloadResultadoPdf, type PdfPleito } from "@/lib/transparencia-pdf";
 import type {
@@ -149,10 +157,10 @@ export function LocalCard({
     }
   }
 
-  async function toggle() {
-    const next = !open;
-    setOpen(next);
-    if (next && podeVerApuracao && !resultado) await garantirResultado();
+  // Abrir o modal: carrega o resultado sob demanda (só quando revelável).
+  function handleOpen(o: boolean) {
+    setOpen(o);
+    if (o && podeVerApuracao && !resultado) void garantirResultado();
   }
 
   async function baixarPdf() {
@@ -166,10 +174,8 @@ export function LocalCard({
   }
 
   return (
-    <div
-      data-expanded={open ? "true" : undefined}
-      className="sev-hover-lift overflow-hidden rounded-xl border bg-card shadow-sm"
-    >
+    <Dialog open={open} onOpenChange={handleOpen}>
+      <div className="sev-hover-lift overflow-hidden rounded-xl border bg-card shadow-sm">
       {/* Cabeçalho do card (resumo) */}
       <div className="p-4">
         <div className="flex items-start justify-between gap-2">
@@ -211,28 +217,16 @@ export function LocalCard({
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={toggle}
-            className="flex-1"
-            disabled={loading}
-          >
-            {loading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : open ? (
-              <ChevronUp className="mr-2 h-4 w-4" />
-            ) : (
-              <ChevronDown className="mr-2 h-4 w-4" />
-            )}
-            {open
-              ? "Recolher"
-              : isClosed
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" className="flex-1">
+              <Eye className="mr-2 h-4 w-4" />
+              {isClosed
                 ? "Ver eleitos e suplentes"
                 : isOpen && parciaisPublicas
                   ? "Ver parcial ao vivo"
                   : "Detalhes"}
-          </Button>
+            </Button>
+          </DialogTrigger>
           {isClosed && (
             <Button size="sm" onClick={baixarPdf} disabled={pdfLoading}>
               {pdfLoading ? (
@@ -245,13 +239,33 @@ export function LocalCard({
           )}
         </div>
       </div>
+      </div>
 
-      {/* Conteúdo expandido */}
-      {open && (
-        <div className="border-t bg-muted/30 p-4">
-          {/* No card expandido (que ocupa a linha toda), resultado e linha do
-              tempo ficam lado a lado no desktop; empilham no mobile. */}
-          <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+      {/* Detalhe em MODAL: focado, sem bagunçar a grade. Resultado e linha do
+          tempo lado a lado no desktop; empilham no mobile. */}
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex flex-wrap items-center gap-2 pr-6 text-left">
+            {local.nome}
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}
+            >
+              {st.label}
+            </span>
+            {local.rodadaAtual > 1 && (
+              <span className="flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-700">
+                <Repeat className="h-3 w-3" />
+                {local.rodadaAtual}ª rodada
+              </span>
+            )}
+          </DialogTitle>
+          <DialogDescription className="text-left">
+            {local.orgao} · Zona {local.zona} · {local.totalVotantes} votantes ·{" "}
+            {local.vagas} {local.vagas === 1 ? "vaga" : "vagas"}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
             <div className="min-w-0">
           {!podeVerApuracao ? (
             <p className="text-sm text-muted-foreground">
@@ -440,8 +454,7 @@ export function LocalCard({
               />
             </div>
           </div>
-        </div>
-      )}
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -179,12 +179,6 @@
     0 0 22px 4px rgba(16, 185, 129, 0.45);
 }
 
-/* Card de local EXPANDIDO ocupa a linha inteira da grade — evita o "vão branco"
-   ao lado quando um card cresce e os vizinhos ficam curtos. */
-.sev-locais-grid > [data-expanded="true"] {
-  grid-column: 1 / -1;
-}
-
 /* -------------------------------------------------------------------------- */
 /*   Animações sutis do sistema (entrada + hover) — humanização sem exagero    */
 /* -------------------------------------------------------------------------- */
