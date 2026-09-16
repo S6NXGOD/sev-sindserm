@@ -863,30 +863,77 @@ export type AtividadeItem = {
  */
 export async function getAtividadeDiretoria(
   electionId: string,
-  limit = 25,
+  limit = 12,
+): Promise<AtividadeItem[]> {
+  // Feed recente = topo do histórico completo (atos logados + derivados).
+  return getHistoricoDiretoria(
+    electionId,
+    Math.min(Math.max(Math.trunc(limit) || 12, 1), 200),
+  );
+}
+
+/**
+ * HISTÓRICO COMPLETO da atividade da diretoria: junta o registro append-only
+ * (LocalEvento) com os atos DERIVADOS dos campos de cada local (agendamento e
+ * encerramento) — recuperando o que aconteceu ANTES da linha do tempo existir.
+ * Assim o filiado confere tudo, inclusive o passado. Ordenado do mais recente.
+ */
+export async function getHistoricoDiretoria(
+  electionId: string,
+  limite = 1000,
 ): Promise<AtividadeItem[]> {
   const el = await prisma.election.findUnique({
     where: { id: electionId },
     select: { ano: true },
   });
   if (!el) return [];
-  const take = Math.min(Math.max(Math.trunc(limit) || 25, 1), 100);
+  const ano = el.ano;
 
-  const regs = await prisma.localEvento.findMany({
-    where: { anoEleicao: el.ano, tipo: { not: "RODADA_ENCERRADA" } },
-    orderBy: { createdAt: "desc" },
-    take,
-    select: {
-      tipo: true,
-      titulo: true,
-      detalhe: true,
-      autorNome: true,
-      createdAt: true,
-      workplace: { select: { id: true, nome: true } },
-    },
-  });
+  const [regs, locais] = await Promise.all([
+    prisma.localEvento.findMany({
+      where: { anoEleicao: ano, tipo: { not: "RODADA_ENCERRADA" } },
+      orderBy: { createdAt: "desc" },
+      select: {
+        tipo: true,
+        titulo: true,
+        detalhe: true,
+        autorNome: true,
+        createdAt: true,
+        workplaceId: true,
+        workplace: { select: { id: true, nome: true } },
+      },
+    }),
+    prisma.workplace.findMany({
+      where: { anoEleicao: ano },
+      select: {
+        id: true,
+        nome: true,
+        dataInicioVotacao: true,
+        dataFimVotacao: true,
+        agendadoEm: true,
+        agendadoPorNome: true,
+        encerradoEm: true,
+        encerradoPorNome: true,
+      },
+    }),
+  ]);
+  const now = new Date();
+  const fmtData = (d: Date) =>
+    new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+      timeZone: "America/Sao_Paulo",
+    }).format(d);
 
-  return regs.map((r) => ({
+  // Locais que JÁ têm agendamento/encerramento logado — não deriva de novo.
+  const temAgend = new Set(
+    regs.filter((r) => r.tipo === "AGENDAMENTO").map((r) => r.workplaceId),
+  );
+  const temEnc = new Set(
+    regs.filter((r) => r.tipo === "ENCERRAMENTO").map((r) => r.workplaceId),
+  );
+
+  const itens: AtividadeItem[] = regs.map((r) => ({
     tipo: r.tipo,
     titulo: r.titulo,
     detalhe: r.detalhe,
@@ -895,6 +942,45 @@ export async function getAtividadeDiretoria(
     localId: r.workplace.id,
     data: r.createdAt.toISOString(),
   }));
+
+  // Atos DERIVADOS das datas do local (recupera o passado que não foi logado):
+  // agendamento (data de início) e encerramento (data de fim, se já passou).
+  // O "responsável" pode não existir (agendamento em massa / fim automático).
+  for (const l of locais) {
+    if (l.dataInicioVotacao && !temAgend.has(l.id)) {
+      itens.push({
+        tipo: "AGENDAMENTO",
+        titulo: "Votação agendada",
+        detalhe:
+          l.dataInicioVotacao && l.dataFimVotacao
+            ? `De ${fmtData(l.dataInicioVotacao)} até ${fmtData(l.dataFimVotacao)}.`
+            : null,
+        autorNome: l.agendadoPorNome,
+        localNome: l.nome,
+        localId: l.id,
+        data: (l.agendadoEm ?? l.dataInicioVotacao).toISOString(),
+      });
+    }
+    if (
+      l.dataFimVotacao &&
+      l.dataFimVotacao < now &&
+      l.dataInicioVotacao &&
+      !temEnc.has(l.id)
+    ) {
+      itens.push({
+        tipo: "ENCERRAMENTO",
+        titulo: "Votação encerrada",
+        detalhe: l.encerradoPorNome ? null : "Encerramento automático (fim da janela).",
+        autorNome: l.encerradoPorNome,
+        localNome: l.nome,
+        localId: l.id,
+        data: (l.encerradoEm ?? l.dataFimVotacao).toISOString(),
+      });
+    }
+  }
+
+  itens.sort((a, b) => b.data.localeCompare(a.data));
+  return itens.slice(0, Math.min(Math.max(limite, 1), 3000));
 }
 
 /* -------------------------------------------------------------------------- */

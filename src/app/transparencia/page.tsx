@@ -111,7 +111,7 @@ export default async function TransparenciaPage({
           ? searchParams.status
           : "todos",
     }),
-    getAtividadeDiretoria(pleitoId, 25),
+    getAtividadeDiretoria(pleitoId, 12),
   ]);
   const pleito = data.pleito!;
   const pdfPleito = {
@@ -260,7 +260,7 @@ export default async function TransparenciaPage({
 
         {/* Atividade da diretoria — feed público dos atos oficiais (quem agendou,
             encerrou, dispensou etc.). Some quando não há atos registrados. */}
-        <AtividadeDiretoria itens={atividade} />
+        <AtividadeDiretoria itens={atividade} electionId={pleitoId} />
 
         {/* Próximas aberturas: o filiado vê quais urnas vão abrir e quando. */}
         <ProximasAberturas

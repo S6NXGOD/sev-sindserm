@@ -4,9 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { searchScore, searchTokens } from "@/lib/slug";
 import {
   getEleitosCsv,
+  getHistoricoDiretoria,
   getLinhaTempoLocal,
   getRelatorioTransparencia,
   getResultadoLocal,
+  type AtividadeItem,
   type LinhaTempoLocal,
   type RelatorioTransparencia,
   type ResultadoLocal,
@@ -73,6 +75,15 @@ export async function fetchResultadoLocal(
   const id = String(workplaceId ?? "").trim();
   if (!id) return null;
   return getResultadoLocal(id);
+}
+
+/** Histórico COMPLETO da atividade da diretoria (logado + derivado). */
+export async function fetchHistoricoDiretoria(
+  electionId: string,
+): Promise<AtividadeItem[]> {
+  const id = String(electionId ?? "").trim();
+  if (!id) return [];
+  return getHistoricoDiretoria(id);
 }
 
 /** Linha do tempo pública + histórico de rodadas de um local (sem PII). */
