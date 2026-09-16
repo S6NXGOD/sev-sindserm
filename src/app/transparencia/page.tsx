@@ -18,6 +18,7 @@ import { AuditoriaLisura } from "@/components/transparencia/auditoria-lisura";
 import { ConformidadeLegal } from "@/components/transparencia/conformidade-legal";
 import { SuplementarAviso } from "@/components/transparencia/suplementar-aviso";
 import { GuiaPortal } from "@/components/transparencia/guia-portal";
+import { CountUp } from "@/components/transparencia/count-up";
 import { ParticipacaoPanel } from "@/components/transparencia/participacao-panel";
 import { PleitoSelector } from "@/components/transparencia/pleito-selector";
 import { FiltrosBar } from "@/components/transparencia/filtros-bar";
@@ -56,7 +57,7 @@ function Kpi({
           linhas (sem truncar) para não cortar "Locais de votação" etc. */}
       <div className="min-w-0">
         <p className="text-2xl font-bold leading-none">
-          {value.toLocaleString("pt-BR")}
+          <CountUp value={value} />
         </p>
         <p className="mt-1 text-xs leading-tight text-muted-foreground">{label}</p>
       </div>
