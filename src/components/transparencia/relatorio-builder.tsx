@@ -122,7 +122,7 @@ export function RelatorioBuilder({ electionId }: { electionId: string }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm">
+        <Button className="h-11 w-full shrink-0 whitespace-nowrap sm:h-12 sm:w-auto sm:px-5">
           <Download className="mr-2 h-4 w-4" />
           Baixar relatório
         </Button>
