@@ -166,7 +166,10 @@ export function LocalCard({
   }
 
   return (
-    <div className="sev-hover-lift overflow-hidden rounded-xl border bg-card shadow-sm">
+    <div
+      data-expanded={open ? "true" : undefined}
+      className="sev-hover-lift overflow-hidden rounded-xl border bg-card shadow-sm"
+    >
       {/* Cabeçalho do card (resumo) */}
       <div className="p-4">
         <div className="flex items-start justify-between gap-2">
@@ -246,6 +249,10 @@ export function LocalCard({
       {/* Conteúdo expandido */}
       {open && (
         <div className="border-t bg-muted/30 p-4">
+          {/* No card expandido (que ocupa a linha toda), resultado e linha do
+              tempo ficam lado a lado no desktop; empilham no mobile. */}
+          <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+            <div className="min-w-0">
           {!podeVerApuracao ? (
             <p className="text-sm text-muted-foreground">
               {local.status === "open"
@@ -420,16 +427,18 @@ export function LocalCard({
               )}
             </div>
           )}
+            </div>
 
-          {/* Linha do tempo pública — cada passo do sindicato neste local +
-              histórico de resultado por rodada. Sempre disponível ao expandir. */}
-          <div className="mt-4">
-            <LinhaTempoLocal
-              workplaceId={local.id}
-              orgao={local.orgao}
-              zona={local.zona}
-              pleito={pleito}
-            />
+            {/* Linha do tempo pública — 2ª coluna no desktop; cada passo do
+                sindicato + histórico por rodada. Sempre disponível ao expandir. */}
+            <div className="min-w-0">
+              <LinhaTempoLocal
+                workplaceId={local.id}
+                orgao={local.orgao}
+                zona={local.zona}
+                pleito={pleito}
+              />
+            </div>
           </div>
         </div>
       )}

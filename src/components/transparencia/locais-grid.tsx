@@ -44,7 +44,7 @@ export function LocaisGrid({
       <p className="text-sm text-muted-foreground">
         {locais.length} local(is) encontrado(s)
       </p>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="sev-locais-grid grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {locais.slice(0, shown).map((l) => (
           <LocalCard
             key={l.id}
