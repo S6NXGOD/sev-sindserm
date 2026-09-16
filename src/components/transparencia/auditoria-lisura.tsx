@@ -2,16 +2,12 @@
 
 import { useState } from "react";
 import {
-  BadgeCheck,
   CheckCircle2,
   ChevronDown,
   FileSearch,
-  Lock,
   Mail,
-  ScrollText,
   ShieldCheck,
   TriangleAlert,
-  UserCheck,
 } from "lucide-react";
 
 /**
@@ -44,33 +40,6 @@ export function AuditoriaLisura({
           "Obrigado(a).",
       )}`
     : null;
-
-  const garantias = [
-    {
-      Icon: Lock,
-      titulo: "Voto secreto de verdade",
-      texto:
-        "O voto é anônimo: não tem carimbo de horário nem qualquer ligação com o eleitor. O sistema registra apenas o comparecimento (quem votou e quando compareceu), nunca EM QUEM — é impossível descobrir o voto de alguém.",
-    },
-    {
-      Icon: UserCheck,
-      titulo: "Uma pessoa, um voto",
-      texto:
-        "CPF e matrícula são únicos por eleição: ninguém vota duas vezes. O sistema recusa a segunda tentativa.",
-    },
-    {
-      Icon: BadgeCheck,
-      titulo: "Apuração automática",
-      texto:
-        "Os eleitos saem de uma regra pública de vagas aplicada pelo computador — sem ninguém digitar resultado à mão.",
-    },
-    {
-      Icon: ScrollText,
-      titulo: "Tudo registrado (e público)",
-      texto:
-        "Quem agendou, abriu, encerrou ou dispensou cada votação fica gravado — com data e responsável — na linha do tempo pública de cada local.",
-    },
-  ];
 
   return (
     <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
@@ -140,29 +109,6 @@ export function AuditoriaLisura({
                     : " Uma divergência aqui indica anomalia e deve ser investigada."}
                 </p>
               </div>
-            </div>
-          </div>
-
-          {/* Garantias do sistema (humanizado, em cartões). */}
-          <div>
-            <p className="mb-2 text-sm font-semibold text-slate-800">
-              Como garantimos que é limpa
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {garantias.map((g) => (
-                <div
-                  key={g.titulo}
-                  className="flex gap-3 rounded-xl border bg-slate-50/60 p-3"
-                >
-                  <g.Icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">{g.titulo}</p>
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      {g.texto}
-                    </p>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
 
