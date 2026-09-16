@@ -15,6 +15,7 @@ import {
 import { ProximasAberturas } from "@/components/proximas-aberturas";
 import { ApuracaoAoVivo } from "@/components/transparencia/apuracao-ao-vivo";
 import { AuditoriaLisura } from "@/components/transparencia/auditoria-lisura";
+import { ConformidadeLegal } from "@/components/transparencia/conformidade-legal";
 import { SuplementarAviso } from "@/components/transparencia/suplementar-aviso";
 import { GuiaPortal } from "@/components/transparencia/guia-portal";
 import { ParticipacaoPanel } from "@/components/transparencia/participacao-panel";
@@ -101,7 +102,8 @@ export default async function TransparenciaPage({
       searchParams.status === "open" ||
       searchParams.status === "closed" ||
       searchParams.status === "upcoming" ||
-      searchParams.status === "suplementar"
+      searchParams.status === "suplementar" ||
+      searchParams.status === "empate"
         ? searchParams.status
         : "todos",
   });
@@ -245,6 +247,10 @@ export default async function TransparenciaPage({
             tituloPleito={pleito.titulo}
           />
         </div>
+
+        {/* Base legal e conformidade — fundamentação (CF/CLT/Estatuto/Regimento),
+            princípios e hierarquia das regras. Recolhível, complementa a Auditoria. */}
+        <ConformidadeLegal />
 
         {/* Próximas aberturas: o filiado vê quais urnas vão abrir e quando. */}
         <ProximasAberturas

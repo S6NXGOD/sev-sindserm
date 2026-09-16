@@ -198,6 +198,12 @@ export function LocalCard({
                 Suplementar · {local.rodadaAtual}ª rodada
               </span>
             )}
+            {local.temEmpate && (
+              <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                <Scale className="h-3 w-3" />
+                Empate a resolver
+              </span>
+            )}
           </div>
         </div>
 

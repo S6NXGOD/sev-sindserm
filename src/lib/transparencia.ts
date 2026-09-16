@@ -57,7 +57,7 @@ export async function getPleitosPublicos(): Promise<{
 export type TransparenciaFiltros = {
   q?: string;
   orgao?: string;
-  status?: "todos" | "open" | "closed" | "upcoming" | "suplementar";
+  status?: "todos" | "open" | "closed" | "upcoming" | "suplementar" | "empate";
 };
 
 export type TransparenciaLocal = {
@@ -71,6 +71,8 @@ export type TransparenciaLocal = {
   vagas: number;
   /** Rodada de votação atual (1 = normal; 2+ = eleição suplementar). */
   rodadaAtual: number;
+  /** true = encerrado COM empate na linha de corte (aguarda desempate). */
+  temEmpate: boolean;
   /** null quando a votação ainda não foi agendada (status "undefined"). */
   dataInicio: string | null;
   dataFim: string | null;
@@ -252,6 +254,7 @@ export async function getTransparenciaData(
     totalCandidatos: w._count.candidates,
     vagas: calcularVagas(w._count.candidates),
     rodadaAtual: w.rodadaAtual,
+    temEmpate: false,
     dataInicio: w.dataInicioVotacao?.toISOString() ?? null,
     dataFim: w.dataFimVotacao?.toISOString() ?? null,
   }));
@@ -282,6 +285,7 @@ export async function getTransparenciaData(
         restantes,
       );
       eleitos += presv + apurado.eleitos.length;
+      l.temEmpate = apurado.temEmpate; // visível/filtrável no portal
     } else if (l.status === "upcoming") naoIniciadas += 1;
     else naoDefinidas += 1;
   }
@@ -386,6 +390,7 @@ export async function getTransparenciaData(
     if (filtros.status === "closed" && l.status !== "closed") return false;
     if (filtros.status === "upcoming" && l.status !== "upcoming") return false;
     if (filtros.status === "suplementar" && l.rodadaAtual <= 1) return false;
+    if (filtros.status === "empate" && !l.temEmpate) return false;
     if (
       q &&
       !l.nome.toLowerCase().includes(q) &&
