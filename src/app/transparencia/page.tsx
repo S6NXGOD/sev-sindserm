@@ -9,6 +9,7 @@ import {
   Vote,
 } from "lucide-react";
 import {
+  getAtividadeDiretoria,
   getPleitosPublicos,
   getTransparenciaData,
 } from "@/lib/transparencia";
@@ -16,6 +17,7 @@ import { ProximasAberturas } from "@/components/proximas-aberturas";
 import { ApuracaoAoVivo } from "@/components/transparencia/apuracao-ao-vivo";
 import { AuditoriaLisura } from "@/components/transparencia/auditoria-lisura";
 import { ConformidadeLegal } from "@/components/transparencia/conformidade-legal";
+import { AtividadeDiretoria } from "@/components/transparencia/atividade-diretoria";
 import { SuplementarAviso } from "@/components/transparencia/suplementar-aviso";
 import { GuiaPortal } from "@/components/transparencia/guia-portal";
 import { CountUp } from "@/components/transparencia/count-up";
@@ -96,18 +98,21 @@ export default async function TransparenciaPage({
       ? searchParams.pleito
       : defaultId;
 
-  const data = await getTransparenciaData(pleitoId, {
-    q: searchParams.q,
-    orgao: searchParams.orgao,
-    status:
-      searchParams.status === "open" ||
-      searchParams.status === "closed" ||
-      searchParams.status === "upcoming" ||
-      searchParams.status === "suplementar" ||
-      searchParams.status === "empate"
-        ? searchParams.status
-        : "todos",
-  });
+  const [data, atividade] = await Promise.all([
+    getTransparenciaData(pleitoId, {
+      q: searchParams.q,
+      orgao: searchParams.orgao,
+      status:
+        searchParams.status === "open" ||
+        searchParams.status === "closed" ||
+        searchParams.status === "upcoming" ||
+        searchParams.status === "suplementar" ||
+        searchParams.status === "empate"
+          ? searchParams.status
+          : "todos",
+    }),
+    getAtividadeDiretoria(pleitoId, 25),
+  ]);
   const pleito = data.pleito!;
   const pdfPleito = {
     titulo: pleito.titulo,
@@ -252,6 +257,10 @@ export default async function TransparenciaPage({
         {/* Base legal e conformidade — fundamentação (CF/CLT/Estatuto/Regimento),
             princípios e hierarquia das regras. Recolhível, complementa a Auditoria. */}
         <ConformidadeLegal />
+
+        {/* Atividade da diretoria — feed público dos atos oficiais (quem agendou,
+            encerrou, dispensou etc.). Some quando não há atos registrados. */}
+        <AtividadeDiretoria itens={atividade} />
 
         {/* Próximas aberturas: o filiado vê quais urnas vão abrir e quando. */}
         <ProximasAberturas

@@ -53,7 +53,7 @@ export function ConformidadeLegal() {
       Icon: Lock,
       titulo: "Voto secreto",
       texto:
-        "Não há qualquer vínculo entre o voto e a pessoa que votou, nem registro do horário do voto — é impossível identificar em quem alguém votou.",
+        "Não há vínculo entre o voto e o eleitor, e o voto não tem carimbo de horário. Registra-se apenas o comparecimento (quem votou), jamais em quem — é impossível identificar o voto de alguém.",
     },
     {
       Icon: UserCheck,
@@ -166,6 +166,22 @@ export function ConformidadeLegal() {
             <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
               Trata-se de eleição interna e privada da entidade sindical, por voto
               direto e secreto — não é conduzida pela Justiça Eleitoral.
+            </p>
+          </div>
+
+          {/* Disposição a auditoria oficial — mediante solicitação formal e LGPD. */}
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+            <p className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-emerald-900">
+              <ShieldCheck className="h-4 w-4" />
+              Aberto à auditoria oficial
+            </p>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Caso a comissão eleitoral, um órgão competente ou uma auditoria
+              independente contratada precise examinar o pleito, a entidade
+              disponibiliza — mediante solicitação formal pelos canais oficiais e
+              observada a LGPD — os registros técnicos necessários (contagens,
+              logs e a trilha de auditoria). O objetivo é permitir a conferência
+              por profissionais habilitados, com respaldo legal.
             </p>
           </div>
         </div>

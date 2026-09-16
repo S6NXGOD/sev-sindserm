@@ -50,7 +50,7 @@ export function AuditoriaLisura({
       Icon: Lock,
       titulo: "Voto secreto de verdade",
       texto:
-        "O voto não guarda data/hora nem qualquer ligação com quem votou. É impossível descobrir em quem alguém votou.",
+        "O voto é anônimo: não tem carimbo de horário nem qualquer ligação com o eleitor. O sistema registra apenas o comparecimento (quem votou e quando compareceu), nunca EM QUEM — é impossível descobrir o voto de alguém.",
     },
     {
       Icon: UserCheck,
@@ -66,9 +66,9 @@ export function AuditoriaLisura({
     },
     {
       Icon: ScrollText,
-      titulo: "Tudo registrado",
+      titulo: "Tudo registrado (e público)",
       texto:
-        "Quem agendou, abriu e encerrou cada votação fica gravado numa auditoria interna, com data e responsável.",
+        "Quem agendou, abriu, encerrou ou dispensou cada votação fica gravado — com data e responsável — na linha do tempo pública de cada local.",
     },
   ];
 

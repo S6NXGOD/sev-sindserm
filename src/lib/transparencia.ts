@@ -842,6 +842,62 @@ export async function getLinhaTempoLocal(
 }
 
 /* -------------------------------------------------------------------------- */
+/*              Atividade da diretoria (feed público de atos)                 */
+/* -------------------------------------------------------------------------- */
+
+export type AtividadeItem = {
+  tipo: string;
+  titulo: string;
+  detalhe: string | null;
+  autorNome: string | null;
+  localNome: string;
+  localId: string;
+  data: string; // ISO
+};
+
+/**
+ * FEED PÚBLICO da atividade da diretoria no pleito: os atos oficiais mais
+ * recentes em todos os locais (agendou, encerrou, reabriu, abriu suplementar,
+ * dispensou, renúncia) — com QUEM fez e QUANDO. Transparência do trabalho da
+ * diretoria. Exclui marcadores internos (arquivo de rodada). Só dados públicos.
+ */
+export async function getAtividadeDiretoria(
+  electionId: string,
+  limit = 25,
+): Promise<AtividadeItem[]> {
+  const el = await prisma.election.findUnique({
+    where: { id: electionId },
+    select: { ano: true },
+  });
+  if (!el) return [];
+  const take = Math.min(Math.max(Math.trunc(limit) || 25, 1), 100);
+
+  const regs = await prisma.localEvento.findMany({
+    where: { anoEleicao: el.ano, tipo: { not: "RODADA_ENCERRADA" } },
+    orderBy: { createdAt: "desc" },
+    take,
+    select: {
+      tipo: true,
+      titulo: true,
+      detalhe: true,
+      autorNome: true,
+      createdAt: true,
+      workplace: { select: { id: true, nome: true } },
+    },
+  });
+
+  return regs.map((r) => ({
+    tipo: r.tipo,
+    titulo: r.titulo,
+    detalhe: r.detalhe,
+    autorNome: r.autorNome,
+    localNome: r.workplace.nome,
+    localId: r.workplace.id,
+    data: r.createdAt.toISOString(),
+  }));
+}
+
+/* -------------------------------------------------------------------------- */
 /*                  Relatório geral do pleito (CSV de eleitos)                */
 /* -------------------------------------------------------------------------- */
 
