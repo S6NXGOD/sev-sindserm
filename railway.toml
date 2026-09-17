@@ -14,13 +14,16 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-# 1) aplica migrações — TOLERANTE A FALHA (`|| true`). As migrações são sempre
-#    aplicadas MANUALMENTE contra a produção ANTES do push (fluxo documentado);
-#    no boot o `migrate deploy` é apenas uma rede de segurança (no-op quando não
-#    há pendências). Isto evita que uma falha transitória do schema-engine do
-#    Prisma (ex.: EACCES ao spawnar o binário no Railway) DERRUBE o app inteiro.
-# 2) cria o admin (idempotente) — também tolerante a falha.
-# 3) sobe o servidor Next na porta fornecida pela Railway (env PORT).
-startCommand = "npm run db:deploy || true && (npm run db:seed || true) && npm run start"
+# O `next start` (foreground) sobe IMEDIATAMENTE e prende a porta (env PORT) —
+# NADA pode bloquear isso. As redes de segurança do banco rodam em SEGUNDO PLANO:
+#   - migrate deploy: as migrações já são aplicadas MANUALMENTE antes do push
+#     (fluxo documentado); aqui é só no-op quando não há pendências.
+#   - seed: cria o admin (idempotente); já existe em produção.
+# POR QUÊ em background: na imagem Docker o processo do engine do Prisma não
+# encerra limpo (filho do PID 1 do container) e o `migrate deploy` FICAVA PENDURADO
+# depois de concluir, travando o `&&` e impedindo o `next start` de subir (→ 502).
+# Em background, mesmo que pendure, o app já está no ar. Seguro porque no boot
+# nunca há migração pendente (aplicamos manualmente antes).
+startCommand = "(npm run db:deploy || true; npm run db:seed || true) & npm run start"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
