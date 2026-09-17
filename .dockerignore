@@ -1,0 +1,13 @@
+# Mantém o contexto de build enxuto e evita vazar segredos locais para a imagem.
+# NÃO ignore: prisma/, public/, src/, next.config, tailwind/postcss, tsconfig.
+node_modules
+.next
+.git
+.gitignore
+.env
+.env.*
+npm-debug.log*
+*.log
+Dockerfile
+.dockerignore
+README.md

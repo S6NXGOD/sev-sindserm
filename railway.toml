@@ -1,18 +1,17 @@
 # Configuração de deploy na Railway (https://railway.app) — SEV SINDSERM.
 #
-# Build com Nixpacks (detecta Next.js + Prisma automaticamente e roda
-# `npm run build` = `prisma generate && next build`).
+# Build via DOCKERFILE (ver ./Dockerfile). Trocamos do Nixpacks porque ele passou
+# a falhar no planejamento ("nixpacks exited with an error") após um bump de
+# versão no Railway, prendendo a produção num build antigo. O Dockerfile é
+# determinístico e roda `npm run build` (= `prisma generate && next build`).
 #
 # As MIGRAÇÕES e o SEED rodam no START (deploy), quando o banco já está online e
-# conectado — por isso o `prisma migrate deploy` foi tirado do script de build.
+# conectado — por isso o `prisma migrate deploy` fica no startCommand, não no build.
 
 [build]
-# Força o Nixpacks (enum em MAIÚSCULAS) — sem isto a Railway pode cair no
-# auto-detect e usar um Dockerfile. O Dockerfile foi removido do repositório.
-builder = "NIXPACKS"
-# Explícito: o `prisma generate` roda na fase de BUILD (código completo presente),
-# não no install — evita "Could not find Prisma Schema" do postinstall no Nixpacks.
-buildCommand = "npm run build"
+# Usa o Dockerfile do repositório (imagem reprodutível, sem depender do Nixpacks).
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 # 1) aplica migrações — TOLERANTE A FALHA (`|| true`). As migrações são sempre
