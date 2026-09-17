@@ -14,16 +14,17 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-# O `next start` (foreground) sobe IMEDIATAMENTE e prende a porta (env PORT) —
-# NADA pode bloquear isso. As redes de segurança do banco rodam em SEGUNDO PLANO:
-#   - migrate deploy: as migrações já são aplicadas MANUALMENTE antes do push
-#     (fluxo documentado); aqui é só no-op quando não há pendências.
-#   - seed: cria o admin (idempotente); já existe em produção.
-# POR QUÊ em background: na imagem Docker o processo do engine do Prisma não
-# encerra limpo (filho do PID 1 do container) e o `migrate deploy` FICAVA PENDURADO
-# depois de concluir, travando o `&&` e impedindo o `next start` de subir (→ 502).
-# Em background, mesmo que pendure, o app já está no ar. Seguro porque no boot
-# nunca há migração pendente (aplicamos manualmente antes).
-startCommand = "(npm run db:deploy || true; npm run db:seed || true) & npm run start"
+# Comando de start SIMPLES e à prova de parse. Em deploy por DOCKERFILE, o Railway
+# roda o startCommand em EXEC FORM (sem shell) — operadores como `&&`, `||`, `;`,
+# `(subshell)` e `&` NÃO são válidos aqui e quebram a criação do container
+# ("Failed to parse start command").
+#
+# `next start` sobe direto e prende a porta pela env PORT (o Next lê PORT sozinho).
+#
+# As migrações NÃO rodam mais no boot: são aplicadas MANUALMENTE contra a produção
+# ANTES de cada push (ver memória "deploy-seguro-migracoes"). O admin já existe, então
+# o seed também sai do boot. Isto remove a etapa de banco que, na imagem Docker,
+# PENDURAVA (engine do Prisma não encerra como filho do PID 1) e travava o start (→ 502).
+startCommand = "npm run start"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
