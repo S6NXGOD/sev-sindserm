@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   Ban,
   CalendarClock,
+  CheckCircle2,
   ChevronDown,
   Flag,
   History,
@@ -39,6 +40,7 @@ const ESTILO: Record<
   SUPLEMENTAR: { Icon: Repeat, cor: "text-violet-600", ring: "bg-violet-100" },
   RENUNCIA: { Icon: UserX, cor: "text-rose-600", ring: "bg-rose-100" },
   DISPENSA: { Icon: Ban, cor: "text-slate-600", ring: "bg-slate-100" },
+  DECISAO: { Icon: CheckCircle2, cor: "text-emerald-600", ring: "bg-emerald-100" },
 };
 
 function fmt(iso: string): string {
@@ -55,7 +57,6 @@ function fmt(iso: string): string {
 
 function Ato({ e }: { e: AtividadeItem }) {
   const st = ESTILO[e.tipo] ?? ESTILO.DISPENSA;
-  const motivo = e.tipo === "DISPENSA" && e.detalhe ? e.detalhe : null;
   return (
     <li className="flex gap-3 px-4 py-3 sm:px-5">
       <span
@@ -69,9 +70,9 @@ function Ato({ e }: { e: AtividadeItem }) {
           <MapPin className="h-3 w-3 shrink-0" />
           <span className="truncate">{e.localNome}</span>
         </p>
-        {motivo && (
+        {e.detalhe && (
           <p className="mt-1 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600">
-            {motivo}
+            {e.detalhe}
           </p>
         )}
         <p className="mt-0.5 text-[11px] text-muted-foreground">

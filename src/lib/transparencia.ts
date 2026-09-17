@@ -872,11 +872,28 @@ export async function getAtividadeDiretoria(
   );
 }
 
+// Atos de LOCAL (da diretoria) que viram feed público, com rótulo humanizado.
+// Ações de usuário/pleito/config/login NÃO entram (privadas/irrelevantes).
+const ACAO_MAP: Record<string, { tipo: string; titulo: string }> = {
+  AGENDOU_VOTACAO: { tipo: "AGENDAMENTO", titulo: "Votação agendada" },
+  ENCERROU: { tipo: "ENCERRAMENTO", titulo: "Votação encerrada" },
+  REABRIU: { tipo: "REABERTURA", titulo: "Votação reaberta" },
+  INICIOU_SUPLEMENTAR: { tipo: "SUPLEMENTAR", titulo: "Eleição suplementar aberta" },
+  RENUNCIA: { tipo: "RENUNCIA", titulo: "Candidato não assume a vaga" },
+  REVERTEU_RENUNCIA: { tipo: "RENUNCIA", titulo: "Renúncia revertida" },
+  DISPENSOU_LOCAL: { tipo: "DISPENSA", titulo: "Local dispensado (sem representação)" },
+  REVERTEU_DISPENSA: { tipo: "DISPENSA", titulo: "Dispensa revertida" },
+  ACEITOU_VAGAS_VAZIAS: { tipo: "DECISAO", titulo: "Finalizado sem suplementar" },
+  REVERTEU_VAGAS_VAZIAS: { tipo: "DECISAO", titulo: "Decisão de vagas revertida" },
+};
+
 /**
- * HISTÓRICO COMPLETO da atividade da diretoria: junta o registro append-only
- * (LocalEvento) com os atos DERIVADOS dos campos de cada local (agendamento e
- * encerramento) — recuperando o que aconteceu ANTES da linha do tempo existir.
- * Assim o filiado confere tudo, inclusive o passado. Ordenado do mais recente.
+ * HISTÓRICO COMPLETO da atividade da diretoria. Fonte principal: a AUDITORIA
+ * (AuditLog) — que já registra QUEM fez e QUANDO (agendou, encerrou, reabriu,
+ * suplementar, renúncia, dispensa, vagas). Complementa com atos DERIVADOS das
+ * datas de cada local, só para os que não têm registro autoral (agendamento em
+ * massa / encerramento automático ao fim da janela) — mostrados com honestidade.
+ * Ordenado do mais recente. Só dados públicos (atos de local; nunca usuário/senha).
  */
 export async function getHistoricoDiretoria(
   electionId: string,
@@ -889,19 +906,12 @@ export async function getHistoricoDiretoria(
   if (!el) return [];
   const ano = el.ano;
 
-  const [regs, locais] = await Promise.all([
-    prisma.localEvento.findMany({
-      where: { anoEleicao: ano, tipo: { not: "RODADA_ENCERRADA" } },
+  const [logs, locais] = await Promise.all([
+    prisma.auditLog.findMany({
+      where: { acao: { in: Object.keys(ACAO_MAP) } },
       orderBy: { createdAt: "desc" },
-      select: {
-        tipo: true,
-        titulo: true,
-        detalhe: true,
-        autorNome: true,
-        createdAt: true,
-        workplaceId: true,
-        workplace: { select: { id: true, nome: true } },
-      },
+      take: 3000,
+      select: { userNome: true, acao: true, alvo: true, detalhe: true, createdAt: true },
     }),
     prisma.workplace.findMany({
       where: { anoEleicao: ano },
@@ -910,13 +920,10 @@ export async function getHistoricoDiretoria(
         nome: true,
         dataInicioVotacao: true,
         dataFimVotacao: true,
-        agendadoEm: true,
-        agendadoPorNome: true,
-        encerradoEm: true,
-        encerradoPorNome: true,
       },
     }),
   ]);
+
   const now = new Date();
   const fmtData = (d: Date) =>
     new Intl.DateTimeFormat("pt-BR", {
@@ -924,30 +931,33 @@ export async function getHistoricoDiretoria(
       timeStyle: "short",
       timeZone: "America/Sao_Paulo",
     }).format(d);
+  const nomeToId = new Map(locais.map((l) => [l.nome, l.id]));
 
-  // Locais que JÁ têm agendamento/encerramento logado — não deriva de novo.
-  const temAgend = new Set(
-    regs.filter((r) => r.tipo === "AGENDAMENTO").map((r) => r.workplaceId),
+  // Auditoria → itens (só os atos cujo ALVO é um local DESTE pleito).
+  const itens: AtividadeItem[] = [];
+  for (const g of logs) {
+    if (!g.alvo || !nomeToId.has(g.alvo)) continue;
+    const m = ACAO_MAP[g.acao];
+    itens.push({
+      tipo: m.tipo,
+      titulo: m.titulo,
+      detalhe: g.detalhe,
+      autorNome: g.userNome,
+      localNome: g.alvo,
+      localId: nomeToId.get(g.alvo) ?? "",
+      data: g.createdAt.toISOString(),
+    });
+  }
+
+  // Fallback derivado das DATAS, só para locais SEM registro autoral do ato.
+  const comAgend = new Set(
+    logs.filter((g) => g.acao === "AGENDOU_VOTACAO").map((g) => g.alvo),
   );
-  const temEnc = new Set(
-    regs.filter((r) => r.tipo === "ENCERRAMENTO").map((r) => r.workplaceId),
+  const comEnc = new Set(
+    logs.filter((g) => g.acao === "ENCERROU").map((g) => g.alvo),
   );
-
-  const itens: AtividadeItem[] = regs.map((r) => ({
-    tipo: r.tipo,
-    titulo: r.titulo,
-    detalhe: r.detalhe,
-    autorNome: r.autorNome,
-    localNome: r.workplace.nome,
-    localId: r.workplace.id,
-    data: r.createdAt.toISOString(),
-  }));
-
-  // Atos DERIVADOS das datas do local (recupera o passado que não foi logado):
-  // agendamento (data de início) e encerramento (data de fim, se já passou).
-  // O "responsável" pode não existir (agendamento em massa / fim automático).
   for (const l of locais) {
-    if (l.dataInicioVotacao && !temAgend.has(l.id)) {
+    if (l.dataInicioVotacao && !comAgend.has(l.nome)) {
       itens.push({
         tipo: "AGENDAMENTO",
         titulo: "Votação agendada",
@@ -955,26 +965,21 @@ export async function getHistoricoDiretoria(
           l.dataInicioVotacao && l.dataFimVotacao
             ? `De ${fmtData(l.dataInicioVotacao)} até ${fmtData(l.dataFimVotacao)}.`
             : null,
-        autorNome: l.agendadoPorNome,
+        autorNome: null,
         localNome: l.nome,
         localId: l.id,
-        data: (l.agendadoEm ?? l.dataInicioVotacao).toISOString(),
+        data: l.dataInicioVotacao.toISOString(),
       });
     }
-    if (
-      l.dataFimVotacao &&
-      l.dataFimVotacao < now &&
-      l.dataInicioVotacao &&
-      !temEnc.has(l.id)
-    ) {
+    if (l.dataFimVotacao && l.dataFimVotacao < now && !comEnc.has(l.nome)) {
       itens.push({
         tipo: "ENCERRAMENTO",
         titulo: "Votação encerrada",
-        detalhe: l.encerradoPorNome ? null : "Encerramento automático (fim da janela).",
-        autorNome: l.encerradoPorNome,
+        detalhe: "Encerramento automático (fim da janela).",
+        autorNome: null,
         localNome: l.nome,
         localId: l.id,
-        data: (l.encerradoEm ?? l.dataFimVotacao).toISOString(),
+        data: l.dataFimVotacao.toISOString(),
       });
     }
   }
