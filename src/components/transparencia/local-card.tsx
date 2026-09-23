@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   Award,
+  CalendarClock,
   CheckCircle2,
   ChevronDown,
   Download,
@@ -36,6 +37,20 @@ import { Button } from "@/components/ui/button";
 import { LinhaTempoLocal } from "@/components/transparencia/linha-tempo-local";
 
 const PAGE = 15; // paginação interna por lista (anti-quebra no celular).
+
+/** Data/hora curta em pt-BR (fuso de Brasília). */
+function fmtData(iso: string | null): string {
+  if (!iso) return "a definir";
+  try {
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+      timeZone: "America/Sao_Paulo",
+    }).format(new Date(iso));
+  } catch {
+    return "a definir";
+  }
+}
 
 const STATUS = {
   open: { label: "Em andamento", cls: "bg-emerald-100 text-emerald-700" },
@@ -211,6 +226,18 @@ export function LocalCard({
             )}
           </div>
         </div>
+
+        {/* Janela de votação: quando abre/encerra. Essencial p/ suplementar
+            agendada (o filiado precisa saber o novo período). */}
+        {(local.status === "upcoming" || local.status === "open") &&
+          local.dataFim && (
+            <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+              {local.status === "upcoming"
+                ? `Abre ${fmtData(local.dataInicio)} · encerra ${fmtData(local.dataFim)}`
+                : `Votação encerra ${fmtData(local.dataFim)}`}
+            </p>
+          )}
 
         <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
           <div className="flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-2">

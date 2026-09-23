@@ -148,6 +148,15 @@ export type TransparenciaData = {
   integridade: { votantes: number; votos: number; confere: boolean };
   orgaos: string[];
   locais: TransparenciaLocal[];
+  /** Locais em rodada suplementar (2+), com estado e janela — alimenta o aviso
+      público (distingue "agendada" de "em andamento" e mostra o período). */
+  suplementaresLista: {
+    id: string;
+    nome: string;
+    status: LocalStatus;
+    dataInicio: string | null;
+    dataFim: string | null;
+  }[];
 };
 
 /** Quantas "próximas aberturas" listar (as demais ficam só na contagem). */
@@ -173,6 +182,7 @@ const EMPTY: TransparenciaData = {
   integridade: { votantes: 0, votos: 0, confere: true },
   orgaos: [],
   locais: [],
+  suplementaresLista: [],
 };
 
 export async function getTransparenciaData(
@@ -464,6 +474,21 @@ export async function getTransparenciaData(
     integridade: { votantes: votos, votos: totalVotosReais, confere: votos === totalVotosReais },
     orgaos,
     locais,
+    // Suplementares (rodada 2+): estado + janela para o aviso público. Ordena os
+    // "em andamento" antes das "agendadas"; encerradas por último.
+    suplementaresLista: todos
+      .filter((l) => l.rodadaAtual > 1)
+      .sort((a, b) => {
+        const ordem = { open: 0, upcoming: 1, undefined: 2, closed: 3 } as const;
+        return ordem[a.status] - ordem[b.status];
+      })
+      .map((l) => ({
+        id: l.id,
+        nome: l.nome,
+        status: l.status,
+        dataInicio: l.dataInicio,
+        dataFim: l.dataFim,
+      })),
   };
 }
 
@@ -931,20 +956,35 @@ export async function getHistoricoDiretoria(
       timeStyle: "short",
       timeZone: "America/Sao_Paulo",
     }).format(d);
-  const nomeToId = new Map(locais.map((l) => [l.nome, l.id]));
+  const nomeToWp = new Map(
+    locais.map((l) => [
+      l.nome,
+      { id: l.id, ini: l.dataInicioVotacao, fim: l.dataFimVotacao },
+    ]),
+  );
+  const janela = (ini: Date | null, fim: Date | null) =>
+    ini && fim ? `De ${fmtData(ini)} até ${fmtData(fim)}.` : null;
 
   // Auditoria → itens (só os atos cujo ALVO é um local DESTE pleito).
   const itens: AtividadeItem[] = [];
   for (const g of logs) {
-    if (!g.alvo || !nomeToId.has(g.alvo)) continue;
+    if (!g.alvo) continue;
+    const wp = nomeToWp.get(g.alvo);
+    if (!wp) continue;
     const m = ACAO_MAP[g.acao];
+    // Suplementar: mostra a JANELA (início e fim) da rodada. Enriquecemos com as
+    // datas do local quando o registro antigo só guardava o término (retroativo).
+    let detalhe = g.detalhe;
+    if (m.tipo === "SUPLEMENTAR" && !(detalhe ?? "").includes(" até ")) {
+      detalhe = janela(wp.ini, wp.fim) ?? detalhe;
+    }
     itens.push({
       tipo: m.tipo,
       titulo: m.titulo,
-      detalhe: g.detalhe,
+      detalhe,
       autorNome: g.userNome,
       localNome: g.alvo,
-      localId: nomeToId.get(g.alvo) ?? "",
+      localId: wp.id,
       data: g.createdAt.toISOString(),
     });
   }
@@ -953,11 +993,16 @@ export async function getHistoricoDiretoria(
   const comAgend = new Set(
     logs.filter((g) => g.acao === "AGENDOU_VOTACAO").map((g) => g.alvo),
   );
+  // Locais com suplementar registrada NÃO recebem "Votação agendada" derivada
+  // (o próprio ato de suplementar já mostra a janela — evita duplicar).
+  const comSuplementar = new Set(
+    logs.filter((g) => g.acao === "INICIOU_SUPLEMENTAR").map((g) => g.alvo),
+  );
   const comEnc = new Set(
     logs.filter((g) => g.acao === "ENCERROU").map((g) => g.alvo),
   );
   for (const l of locais) {
-    if (l.dataInicioVotacao && !comAgend.has(l.nome)) {
+    if (l.dataInicioVotacao && !comAgend.has(l.nome) && !comSuplementar.has(l.nome)) {
       itens.push({
         tipo: "AGENDAMENTO",
         titulo: "Votação agendada",

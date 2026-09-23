@@ -34,8 +34,12 @@ export type DashboardData = {
     /** Vagas preenchidas = candidatos com votos, limitado às vagas de cada local. */
     vagasPreenchidas: number;
     votosUltimaHora: number;
-    /** Locais em eleição suplementar (rodada atual >= 2). */
+    /** Locais em eleição suplementar (rodada atual >= 2), em qualquer estado. */
     suplementares: number;
+    /** Suplementares VOTANDO agora (rodada >= 2 e janela aberta). */
+    suplementaresAtivas: number;
+    /** Suplementares AGENDADAS (rodada >= 2 e início no futuro). */
+    suplementaresAgendadas: number;
   };
   statusPie: StatusFatia[];
   /** Locais com votação AGENDADA, os que abrem primeiro (limitado p/ render). */
@@ -150,6 +154,8 @@ export async function getDashboardData(
     proximoFim,
     proximasRaw,
     suplementares,
+    suplementaresAtivas,
+    suplementaresAgendadas,
   ] = await Promise.all([
     prisma.workplace.count({ where: { anoEleicao } }),
     prisma.vote.count({ where: { anoEleicao } }),
@@ -244,6 +250,19 @@ export async function getDashboardData(
     // EM SUPLEMENTAR: rodada atual >= 2 (nova rodada por vagas que faltaram).
     prisma.workplace.count({
       where: { anoEleicao, rodadaAtual: { gte: 2 } },
+    }),
+    // Suplementar VOTANDO agora (rodada >= 2 e janela aberta).
+    prisma.workplace.count({
+      where: {
+        anoEleicao,
+        rodadaAtual: { gte: 2 },
+        dataInicioVotacao: { lte: now },
+        dataFimVotacao: { gte: now },
+      },
+    }),
+    // Suplementar AGENDADA (rodada >= 2 e início no futuro).
+    prisma.workplace.count({
+      where: { anoEleicao, rodadaAtual: { gte: 2 }, dataInicioVotacao: { gt: now } },
     }),
   ]);
 
@@ -372,6 +391,8 @@ export async function getDashboardData(
       vagasPreenchidas,
       votosUltimaHora,
       suplementares,
+      suplementaresAtivas,
+      suplementaresAgendadas,
     },
     // As 4 fatias somam o total de locais (categorias mutuamente exclusivas).
     statusPie: [

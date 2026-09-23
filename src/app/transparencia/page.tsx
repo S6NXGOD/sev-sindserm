@@ -226,7 +226,7 @@ export default async function TransparenciaPage({
 
         {/* Aviso de eleição suplementar (aparece só quando há rodada 2+): explica
             a lisura e leva o filiado aos locais em suplementar. */}
-        <SuplementarAviso total={data.kpis.suplementares} />
+        <SuplementarAviso itens={data.suplementaresLista} />
 
         {/* Apuração ao vivo: votações em andamento agora (participação + líder
             parcial quando a diretoria habilita). Some quando não há nada aberto. */}

@@ -116,6 +116,21 @@ export default async function DashboardPage({
     d.alertas.encerrandoEm24h.length;
   const maxZona = Math.max(1, ...d.zonasAtivas.map((z) => z.votos));
 
+  // Suplementar: distingue "votando agora" de "agendada" para o texto ser honesto
+  // (antes dizia "está em suplementar" mesmo quando ainda nem tinha aberto).
+  const supAtivas = d.kpis.suplementaresAtivas;
+  const supAgendadas = d.kpis.suplementaresAgendadas;
+  const supTitulo =
+    supAtivas > 0 && supAgendadas > 0
+      ? "Eleições suplementares em andamento e agendadas"
+      : supAtivas > 0
+        ? supAtivas === 1
+          ? "1 local em eleição suplementar agora"
+          : `${supAtivas} locais em eleição suplementar agora`
+        : supAgendadas === 1
+          ? "1 eleição suplementar agendada"
+          : `${supAgendadas} eleições suplementares agendadas`;
+
   return (
     <div className="sev-stagger space-y-6">
       {/* Som de "resultado consolidado" (success.mp3) ao encerrar um local. */}
@@ -210,9 +225,10 @@ export default async function DashboardPage({
         />
       </div>
 
-      {/* Faixa de SUPLEMENTAR: só aparece quando há locais em nova rodada. Leva
-          direto à lista filtrada — o admin vê e age de relance. */}
-      {d.kpis.suplementares > 0 && (
+      {/* Faixa de SUPLEMENTAR: só aparece quando há rodada votando agora OU
+          agendada (encerradas não alarmam). Texto honesto conforme o estado e
+          leva direto à lista filtrada — o admin vê o período e age de relance. */}
+      {supAtivas + supAgendadas > 0 && (
         <Link
           href="/admin/locais?status=suplementar"
           className="flex items-center gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-sm transition hover:bg-violet-100"
@@ -221,14 +237,10 @@ export default async function DashboardPage({
             <Repeat className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="font-bold text-violet-900">
-              {d.kpis.suplementares}{" "}
-              {d.kpis.suplementares === 1
-                ? "local em eleição suplementar"
-                : "locais em eleição suplementar"}
-            </p>
+            <p className="font-bold text-violet-900">{supTitulo}</p>
             <p className="text-xs text-violet-700">
-              Nova rodada por vagas que faltaram. Toque para ver e gerenciar.
+              Nova rodada por vagas que faltaram. Toque para ver o período e
+              gerenciar.
             </p>
           </div>
           <span className="shrink-0 text-sm font-semibold text-violet-700">

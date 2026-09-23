@@ -173,7 +173,7 @@ export function AuditoriaList({ rows }: { rows: AuditRow[] }) {
                   ) : null}
                 </p>
                 {r.detalhe && (
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground break-words">
                     {r.detalhe}
                   </p>
                 )}

@@ -1057,10 +1057,12 @@ export async function iniciarSuplementar(
   revalidatePath(`/admin/locais/${id}`);
   revalidatePath("/admin/encerradas");
 
+  // Detalhe da auditoria com a JANELA COMPLETA (início até fim) — não só o término.
+  const janelaTxt = `de ${formatDateTime(novoInicio)} até ${formatDateTime(novoFim)}`;
   const detalhe =
     modo === "suplementar"
-      ? `rodada ${novaRodada} · ${eleitosIds.length} eleito(s) preservado(s) · término ${formatDateTime(novoFim)}`
-      : `rodada ${novaRodada} · nova eleição do zero · término ${formatDateTime(novoFim)}`;
+      ? `rodada ${novaRodada} · ${eleitosIds.length} eleito(s) preservado(s) · ${janelaTxt}`
+      : `rodada ${novaRodada} · nova eleição do zero · ${janelaTxt}`;
   await registrarAuditoria("INICIOU_SUPLEMENTAR", {
     alvo: workplace.nome,
     detalhe,
