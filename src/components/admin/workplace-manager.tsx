@@ -48,6 +48,11 @@ import {
 import { initialActionState } from "@/lib/types";
 import { slugify } from "@/lib/slug";
 import type { VotingStatus } from "@/lib/voting-status";
+import {
+  isSuplementar,
+  ordinalRodada,
+  SuplementarBadge,
+} from "@/components/admin/suplementar-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -111,6 +116,8 @@ export type ManagerData = {
   status: VotingStatus;
   /** Rodada atual (1 = normal; 2+ = suplementar). */
   rodadaAtual: number;
+  /** Eleitos de rodadas anteriores travados (fora da cédula) na suplementar. */
+  preservados: number;
   /** Local dispensado pela diretoria (sem representação por decisão). */
   semRepresentacao: boolean;
   semRepresentacaoMotivo: string | null;
@@ -1441,6 +1448,7 @@ export function WorkplaceManager({ data }: { data: ManagerData }) {
                 )}
                 PDF
               </Button>
+              <SuplementarBadge rodada={data.rodadaAtual} />
               <Badge variant={status.variant} className={status.className}>
                 {status.label}
               </Badge>
@@ -1448,6 +1456,26 @@ export function WorkplaceManager({ data }: { data: ManagerData }) {
           </div>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
+          {/* Faixa de SUPLEMENTAR: deixa claro, de relance, que este local está
+              numa nova rodada — com o resumo do que isso significa. */}
+          {isSuplementar(data.rodadaAtual) && (
+            <div className="flex items-start gap-2 rounded-lg border border-violet-200 bg-violet-50 p-3 text-violet-900">
+              <Repeat className="mt-0.5 h-4 w-4 shrink-0" />
+              <p className="text-xs leading-relaxed">
+                <strong>
+                  Eleição suplementar · {ordinalRodada(data.rodadaAtual)} rodada.
+                </strong>{" "}
+                {data.preservados > 0
+                  ? `${data.preservados} eleito(s) das rodadas anteriores estão preservados — mantêm a vaga e ficam fora da cédula. `
+                  : ""}
+                A disputa agora é por{" "}
+                <strong>
+                  {Math.max(0, data.vagas - data.preservados)} vaga(s) restante(s)
+                </strong>
+                . Quem já votou pode votar de novo nesta rodada.
+              </p>
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-2">
             {naoAgendado ? (
               <p className="flex items-center gap-1.5 font-medium text-amber-700">

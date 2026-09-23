@@ -220,6 +220,7 @@ export default async function LocalDetailPage({
     publicUrl: `${votingBaseUrl}/votacao/${workplace.linkToken}`,
 
     rodadaAtual: workplace.rodadaAtual,
+    preservados: preservados.length,
     semRepresentacao: workplace.semRepresentacao,
     semRepresentacaoMotivo: workplace.semRepresentacaoMotivo,
     totalCandidatos,

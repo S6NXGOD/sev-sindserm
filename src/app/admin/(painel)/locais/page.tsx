@@ -33,6 +33,7 @@ import {
 import { WorkplacesFilterBar } from "@/components/admin/workplaces-filter-bar";
 import { CopyButton } from "@/components/admin/copy-button";
 import { ReportGenerator } from "@/components/admin/report-generator";
+import { SuplementarBadge } from "@/components/admin/suplementar-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -316,7 +317,10 @@ export default async function LocaisPage({
                         <Badge variant="outline">{w.zona}</Badge>
                       </TableCell>
                       <TableCell>
-                        {statusBadge(w.dataInicioVotacao, w.dataFimVotacao)}
+                        <div className="flex flex-col items-start gap-1">
+                          {statusBadge(w.dataInicioVotacao, w.dataFimVotacao)}
+                          <SuplementarBadge rodada={w.rodadaAtual} />
+                        </div>
                       </TableCell>
                       <TableCell className="text-center">
                         {w._count.candidates}
@@ -376,8 +380,9 @@ export default async function LocaisPage({
                         /votacao/{w.linkToken}
                       </div>
                     </div>
-                    <div className="shrink-0">
+                    <div className="flex shrink-0 flex-col items-end gap-1">
                       {statusBadge(w.dataInicioVotacao, w.dataFimVotacao)}
+                      <SuplementarBadge rodada={w.rodadaAtual} />
                     </div>
                   </div>
 
