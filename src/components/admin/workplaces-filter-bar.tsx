@@ -18,12 +18,14 @@ import {
 const ALL = "all";
 const ORGAO_OPTIONS = ORGAOS.map((o) => ({ value: o, label: o }));
 
-// 4 status mutuamente exclusivos (ver src/lib/voting-status.ts).
+// 4 status de janela (ver src/lib/voting-status.ts) + "suplementar", que é
+// ORTOGONAL (rodada >= 2) — atalho para achar rápido os locais em nova rodada.
 const STATUS_OPTIONS = [
   { value: "undefined", label: "Aguardando agendamento" },
   { value: "upcoming", label: "Não iniciadas (agendadas)" },
   { value: "open", label: "Abertas" },
   { value: "closed", label: "Encerradas" },
+  { value: "suplementar", label: "Em suplementar (2ª rodada+)" },
 ];
 
 export function WorkplacesFilterBar({

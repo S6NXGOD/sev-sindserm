@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SuplementarBadge } from "@/components/admin/suplementar-badge";
 import {
   Table,
   TableBody,
@@ -106,11 +107,7 @@ function ApuracaoCard({ a }: { a: Apuracao }) {
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-            {a.rodadaAtual > 1 && (
-              <Badge className="bg-violet-600 hover:bg-violet-600">
-                {a.rodadaAtual}ª rodada
-              </Badge>
-            )}
+            <SuplementarBadge rodada={a.rodadaAtual} />
             <Badge variant={STATUS_VARIANT[a.status]}>
               {STATUS_LABEL[a.status]}
             </Badge>

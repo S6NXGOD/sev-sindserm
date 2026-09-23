@@ -134,6 +134,9 @@ function buildWhere(
     AND.push({ dataFimVotacao: { lt: now } });
   } else if (sp.status === "undefined") {
     AND.push({ dataInicioVotacao: null });
+  } else if (sp.status === "suplementar") {
+    // Ortogonal aos 4 status de janela: "em suplementar" = rodada atual >= 2.
+    AND.push({ rodadaAtual: { gte: 2 } });
   }
 
   return { AND };

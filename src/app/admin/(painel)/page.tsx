@@ -12,6 +12,7 @@ import {
   Gauge,
   ListChecks,
   MapPin,
+  Repeat,
   TrendingUp,
   Users,
   Vote,
@@ -208,6 +209,33 @@ export default async function DashboardPage({
           tone="red"
         />
       </div>
+
+      {/* Faixa de SUPLEMENTAR: só aparece quando há locais em nova rodada. Leva
+          direto à lista filtrada — o admin vê e age de relance. */}
+      {d.kpis.suplementares > 0 && (
+        <Link
+          href="/admin/locais?status=suplementar"
+          className="flex items-center gap-3 rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-sm transition hover:bg-violet-100"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700">
+            <Repeat className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-violet-900">
+              {d.kpis.suplementares}{" "}
+              {d.kpis.suplementares === 1
+                ? "local em eleição suplementar"
+                : "locais em eleição suplementar"}
+            </p>
+            <p className="text-xs text-violet-700">
+              Nova rodada por vagas que faltaram. Toque para ver e gerenciar.
+            </p>
+          </div>
+          <span className="shrink-0 text-sm font-semibold text-violet-700">
+            Ver →
+          </span>
+        </Link>
+      )}
 
       {/* Próximas aberturas: as votações já agendadas que vão abrir. Fica logo
           abaixo do KPI "Não iniciadas" — é o detalhe acionável daquele número. */}

@@ -34,6 +34,8 @@ export type DashboardData = {
     /** Vagas preenchidas = candidatos com votos, limitado às vagas de cada local. */
     vagasPreenchidas: number;
     votosUltimaHora: number;
+    /** Locais em eleição suplementar (rodada atual >= 2). */
+    suplementares: number;
   };
   statusPie: StatusFatia[];
   /** Locais com votação AGENDADA, os que abrem primeiro (limitado p/ render). */
@@ -147,6 +149,7 @@ export async function getDashboardData(
     encerrandoEm24h,
     proximoFim,
     proximasRaw,
+    suplementares,
   ] = await Promise.all([
     prisma.workplace.count({ where: { anoEleicao } }),
     prisma.vote.count({ where: { anoEleicao } }),
@@ -237,6 +240,10 @@ export async function getDashboardData(
         orgao: true,
         dataInicioVotacao: true,
       },
+    }),
+    // EM SUPLEMENTAR: rodada atual >= 2 (nova rodada por vagas que faltaram).
+    prisma.workplace.count({
+      where: { anoEleicao, rodadaAtual: { gte: 2 } },
     }),
   ]);
 
@@ -364,6 +371,7 @@ export async function getDashboardData(
       vagas: vagasTotais,
       vagasPreenchidas,
       votosUltimaHora,
+      suplementares,
     },
     // As 4 fatias somam o total de locais (categorias mutuamente exclusivas).
     statusPie: [
