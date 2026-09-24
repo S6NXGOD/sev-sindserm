@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Phone, Users } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { PAGE_SIZE } from "@/lib/constants";
 import { formatDateTime } from "@/lib/format";
@@ -148,6 +148,7 @@ export default async function VotantesPage({
               <TableHeader>
                 <TableRow>
                   <TableHead>Votante</TableHead>
+                  <TableHead>Telefone</TableHead>
                   <TableHead>Filiação</TableHead>
                   <TableHead>Local de Trabalho</TableHead>
                   <TableHead>Órgão</TableHead>
@@ -159,7 +160,7 @@ export default async function VotantesPage({
                 {voters.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={6}
+                      colSpan={7}
                       className="py-10 text-center text-muted-foreground"
                     >
                       Nenhum votante encontrado.
@@ -169,6 +170,19 @@ export default async function VotantesPage({
                   voters.map((v) => (
                     <TableRow key={v.id}>
                       <TableCell className="font-medium">{v.nome}</TableCell>
+                      <TableCell className="text-sm">
+                        {v.telefone ? (
+                          <a
+                            href={`tel:${v.telefone.replace(/[^0-9+]/g, "")}`}
+                            className="inline-flex items-center gap-1.5 text-primary hover:underline"
+                          >
+                            <Phone className="h-3.5 w-3.5 shrink-0" />
+                            {v.telefone}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {v.isFiliado ? (
                           <Badge variant="success">Filiado</Badge>
@@ -234,6 +248,16 @@ export default async function VotantesPage({
                       {v.workplace.orgao}
                     </p>
                   </div>
+
+                  {v.telefone && (
+                    <a
+                      href={`tel:${v.telefone.replace(/[^0-9+]/g, "")}`}
+                      className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                    >
+                      <Phone className="h-4 w-4 shrink-0" />
+                      {v.telefone}
+                    </a>
+                  )}
 
                   <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
                     <Badge variant="outline">{v.workplace.zona}</Badge>

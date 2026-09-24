@@ -452,8 +452,26 @@ function ReopenForm({ data }: { data: ManagerData }) {
       </div>
       <p className="mb-3 text-xs text-amber-700">
         Defina um novo horário de término no futuro. A votação voltará a aceitar
-        votos imediatamente.
+        votos imediatamente, <strong>na mesma rodada</strong> — os votos já dados
+        continuam valendo e quem ainda não votou passa a poder votar.
       </p>
+      {/* GUARDRAIL: reabrir uma votação COM resultado apurado pode mudar quem foi
+          eleito. Avisa e indica a suplementar quando a intenção é só completar. */}
+      {data.eleitos.length > 0 && (
+        <div className="mb-3 flex items-start gap-2 rounded-md border border-rose-300 bg-rose-50 p-2.5 text-xs text-rose-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <strong>
+              Este local já tem resultado apurado ({data.eleitos.length}{" "}
+              eleito(s)).
+            </strong>{" "}
+            Reabrir aceita novos votos que podem <strong>mudar quem foi eleito</strong>.
+            Se a intenção é só preencher as vagas que faltaram{" "}
+            <em>sem alterar</em> os já eleitos, use{" "}
+            <strong>“Abrir nova rodada” → Suplementar</strong>.
+          </span>
+        </div>
+      )}
       {/* Ação crítica (reabre uma votação encerrada): confirma antes de aplicar. */}
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex-1 space-y-1.5">
