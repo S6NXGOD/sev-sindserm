@@ -13,6 +13,7 @@ import { registrarEventoLocal, registrarEventoLocalSafe } from "@/lib/eventos";
 import { notificarAdminsBg } from "@/lib/push";
 import { formatDateTime } from "@/lib/format";
 import { buildVoterWhere, type VoterFiltros } from "@/lib/voter-filters";
+import { isValidPhoneBr } from "@/lib/phone";
 import { apurarEleitos, calcularVagas } from "@/lib/vagas";
 import { apurarLocal } from "@/lib/apuracao";
 import { DEFAULT_LOGO } from "@/lib/logo-constants";
@@ -1464,6 +1465,61 @@ export async function fetchVotersForPdf(
     total,
     filiados,
   };
+}
+
+/** Verificação de telefones (auditoria/anti-fraude) — SÓ LEITURA. */
+export type PhoneAnomalies = {
+  /** Telefones usados por 2+ votantes (o sinal mais forte para revisão). */
+  repetidos: {
+    telefone: string;
+    count: number;
+    votantes: { nome: string; local: string }[];
+  }[];
+  /** Quantos votantes têm telefone em formato inválido/obviamente falso. */
+  invalidos: number;
+  /** Quantos votantes têm telefone preenchido (base da checagem). */
+  totalComTelefone: number;
+};
+
+export async function getPhoneAnomalies(
+  anoEleicao: number,
+): Promise<PhoneAnomalies> {
+  await ensureModule("votantes", "VIEW"); // dados pessoais — nunca sem permissão
+
+  const grupos = await prisma.voter.groupBy({
+    by: ["telefone"],
+    where: { anoEleicao, telefone: { not: null } },
+    _count: { telefone: true },
+    having: { telefone: { _count: { gt: 1 } } },
+    orderBy: { _count: { telefone: "desc" } },
+    take: 50,
+  });
+
+  const repetidos: PhoneAnomalies["repetidos"] = [];
+  for (const g of grupos) {
+    if (!g.telefone) continue;
+    const vs = await prisma.voter.findMany({
+      where: { anoEleicao, telefone: g.telefone },
+      select: { nome: true, workplace: { select: { nome: true } } },
+      orderBy: { createdAt: "asc" },
+      take: 40,
+    });
+    repetidos.push({
+      telefone: g.telefone,
+      count: g._count.telefone,
+      votantes: vs.map((v) => ({ nome: v.nome, local: v.workplace.nome })),
+    });
+  }
+
+  // Formato inválido: varre os telefones preenchidos (universo pequeno por pleito).
+  const comTel = await prisma.voter.findMany({
+    where: { anoEleicao, telefone: { not: null } },
+    select: { telefone: true },
+    take: 20000,
+  });
+  const invalidos = comTel.filter((v) => !isValidPhoneBr(v.telefone)).length;
+
+  return { repetidos, invalidos, totalComTelefone: comTel.length };
 }
 
 const REPORT_ROW_CAP = 50000;

@@ -7,6 +7,8 @@ import { castVote, type CandidateOption } from "@/lib/actions/votacao";
 import { initialVoteActionState } from "@/lib/types";
 import { downloadReceiptPdf } from "@/lib/receipt-pdf";
 import { formatCpf } from "@/lib/cpf";
+import { suggestEmail } from "@/lib/email-suggest";
+import { formatPhoneBr, isValidPhoneBr, onlyDigits } from "@/lib/phone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +35,8 @@ function SubmitButton() {
 export function VotingForm({ linkToken }: { linkToken: string }) {
   const [state, formAction] = useFormState(castVote, initialVoteActionState);
   const [cpf, setCpf] = useState("");
+  const [telefone, setTelefone] = useState("");
+  const [email, setEmail] = useState("");
   const [candidate, setCandidate] = useState<CandidateOption | null>(null);
   const [filiado, setFiliado] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
@@ -41,10 +45,17 @@ export function VotingForm({ linkToken }: { linkToken: string }) {
     if (state.status === "success") {
       formRef.current?.reset();
       setCpf("");
+      setTelefone("");
+      setEmail("");
       setCandidate(null);
       setFiliado("");
     }
   }, [state]);
+
+  // Sugestão de domínio de e-mail ("Você quis dizer …@gmail.com?") — só palpite.
+  const sugestaoEmail = suggestEmail(email);
+  // Telefone só é sinalizado como suspeito quando já foi digitado por completo.
+  const telSuspeito = onlyDigits(telefone).length >= 10 && !isValidPhoneBr(telefone);
 
   if (state.status === "success") {
     return (
@@ -124,7 +135,16 @@ export function VotingForm({ linkToken }: { linkToken: string }) {
             inputMode="tel"
             placeholder="(00) 00000-0000"
             autoComplete="tel"
+            value={telefone}
+            onChange={(e) => setTelefone(formatPhoneBr(e.target.value))}
+            maxLength={16}
+            aria-invalid={telSuspeito}
           />
+          {telSuspeito && (
+            <p className="text-xs text-amber-600">
+              Confira o telefone: use DDD + número (ex.: (86) 99999-9999).
+            </p>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="email">E-mail</Label>
@@ -134,7 +154,18 @@ export function VotingForm({ linkToken }: { linkToken: string }) {
             type="email"
             autoComplete="email"
             placeholder="seu@email.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
+          {sugestaoEmail && (
+            <button
+              type="button"
+              onClick={() => setEmail(sugestaoEmail)}
+              className="text-left text-xs text-primary hover:underline"
+            >
+              Você quis dizer <strong>{sugestaoEmail}</strong>?
+            </button>
+          )}
         </div>
       </div>
 

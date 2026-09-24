@@ -32,6 +32,7 @@ import {
 import { VotersFilterBar } from "@/components/admin/voters-filter-bar";
 import { ExportVotersButton } from "@/components/admin/export-voters-button";
 import { ExportVotersPdfButton } from "@/components/admin/export-voters-pdf-button";
+import { PhoneChecksPanel } from "@/components/admin/phone-checks-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -141,6 +142,9 @@ export default async function VotantesPage({
           </p>
         </div>
       </div>
+
+      {/* Auditoria de telefones (repetidos / inválidos) — recolhível, só leitura. */}
+      <PhoneChecksPanel ano={ano} />
 
       <Card>
         <CardHeader>
