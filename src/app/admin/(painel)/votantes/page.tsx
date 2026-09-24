@@ -5,8 +5,10 @@ import { PAGE_SIZE } from "@/lib/constants";
 import { formatDateTime } from "@/lib/format";
 import {
   getCurrentElectionYear,
+  getElectionLogos,
   getSelectedElectionYear,
   requirePleito,
+  tituloInstitucional,
 } from "@/lib/election";
 import { requireModule } from "@/lib/current-user";
 import { buildVoterWhere } from "@/lib/voter-filters";
@@ -29,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import { VotersFilterBar } from "@/components/admin/voters-filter-bar";
 import { ExportVotersButton } from "@/components/admin/export-voters-button";
+import { ExportVotersPdfButton } from "@/components/admin/export-voters-pdf-button";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +78,8 @@ export default async function VotantesPage({
     filiacao: searchParams.filiacao,
   });
 
-  const [total, filtered, filiados, voters, selectedLocal] = await Promise.all([
+  const [total, filtered, filiados, voters, selectedLocal, logos, pleito] =
+    await Promise.all([
     prisma.voter.count({ where: { anoEleicao: ano } }),
     prisma.voter.count({ where }),
     prisma.voter.count({ where: { ...where, isFiliado: true } }),
@@ -103,10 +107,22 @@ export default async function VotantesPage({
           select: { nome: true },
         })
       : Promise.resolve(null),
+    // Cabeçalho institucional do PDF (logos + título do pleito).
+    getElectionLogos(ano),
+    prisma.election.findFirst({
+      where: { ano },
+      orderBy: [{ isEleicaoEspecial: "asc" }, { createdAt: "asc" }],
+      select: { titulo: true, duracaoMandato: true },
+    }),
   ]);
 
   const selectedLocalNome = selectedLocal?.nome ?? "";
   const totalPages = Math.max(1, Math.ceil(filtered / PAGE_SIZE));
+  const tituloPleito = tituloInstitucional(
+    pleito?.titulo,
+    ano,
+    pleito?.duracaoMandato ?? 3,
+  );
 
   return (
     <div className="space-y-6">
@@ -136,7 +152,15 @@ export default async function VotantesPage({
                 campanhas de filiação.
               </CardDescription>
             </div>
-            <ExportVotersButton ano={ano} />
+            <div className="flex flex-wrap gap-2">
+              <ExportVotersButton ano={ano} />
+              <ExportVotersPdfButton
+                ano={ano}
+                logoSindserm={logos.sindserm}
+                logoPleito={logos.pleito}
+                tituloPleito={tituloPleito}
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">

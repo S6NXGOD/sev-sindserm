@@ -68,8 +68,13 @@ export function SuplementarAviso({ itens }: { itens: SuplementarInfo[] }) {
     }, 60);
   }
 
+  const soUm = relevantes.length === 1;
+
   return (
-    <section className="overflow-hidden rounded-2xl border-2 border-violet-200 bg-violet-50 shadow-sm">
+    <section
+      data-tour="suplementar"
+      className="overflow-hidden rounded-2xl border-2 border-violet-200 bg-violet-50 shadow-sm"
+    >
       <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:gap-4 sm:p-5">
         <div className="flex shrink-0 items-center justify-center rounded-xl bg-violet-600 p-3 text-white">
           <Repeat className="h-6 w-6" />
@@ -124,7 +129,7 @@ export function SuplementarAviso({ itens }: { itens: SuplementarInfo[] }) {
             className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
           >
             <Vote className="h-4 w-4" />
-            Ver esses locais
+            {soUm ? "Ver esse local" : "Ver esses locais"}
           </button>
           <button
             type="button"

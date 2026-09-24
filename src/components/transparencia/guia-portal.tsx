@@ -6,7 +6,8 @@ import { ChevronLeft, ChevronRight, HelpCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // Bump a versão para reexibir o tour a todos (ex.: mudou bastante o portal).
-const STORAGE_KEY = "sev_tour_portal_v1";
+// v2: incluídos os passos de "Eleição suplementar" e "O que a diretoria andou fazendo".
+const STORAGE_KEY = "sev_tour_portal_v2";
 
 type Passo = {
   /** Seletor do elemento real a destacar. Vazio = passo de boas-vindas (centro). */
@@ -29,6 +30,12 @@ const PASSOS: Passo[] = [
       "Aqui ficam os números do momento: total de votantes, eleitos já definidos, locais em andamento e encerrados. Atualiza sozinho conforme os votos entram.",
   },
   {
+    sel: '[data-tour="suplementar"]',
+    titulo: "Eleição suplementar",
+    texto:
+      "Quando um local não preenche todas as vagas, a diretoria pode abrir uma nova rodada (suplementar). Este aviso mostra quais locais estão nesse caso e quando cada um abre e encerra. Os já eleitos são preservados e você pode votar de novo.",
+  },
+  {
     sel: '[data-tour="regimento"]',
     titulo: "As regras oficiais",
     texto:
@@ -45,6 +52,12 @@ const PASSOS: Passo[] = [
     titulo: "Confira que é limpo",
     texto:
       "Toque para abrir a auditoria: você vê que o total de votos bate com o de votantes (urna conferida), as garantias do sistema e como contestar se algo parecer errado.",
+  },
+  {
+    sel: '[data-tour="atividade"]',
+    titulo: "O que a diretoria andou fazendo",
+    texto:
+      "Cada passo oficial no pleito — agendou, encerrou, abriu suplementar — com quem fez, quando e o período. Toque em “Ver todo o histórico” para a lista completa, com busca.",
   },
   {
     sel: '[data-tour="busca"]',

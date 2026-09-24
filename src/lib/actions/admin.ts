@@ -1413,6 +1413,59 @@ export async function exportVotersCsv(filtros: VoterFiltros): Promise<string> {
   return `﻿${corpo}`;
 }
 
+/** Dados estruturados dos votantes para o PDF (mesma permissão e filtros do CSV). */
+export type VotersPdfData = {
+  rows: {
+    nome: string;
+    telefone: string;
+    email: string;
+    filiado: boolean;
+    local: string;
+    orgao: string;
+    zona: string;
+  }[];
+  total: number;
+  filiados: number;
+};
+
+export async function fetchVotersForPdf(
+  filtros: VoterFiltros,
+): Promise<VotersPdfData> {
+  await ensureModule("votantes", "VIEW"); // dados pessoais — nunca sem permissão
+  const where = buildVoterWhere(filtros);
+
+  const [voters, total, filiados] = await Promise.all([
+    prisma.voter.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: CSV_EXPORT_LIMIT,
+      select: {
+        nome: true,
+        telefone: true,
+        email: true,
+        isFiliado: true,
+        workplace: { select: { nome: true, orgao: true, zona: true } },
+      },
+    }),
+    prisma.voter.count({ where }),
+    prisma.voter.count({ where: { ...where, isFiliado: true } }),
+  ]);
+
+  return {
+    rows: voters.map((v) => ({
+      nome: v.nome,
+      telefone: v.telefone ?? "",
+      email: v.email ?? "",
+      filiado: v.isFiliado,
+      local: v.workplace.nome,
+      orgao: v.workplace.orgao,
+      zona: v.workplace.zona,
+    })),
+    total,
+    filiados,
+  };
+}
+
 const REPORT_ROW_CAP = 50000;
 const CSV_ESC = (campo: string) => `"${String(campo).replace(/"/g, '""')}"`;
 const toCsv = (rows: string[][]) =>

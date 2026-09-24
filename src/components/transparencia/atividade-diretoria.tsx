@@ -76,11 +76,17 @@ function Ato({ e, compact = false }: { e: AtividadeItem; compact?: boolean }) {
           <MapPin className="h-3 w-3 shrink-0" />
           <span className="truncate">{e.localNome}</span>
         </p>
-        {!compact && e.detalhe && (
-          <p className="mt-1 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600">
-            {e.detalhe}
-          </p>
-        )}
+        {/* Detalhe (ex.: janela "de X até Y" do agendamento/suplementar) — SEMPRE
+            visível, inclusive na prévia compacta: é a informação que responde
+            "qual o horário". Compacto = linha simples; completo = caixa. */}
+        {e.detalhe &&
+          (compact ? (
+            <p className="mt-0.5 text-xs text-slate-600">{e.detalhe}</p>
+          ) : (
+            <p className="mt-1 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-600">
+              {e.detalhe}
+            </p>
+          ))}
         <p className="mt-0.5 text-[11px] text-muted-foreground">
           {fmt(e.data)}
           {e.autorNome ? ` · ${e.autorNome}` : ""}
@@ -148,7 +154,10 @@ export function AtividadeDiretoria({
   const previa = itens.slice(0, PREVIA);
 
   return (
-    <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+    <section
+      data-tour="atividade"
+      className="overflow-hidden rounded-2xl border bg-white shadow-sm"
+    >
       {/* Barra recolhível — fechada por padrão. Clique para abrir/fechar. */}
       <button
         type="button"
