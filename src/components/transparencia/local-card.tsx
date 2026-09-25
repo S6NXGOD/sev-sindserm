@@ -69,13 +69,17 @@ function ListaCandidatos({
   parcial = false,
   shown,
   onMore,
+  startPos = 1,
 }: {
   itens: CandidatoResultado[];
   tipo: "eleito" | "suplente";
-  /** true = números parciais (votação aberta): rótulos "Liderando"/"Na disputa". */
+  /** true = números parciais (votação aberta): rótulos "Liderando"/"Logo atrás". */
   parcial?: boolean;
   shown: number;
   onMore: () => void;
+  /** Posição inicial no ranking GERAL (suplentes continuam após eleitos+empate,
+      em vez de reiniciar em 1º — que dava a impressão errada de novo "1º"). */
+  startPos?: number;
 }) {
   const visiveis = itens.slice(0, shown);
   const eleito = tipo === "eleito";
@@ -84,7 +88,7 @@ function ListaCandidatos({
       ? "Liderando"
       : "Eleito"
     : parcial
-      ? "Na disputa"
+      ? "Logo atrás"
       : "Suplente";
   return (
     <ol className="space-y-1.5">
@@ -98,7 +102,7 @@ function ListaCandidatos({
           >
             <span className="flex min-w-0 items-center gap-2">
               <span className="w-6 shrink-0 text-xs font-semibold text-muted-foreground">
-                {i + 1}º
+                {startPos + i}º
               </span>
               <span className="truncate font-medium">{c.nome}</span>
               <Badge
@@ -435,6 +439,13 @@ export function LocalCard({
                     parcial={resultado.parcial}
                     shown={suplentesShown}
                     onMore={() => setSuplentesShown((n) => n + PAGE)}
+                    // Continua o ranking geral: após os eleitos + os empatados na
+                    // linha de corte (que ficam na caixa de empate, sem número).
+                    startPos={
+                      resultado.eleitos.length +
+                      (resultado.empate?.candidatos.length ?? 0) +
+                      1
+                    }
                   />
                 </div>
               )}
