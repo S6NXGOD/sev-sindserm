@@ -20,6 +20,7 @@ import { ConformidadeLegal } from "@/components/transparencia/conformidade-legal
 import { AtividadeDiretoria } from "@/components/transparencia/atividade-diretoria";
 import { SuplementarAviso } from "@/components/transparencia/suplementar-aviso";
 import { GuiaPortal } from "@/components/transparencia/guia-portal";
+import { PeriodoPleito } from "@/components/periodo-pleito";
 import { CountUp } from "@/components/transparencia/count-up";
 import { ParticipacaoPanel } from "@/components/transparencia/participacao-panel";
 import { PleitoSelector } from "@/components/transparencia/pleito-selector";
@@ -172,6 +173,14 @@ export default async function TransparenciaPage({
             <GuiaPortal />
           </div>
         </div>
+
+        {/* Período oficial do pleito (início/fim geral) — cada local vota na sua
+            janela dentro dele. */}
+        <PeriodoPleito
+          inicio={pleito.dataInicioGeral}
+          fim={pleito.dataFimGeral}
+          hint
+        />
 
         {/* Regimento oficial: o fundamento das regras (quem vota/concorre, como
             se apura, datas). Fica no topo — a base de tudo, aberta a qualquer um. */}

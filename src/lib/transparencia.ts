@@ -92,6 +92,9 @@ export type TransparenciaPleito = {
   emailOficial: string | null;
   /** Parciais por candidato dos locais ABERTOS são públicas neste pleito? */
   parciaisPublicas: boolean;
+  /** Janela GERAL do pleito (calendário oficial que trava a votação). */
+  dataInicioGeral: string | null;
+  dataFimGeral: string | null;
 };
 
 /** Um local com votação em andamento (para o painel "Apuração ao vivo"). */
@@ -450,6 +453,8 @@ export async function getTransparenciaData(
       logoPleito: resolvePleitoLogo(election.logoPleitoUrl),
       emailOficial: election.emailOficial?.trim() || null,
       parciaisPublicas: election.parciaisPublicas,
+      dataInicioGeral: election.dataInicioGeral?.toISOString() ?? null,
+      dataFimGeral: election.dataFimGeral?.toISOString() ?? null,
     },
     kpis: {
       locais: todos.length,

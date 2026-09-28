@@ -41,6 +41,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ProximasAberturas } from "@/components/proximas-aberturas";
+import { PeriodoPleito } from "@/components/periodo-pleito";
 import { AutoRefresh } from "@/components/admin/auto-refresh";
 import { RitmoCard } from "@/components/admin/ritmo-card";
 import { StatusPieChart } from "@/components/admin/status-pie-chart";
@@ -173,6 +174,9 @@ export default async function DashboardPage({
           </div>
         </CardContent>
       </Card>
+
+      {/* Período oficial do pleito (janela geral que trava a votação). */}
+      <PeriodoPleito inicio={d.periodo.inicio} fim={d.periodo.fim} />
 
       {/* KPIs principais */}
       <div className="grid gap-4 sm:grid-cols-3">

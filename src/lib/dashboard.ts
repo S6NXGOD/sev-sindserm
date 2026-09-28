@@ -19,6 +19,8 @@ export type LocalAdesao = {
 
 export type DashboardData = {
   ano: number;
+  /** Janela GERAL do pleito (calendário oficial). null = não definida. */
+  periodo: { inicio: string | null; fim: string | null };
   kpis: {
     locais: number;
     abertas: number;
@@ -377,8 +379,19 @@ export async function getDashboardData(
       presv + Math.min(restantes, votadosMap.get(c.workplaceId) ?? 0);
   }
 
+  // Calendário oficial do pleito (janela geral).
+  const pleito = await prisma.election.findFirst({
+    where: { ano: anoEleicao },
+    orderBy: [{ isEleicaoEspecial: "asc" }, { createdAt: "asc" }],
+    select: { dataInicioGeral: true, dataFimGeral: true },
+  });
+
   return {
     ano: anoEleicao,
+    periodo: {
+      inicio: pleito?.dataInicioGeral?.toISOString() ?? null,
+      fim: pleito?.dataFimGeral?.toISOString() ?? null,
+    },
     kpis: {
       locais: totalLocais,
       abertas,
