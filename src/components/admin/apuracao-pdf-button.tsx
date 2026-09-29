@@ -18,9 +18,12 @@ import { Button } from "@/components/ui/button";
 export function ApuracaoPdfButton({
   data,
   header,
+  variant = "default",
 }: {
   data: ReportData;
   header: ApuracaoPdfHeader;
+  /** "outline" na Encerradas (onde a "Lista de Eleitos" é o primário). */
+  variant?: "default" | "outline";
 }) {
   const [loading, setLoading] = useState(false);
 
@@ -37,7 +40,7 @@ export function ApuracaoPdfButton({
   }
 
   return (
-    <Button type="button" onClick={gerar} disabled={loading}>
+    <Button type="button" variant={variant} onClick={gerar} disabled={loading}>
       {loading ? (
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
       ) : (

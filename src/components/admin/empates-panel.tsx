@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Scale } from "lucide-react";
+import { ArrowRight, ChevronDown, Scale } from "lucide-react";
 import type { Apuracao } from "@/lib/reports";
 import { Button } from "@/components/ui/button";
 
@@ -14,28 +14,34 @@ export function EmpatesPanel({ empates }: { empates: Apuracao[] }) {
 
   return (
     <section className="sev-rise overflow-hidden rounded-2xl border bg-card shadow-sm">
-      {/* Cabeçalho + orientação (uma vez só). */}
-      <div className="border-b bg-amber-50/70 p-4 sm:p-5">
+      {/* Cabeçalho neutro; a orientação vira "Como desempatar" recolhível. */}
+      <div className="border-b bg-slate-50/60 p-4 sm:p-5">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
             <Scale className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-bold text-amber-900">
+            <h2 className="text-base font-bold text-slate-900">
               Empates a desempatar
             </h2>
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-muted-foreground">
               {empates.length} local(is) com resultado travado
             </p>
           </div>
         </div>
-        <p className="mt-3 text-xs leading-relaxed text-amber-800">
-          Os empatados têm exatamente os mesmos votos. Defina o critério pelo
-          estatuto (tempo de serviço/idade) ou sorteio em assembleia; depois abra
-          o local e marque quem <strong>não assume</strong> (motivo:{" "}
-          <strong>Desempate</strong>) — o outro é promovido automaticamente.
-          Registre a decisão em ata.
-        </p>
+        <details className="group mt-3">
+          <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-amber-700 [&::-webkit-details-marker]:hidden">
+            Como desempatar
+            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+          </summary>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Os empatados têm exatamente os mesmos votos. Defina o critério pelo
+            estatuto (tempo de serviço/idade) ou sorteio em assembleia; depois abra
+            o local e marque quem <strong>não assume</strong> (motivo:{" "}
+            <strong>Desempate</strong>) — o outro é promovido automaticamente.
+            Registre a decisão em ata.
+          </p>
+        </details>
       </div>
 
       <div className="sev-stagger grid grid-cols-1 gap-3 p-3 lg:grid-cols-2">
@@ -51,7 +57,7 @@ export function EmpatesPanel({ empates }: { empates: Apuracao[] }) {
                   {a.orgao} · Zona {a.zona}
                 </p>
               </div>
-              <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">
+              <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                 {a.vagasEmDisputa} {a.vagasEmDisputa === 1 ? "vaga" : "vagas"}
               </span>
             </div>

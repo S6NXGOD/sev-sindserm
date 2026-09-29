@@ -58,7 +58,7 @@ function LocalInfo({ item }: { item: VagaVaziaItem }) {
       <p className="flex flex-wrap items-center gap-2 font-semibold leading-tight">
         <span>{item.nome}</span>
         {item.semEleito && (
-          <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700">
+          <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600 ring-1 ring-rose-200">
             Nenhum eleito
           </span>
         )}
@@ -180,27 +180,33 @@ export function VagasVaziasPanel({
       id="vagas-sem-eleito"
       className="sev-rise scroll-mt-20 overflow-hidden rounded-2xl border bg-card shadow-sm"
     >
-      <div className="border-b bg-amber-50/70 p-4 sm:p-5">
+      <div className="border-b bg-slate-50/60 p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
             <Scale className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-bold text-amber-900">Vagas sem eleito</h2>
-            <p className="text-xs text-amber-700">
+            <h2 className="text-base font-bold text-slate-900">Vagas sem eleito</h2>
+            <p className="text-xs text-muted-foreground">
               {pendentes.length > 0
                 ? `${pendentes.length} a decidir`
                 : "Nenhuma decisão pendente"}
             </p>
           </div>
         </div>
-        <p className="mt-3 text-xs leading-relaxed text-amber-800">
-          Estes locais encerraram com menos eleitos que vagas — muitas vezes é{" "}
-          <strong>natural</strong>. Para cada um:{" "}
-          <strong>Manter assim</strong> (finaliza) ou{" "}
-          <strong>Agendar suplementar</strong> (cadastre novos candidatos e
-          reabra a votação para as vagas restantes).
-        </p>
+        <details className="group mt-3">
+          <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-amber-700 [&::-webkit-details-marker]:hidden">
+            Como decidir
+            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+          </summary>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Estes locais encerraram com menos eleitos que vagas — muitas vezes é{" "}
+            <strong>natural</strong>. Para cada um:{" "}
+            <strong>Manter assim</strong> (finaliza) ou{" "}
+            <strong>Agendar suplementar</strong> (cadastre novos candidatos e
+            reabra a votação para as vagas restantes).
+          </p>
+        </details>
       </div>
 
       {pendentes.length > 0 ? (

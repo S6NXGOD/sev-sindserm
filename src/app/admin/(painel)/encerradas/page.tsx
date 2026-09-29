@@ -21,6 +21,7 @@ import {
 import { requireModule } from "@/lib/current-user";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { ApuracoesList } from "@/components/admin/apuracoes-list";
 import { ApuracaoPdfButton } from "@/components/admin/apuracao-pdf-button";
 import { RelatorioPendenciasButton } from "@/components/admin/relatorio-pendencias-button";
@@ -151,7 +152,7 @@ export default async function EncerradasPage({
         </p>
       </div>
 
-      {/* KPIs. "Empates" salta em âmbar quando há resultado travado. */}
+      {/* KPIs. O âmbar de "Empates" só acende quando há resultado travado. */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         <Kpi
           label="Locais encerrados"
@@ -165,33 +166,27 @@ export default async function EncerradasPage({
           label="Empates a resolver"
           value={empates.length}
           icon={Scale}
-          tone="amber"
+          tone={empates.length > 0 ? "amber" : "default"}
         />
       </div>
 
-      {/* BOTÃO FÁCIL: encerrados sem NENHUM eleito (só aparece se houver).
-          Leva direto ao painel de decisão, com esses casos destacados no topo. */}
+      {/* Aviso SLIM (uma linha) — encerrados sem NENHUM eleito. Vermelho só como
+          ponto de acento no ícone, sem fundo saturado. Só aparece se houver. */}
       {semEleitoCount > 0 && (
         <a
           href="#vagas-sem-eleito"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-rose-300 bg-rose-50 p-4 shadow-sm transition hover:bg-rose-100"
+          className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm transition hover:bg-slate-50"
         >
-          <div className="flex min-w-0 items-center gap-3">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600" />
-            <div className="min-w-0">
-              <p className="font-bold text-rose-900">
-                {semEleitoCount}{" "}
-                {semEleitoCount === 1
-                  ? "local encerrado sem nenhum eleito"
-                  : "locais encerrados sem nenhum eleito"}
-              </p>
-              <p className="text-xs text-rose-700">
-                Abriram e fecharam sem eleger ninguém. Toque para revisar e agir.
-              </p>
-            </div>
-          </div>
-          <span className="shrink-0 text-sm font-semibold text-rose-700">
-            Ver e agir →
+          <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
+          <span className="min-w-0 flex-1 text-slate-700">
+            <strong className="font-semibold">{semEleitoCount}</strong>{" "}
+            {semEleitoCount === 1
+              ? "local encerrou sem nenhum eleito"
+              : "locais encerraram sem nenhum eleito"}{" "}
+            — revise e decida.
+          </span>
+          <span className="shrink-0 text-slate-400" aria-hidden>
+            →
           </span>
         </a>
       )}
@@ -205,35 +200,63 @@ export default async function EncerradasPage({
         aceitas={vagaVaziaAceitas}
       />
 
-      {/* Ações rápidas — o PDF agora é gerado direto aqui (jsPDF). */}
+      {/* Ações & documentos — agrupadas por finalidade (menos "botões soltos").
+          O primário é a Lista de Eleitos; o resto fica como opções outline. */}
       <Card>
-        <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:flex-wrap sm:items-center">
-          {data.apuracoes.length > 0 && (
-            <ApuracaoPdfButton data={data} header={pdfHeader} />
-          )}
-          {data.apuracoes.length > 0 && (
-            <RelatorioPendenciasButton data={data} header={pdfHeader} />
-          )}
-          <ExportEleitosPdfButton ano={ano} />
-          <ExportEleitosButton ano={ano} />
-          <Button asChild variant="outline" className="w-full sm:w-auto">
-            <Link href="/admin/relatorios">
-              <FileText className="mr-2 h-4 w-4" />
-              Relatório por critério
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="w-full sm:w-auto">
-            <Link href="/admin/locais?status=closed">
-              <Building2 className="mr-2 h-4 w-4" />
-              Locais encerrados
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="w-full sm:w-auto">
-            <Link href="/transparencia" target="_blank">
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Portal público
-            </Link>
-          </Button>
+        <CardContent className="space-y-4 p-4 sm:p-5">
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Lista de eleitos
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <ExportEleitosPdfButton ano={ano} />
+              <ExportEleitosButton ano={ano} />
+            </div>
+          </div>
+
+          <Separator />
+
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Documentos & planilhas
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              {data.apuracoes.length > 0 && (
+                <ApuracaoPdfButton data={data} header={pdfHeader} variant="outline" />
+              )}
+              {data.apuracoes.length > 0 && (
+                <RelatorioPendenciasButton data={data} header={pdfHeader} />
+              )}
+              <Button asChild variant="outline">
+                <Link href="/admin/relatorios">
+                  <FileText className="mr-2 h-4 w-4" />
+                  Relatório por critério
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Atalhos
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <Button asChild variant="outline">
+                <Link href="/admin/locais?status=closed">
+                  <Building2 className="mr-2 h-4 w-4" />
+                  Locais encerrados
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/transparencia" target="_blank">
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Portal público
+                </Link>
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
