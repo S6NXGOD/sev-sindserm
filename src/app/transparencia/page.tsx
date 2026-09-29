@@ -20,6 +20,7 @@ import { AuditoriaLisura } from "@/components/transparencia/auditoria-lisura";
 import { ConformidadeLegal } from "@/components/transparencia/conformidade-legal";
 import { AtividadeDiretoria } from "@/components/transparencia/atividade-diretoria";
 import { MuralEleitos } from "@/components/transparencia/mural-eleitos";
+import { PortalTabs } from "@/components/transparencia/portal-tabs";
 import { SuplementarAviso } from "@/components/transparencia/suplementar-aviso";
 import { GuiaPortal } from "@/components/transparencia/guia-portal";
 import { PeriodoPleito } from "@/components/periodo-pleito";
@@ -160,10 +161,8 @@ export default async function TransparenciaPage({
         </div>
       </header>
 
-      <div className="sev-stagger mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
-        {/* Título do pleito selecionado (a logo já aparece no cabeçalho — evita
-            redundância). O botão "Como usar" abre o guia (e ele abre sozinho na
-            1ª visita). */}
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
+        {/* Título + "Como usar" — persistente (fora das abas). */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
@@ -180,40 +179,7 @@ export default async function TransparenciaPage({
           </div>
         </div>
 
-        {/* Período oficial do pleito (início/fim geral) — cada local vota na sua
-            janela dentro dele. */}
-        <PeriodoPleito
-          inicio={pleito.dataInicioGeral}
-          fim={pleito.dataFimGeral}
-          hint
-        />
-
-        {/* Regimento oficial: o fundamento das regras (quem vota/concorre, como
-            se apura, datas). Fica no topo — a base de tudo, aberta a qualquer um. */}
-        <a
-          data-tour="regimento"
-          href="/doc/regimento_eleicao.pdf"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="sev-hover-lift flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm sm:p-4"
-        >
-          <div className="shrink-0 rounded-lg bg-slate-100 p-2.5 text-slate-700">
-            <ScrollText className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold">Regimento da Eleição</p>
-            <p className="text-xs leading-tight text-muted-foreground">
-              As regras oficiais do pleito: quem pode votar e concorrer, como se
-              apura e o calendário. Documento da Diretoria Colegiada.
-            </p>
-          </div>
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
-            <Download className="h-3.5 w-3.5" />
-            Baixar
-          </span>
-        </a>
-
-        {/* Seletor de eleição em DESTAQUE — a primeira decisão do filiado. */}
+        {/* Seletor de eleição + relatório — persistente em TODAS as abas. */}
         <div
           data-tour="relatorio"
           className="rounded-2xl border-2 border-primary/20 bg-primary/5 p-4 shadow-sm sm:p-5"
@@ -226,93 +192,124 @@ export default async function TransparenciaPage({
           </div>
         </div>
 
-        {/* KPIs (linha cheia, responsiva) */}
-        <div
-          data-tour="kpis"
-          className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6"
-        >
-          <Kpi label="Locais de votação" value={data.kpis.locais} icon={Vote} tone="blue" />
-          <Kpi label="Total de votantes" value={data.kpis.votos} icon={Users} />
-          <Kpi label="Eleitos definidos" value={data.kpis.eleitos} icon={Award} tone="green" />
-          <Kpi label="Vagas no pleito" value={data.kpis.vagas} icon={CheckCircle2} />
-          <Kpi label="Em andamento" value={data.kpis.abertas} icon={Activity} tone="amber" />
-          <Kpi label="Encerradas" value={data.kpis.encerradas} icon={CheckCircle2} tone="green" />
-        </div>
+        {/* Portal em ABAS (menos rolagem). Painéis inativos ficam montados
+            (hidden) para o tour continuar achando os elementos. */}
+        <PortalTabs
+          resultados={
+            <>
+              <MuralEleitos
+                eleitos={eleitosData?.rows ?? []}
+                concluido={concluido}
+                trienio={pleito.trienio}
+                ano={eleitosData?.ano ?? pleito.ano}
+                electionId={pleitoId}
+                titulo={pleito.titulo}
+                logoSindserm={pleito.logoSindserm}
+                logoPleito={pleito.logoPleito}
+              />
 
-        {/* Aviso de eleição suplementar (aparece só quando há rodada 2+): explica
-            a lisura e leva o filiado aos locais em suplementar. */}
-        <SuplementarAviso itens={data.suplementaresLista} />
+              <div
+                data-tour="busca"
+                className="rounded-xl border bg-card p-4 shadow-sm"
+              >
+                <FiltrosBar orgaos={data.orgaos} />
+              </div>
 
-        {/* Apuração ao vivo: votações em andamento agora (participação + líder
-            parcial quando a diretoria habilita). Some quando não há nada aberto. */}
-        <ApuracaoAoVivo
-          itens={data.liderancaAoVivo}
-          parciaisPublicas={pleito.parciaisPublicas}
+              <div id="resultados-locais" className="scroll-mt-4" />
+              <div data-tour="locais">
+                <LocaisGrid
+                  locais={data.locais}
+                  pleito={pdfPleito}
+                  parciaisPublicas={pleito.parciaisPublicas}
+                />
+              </div>
+
+              <ProximasAberturas
+                itens={data.proximasAberturas}
+                total={data.kpis.agendadas}
+                titulo="Próximas votações"
+                descricao="Locais com votação já agendada — veja quando a sua urna abre."
+                vazioTexto="Nenhuma votação agendada no momento. Acompanhe por aqui."
+              />
+            </>
+          }
+          aoVivo={
+            <>
+              {/* Período oficial do pleito (cada local vota na sua janela dentro dele). */}
+              <PeriodoPleito
+                inicio={pleito.dataInicioGeral}
+                fim={pleito.dataFimGeral}
+                hint
+              />
+
+              <div
+                data-tour="kpis"
+                className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6"
+              >
+                <Kpi label="Locais de votação" value={data.kpis.locais} icon={Vote} tone="blue" />
+                <Kpi label="Total de votantes" value={data.kpis.votos} icon={Users} />
+                <Kpi label="Eleitos definidos" value={data.kpis.eleitos} icon={Award} tone="green" />
+                <Kpi label="Vagas no pleito" value={data.kpis.vagas} icon={CheckCircle2} />
+                <Kpi label="Em andamento" value={data.kpis.abertas} icon={Activity} tone="amber" />
+                <Kpi label="Encerradas" value={data.kpis.encerradas} icon={CheckCircle2} tone="green" />
+              </div>
+
+              <SuplementarAviso itens={data.suplementaresLista} />
+
+              <ApuracaoAoVivo
+                itens={data.liderancaAoVivo}
+                parciaisPublicas={pleito.parciaisPublicas}
+              />
+
+              <ParticipacaoPanel
+                ranking={data.rankingParticipacao}
+                porZona={data.votantesPorZona}
+                totalVotantes={data.kpis.votos}
+                eleitos={data.kpis.eleitos}
+                vagas={data.kpis.vagas}
+              />
+            </>
+          }
+          regras={
+            <>
+              {/* Regimento oficial — a base das regras. */}
+              <a
+                data-tour="regimento"
+                href="/doc/regimento_eleicao.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="sev-hover-lift flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm sm:p-4"
+              >
+                <div className="shrink-0 rounded-lg bg-slate-100 p-2.5 text-slate-700">
+                  <ScrollText className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">Regimento da Eleição</p>
+                  <p className="text-xs leading-tight text-muted-foreground">
+                    As regras oficiais do pleito: quem pode votar e concorrer,
+                    como se apura e o calendário. Documento da Diretoria Colegiada.
+                  </p>
+                </div>
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground">
+                  <Download className="h-3.5 w-3.5" />
+                  Baixar
+                </span>
+              </a>
+
+              <div data-tour="auditoria">
+                <AuditoriaLisura
+                  integridade={data.integridade}
+                  emailOficial={pleito.emailOficial}
+                  tituloPleito={pleito.titulo}
+                />
+              </div>
+
+              <ConformidadeLegal />
+
+              <AtividadeDiretoria itens={atividade} electionId={pleitoId} />
+            </>
+          }
         />
-
-        {/* Ranking & Participação (substitui o antigo gráfico de pizza) */}
-        <ParticipacaoPanel
-          ranking={data.rankingParticipacao}
-          porZona={data.votantesPorZona}
-          totalVotantes={data.kpis.votos}
-          eleitos={data.kpis.eleitos}
-          vagas={data.kpis.vagas}
-        />
-
-        {/* Mural dos Eleitos — reconhecimento consolidado de todos os eleitos.
-            Vira celebração (com confetti) quando o pleito é concluído. */}
-        <MuralEleitos
-          eleitos={eleitosData?.rows ?? []}
-          concluido={concluido}
-          trienio={pleito.trienio}
-          ano={eleitosData?.ano ?? pleito.ano}
-          electionId={pleitoId}
-          titulo={pleito.titulo}
-          logoSindserm={pleito.logoSindserm}
-          logoPleito={pleito.logoPleito}
-        />
-
-        {/* Auditoria, integridade e lisura — prova pública de que é limpa e
-            auditável, com reconciliação, como conferir/contestar e LGPD. */}
-        <div data-tour="auditoria">
-          <AuditoriaLisura
-            integridade={data.integridade}
-            emailOficial={pleito.emailOficial}
-            tituloPleito={pleito.titulo}
-          />
-        </div>
-
-        {/* Base legal e conformidade — fundamentação (CF/CLT/Estatuto/Regimento),
-            princípios e hierarquia das regras. Recolhível, complementa a Auditoria. */}
-        <ConformidadeLegal />
-
-        {/* Atividade da diretoria — feed público dos atos oficiais (quem agendou,
-            encerrou, dispensou etc.). Some quando não há atos registrados. */}
-        <AtividadeDiretoria itens={atividade} electionId={pleitoId} />
-
-        {/* Próximas aberturas: o filiado vê quais urnas vão abrir e quando. */}
-        <ProximasAberturas
-          itens={data.proximasAberturas}
-          total={data.kpis.agendadas}
-          titulo="Próximas votações"
-          descricao="Locais com votação já agendada — veja quando a sua urna abre."
-          vazioTexto="Nenhuma votação agendada no momento. Acompanhe por aqui."
-        />
-
-        {/* Filtros */}
-        <div data-tour="busca" className="rounded-xl border bg-card p-4 shadow-sm">
-          <FiltrosBar orgaos={data.orgaos} />
-        </div>
-
-        {/* Resultados (cards) */}
-        <div id="resultados-locais" className="scroll-mt-4" />
-        <div data-tour="locais">
-          <LocaisGrid
-            locais={data.locais}
-            pleito={pdfPleito}
-            parciaisPublicas={pleito.parciaisPublicas}
-          />
-        </div>
 
         <footer className="border-t pt-6 text-center text-xs text-muted-foreground">
           Portal da Transparência do SEV SINDSERM · Sistema Eletrônico de Votação.

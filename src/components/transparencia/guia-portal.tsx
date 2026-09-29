@@ -6,70 +6,82 @@ import { ChevronLeft, ChevronRight, HelpCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // Bump a versão para reexibir o tour a todos (ex.: mudou bastante o portal).
-// v2: incluídos os passos de "Eleição suplementar" e "O que a diretoria andou fazendo".
-const STORAGE_KEY = "sev_tour_portal_v2";
+// v3: portal reorganizado em ABAS — cada passo abre a aba dona do alvo.
+const STORAGE_KEY = "sev_tour_portal_v3";
+
+type AbaTour = "resultados" | "ao-vivo" | "regras";
 
 type Passo = {
   /** Seletor do elemento real a destacar. Vazio = passo de boas-vindas (centro). */
   sel?: string;
   titulo: string;
   texto: string;
+  /** Aba onde o alvo mora (o tour a ativa antes de destacar). Vazio = persistente. */
+  tab?: AbaTour;
 };
 
-// Ordem pedagógica: visão geral → regras → baixar → conferir → achar → resultado.
+// Ordem AGRUPADA POR ABA (evita ficar pulando de aba): persistente → Ao vivo →
+// Resultados → Regras. Cada passo abre a sua aba antes de destacar o alvo.
 const PASSOS: Passo[] = [
   {
     titulo: "Bem-vindo à Transparência 👋",
     texto:
-      "Vou te mostrar, em poucos passos, como acompanhar a eleição, ver os eleitos, baixar documentos e conferir que está tudo limpo. Leva 30 segundos.",
+      "Vou te mostrar, em poucos passos, como acompanhar a eleição, ver os eleitos, baixar documentos e conferir que está tudo limpo. O portal está dividido em abas (Resultados · Ao vivo · Regras) — eu troco de aba pra você.",
+  },
+  {
+    sel: '[data-tour="relatorio"]',
+    titulo: "Baixe os relatórios",
+    texto:
+      "Neste botão você gera o relatório completo do pleito em PDF (ou a planilha dos eleitos). Aqui também troca o pleito, se houver mais de um. Fica sempre visível, em qualquer aba.",
   },
   {
     sel: '[data-tour="kpis"]',
     titulo: "A visão geral do pleito",
     texto:
-      "Aqui ficam os números do momento: total de votantes, eleitos já definidos, locais em andamento e encerrados. Atualiza sozinho conforme os votos entram.",
+      "Na aba “Ao vivo”: os números do momento — total de votantes, eleitos já definidos, locais em andamento e encerrados. Atualiza sozinho conforme os votos entram.",
+    tab: "ao-vivo",
   },
   {
     sel: '[data-tour="suplementar"]',
     titulo: "Eleição suplementar",
     texto:
       "Quando um local não preenche todas as vagas, a diretoria pode abrir uma nova rodada (suplementar). Este aviso mostra quais locais estão nesse caso e quando cada um abre e encerra. Os já eleitos são preservados e você pode votar de novo.",
-  },
-  {
-    sel: '[data-tour="regimento"]',
-    titulo: "As regras oficiais",
-    texto:
-      "Toque aqui para baixar o Regimento da Eleição — quem pode votar e concorrer, como se apura e o calendário. É o documento da Diretoria Colegiada.",
-  },
-  {
-    sel: '[data-tour="relatorio"]',
-    titulo: "Baixe os relatórios",
-    texto:
-      "Neste botão você gera o relatório completo do pleito em PDF (ou a planilha dos eleitos). Aqui também troca o pleito, se houver mais de um.",
-  },
-  {
-    sel: '[data-tour="auditoria"]',
-    titulo: "Confira que é limpo",
-    texto:
-      "Toque para abrir a auditoria: você vê que o total de votos bate com o de votantes (urna conferida), as garantias do sistema e como contestar se algo parecer errado.",
-  },
-  {
-    sel: '[data-tour="atividade"]',
-    titulo: "O que a diretoria andou fazendo",
-    texto:
-      "Cada passo oficial no pleito — agendou, encerrou, abriu suplementar — com quem fez, quando e o período. Toque em “Ver todo o histórico” para a lista completa, com busca.",
+    tab: "ao-vivo",
   },
   {
     sel: '[data-tour="busca"]',
     titulo: "Ache o seu local",
     texto:
-      "Digite o nome do seu local ou órgão, ou filtre por situação (em andamento, encerrada, agendada). É o caminho mais rápido para a sua urna.",
+      "Na aba “Resultados”: digite o nome do seu local ou órgão, ou filtre por situação (em andamento, encerrada, agendada). É o caminho mais rápido para a sua urna.",
+    tab: "resultados",
   },
   {
     sel: '[data-tour="locais"]',
     titulo: "Veja o resultado do local",
     texto:
       "Em cada card, “Ver eleitos e suplentes” abre o resultado e a linha do tempo; o botão “PDF” baixa o resultado daquele local. É aqui que a maioria vai direto.",
+    tab: "resultados",
+  },
+  {
+    sel: '[data-tour="regimento"]',
+    titulo: "As regras oficiais",
+    texto:
+      "Na aba “Regras & Auditoria”: baixe o Regimento da Eleição — quem pode votar e concorrer, como se apura e o calendário. É o documento da Diretoria Colegiada.",
+    tab: "regras",
+  },
+  {
+    sel: '[data-tour="auditoria"]',
+    titulo: "Confira que é limpo",
+    texto:
+      "Abra a auditoria: você vê que o total de votos bate com o de votantes (urna conferida), as garantias do sistema e como contestar se algo parecer errado.",
+    tab: "regras",
+  },
+  {
+    sel: '[data-tour="atividade"]',
+    titulo: "O que a diretoria andou fazendo",
+    texto:
+      "Cada passo oficial no pleito — agendou, encerrou, abriu suplementar — com quem fez, quando e o período. Toque em “Ver todo o histórico” para a lista completa, com busca.",
+    tab: "regras",
   },
 ];
 
@@ -94,14 +106,11 @@ export function GuiaPortal() {
   const [rect, setRect] = useState<DOMRect | null>(null);
 
   const iniciar = useCallback(() => {
-    // Monta a lista só com passos cujo alvo está visível agora.
-    const visiveis = PASSOS.filter((p) => {
-      if (!p.sel) return true;
-      const el = document.querySelector(p.sel);
-      if (!el) return false;
-      const r = el.getBoundingClientRect();
-      return r.width > 0 && r.height > 0;
-    });
+    // Filtra por EXISTÊNCIA (não por visibilidade): com abas, o alvo pode estar
+    // num painel oculto (tamanho 0) mas presente no DOM — o passo deve continuar.
+    // Seções que somem quando vazias (suplementar/atividade/apuração ao vivo)
+    // não existem no DOM e são puladas naturalmente.
+    const visiveis = PASSOS.filter((p) => !p.sel || document.querySelector(p.sel) != null);
     setPassos(visiveis);
     setIdx(0);
     setAtivo(true);
@@ -139,24 +148,51 @@ export function GuiaPortal() {
       setRect(null);
       return;
     }
-    const el = document.querySelector(passo.sel) as HTMLElement | null;
-    if (!el) {
-      setRect(null);
-      return;
+    const sel = passo.sel;
+    let cancelado = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    // 1) Se o passo mora numa aba, ativa-a ANTES de medir (o painel sai do hidden).
+    if (passo.tab) {
+      window.dispatchEvent(
+        new CustomEvent("sev:portal-tab", { detail: passo.tab }),
+      );
     }
-    // Alvo mais alto que a tela → rola até o COMEÇO dele (mostra os primeiros
-    // itens); senão, centraliza.
-    const alto = el.getBoundingClientRect().height > window.innerHeight - 140;
-    el.scrollIntoView({
-      behavior: usaMenosMovimento() ? "auto" : "smooth",
-      block: alto ? "start" : "center",
-    });
-    const medir = () => setRect(el.getBoundingClientRect());
-    const t = setTimeout(medir, usaMenosMovimento() ? 0 : 340);
+
+    const medir = () => {
+      if (cancelado) return;
+      const el = document.querySelector(sel) as HTMLElement | null;
+      if (el) setRect(el.getBoundingClientRect());
+    };
+
+    const rolarEMedir = () => {
+      if (cancelado) return;
+      const el = document.querySelector(sel) as HTMLElement | null;
+      if (!el) {
+        setRect(null);
+        return;
+      }
+      // Alvo mais alto que a tela → rola até o COMEÇO; senão, centraliza.
+      const alto = el.getBoundingClientRect().height > window.innerHeight - 140;
+      el.scrollIntoView({
+        behavior: usaMenosMovimento() ? "auto" : "smooth",
+        block: alto ? "start" : "center",
+      });
+      // Re-mede depois que a rolagem assenta (vale para as duas ramificações).
+      timers.push(setTimeout(medir, usaMenosMovimento() ? 30 : 340));
+    };
+
+    // Espera o painel da aba sair do hidden (2 frames = após o próximo paint)
+    // antes de rolar/medir — senão getBoundingClientRect voltaria 0.
+    const raf1 = requestAnimationFrame(() =>
+      requestAnimationFrame(rolarEMedir),
+    );
     window.addEventListener("resize", medir);
     window.addEventListener("scroll", medir, true);
     return () => {
-      clearTimeout(t);
+      cancelado = true;
+      cancelAnimationFrame(raf1);
+      timers.forEach(clearTimeout);
       window.removeEventListener("resize", medir);
       window.removeEventListener("scroll", medir, true);
     };

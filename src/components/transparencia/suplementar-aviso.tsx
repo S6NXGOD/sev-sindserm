@@ -60,12 +60,20 @@ export function SuplementarAviso({ itens }: { itens: SuplementarInfo[] }) {
   function verLocais() {
     const params = new URLSearchParams(searchParams.toString());
     params.set("status", "suplementar");
+    // Os locais moram na aba "Resultados" — ativa-a antes de rolar (senão a
+    // âncora está num painel oculto e a rolagem não acontece).
+    window.dispatchEvent(
+      new CustomEvent("sev:portal-tab", { detail: "resultados" }),
+    );
     router.push(`/transparencia?${params.toString()}`, { scroll: false });
-    setTimeout(() => {
-      document
-        .getElementById("resultados-locais")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 60);
+    // Espera o painel sair do hidden (2 frames) antes de rolar até a âncora.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        document
+          .getElementById("resultados-locais")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }),
+    );
   }
 
   const soUm = relevantes.length === 1;
