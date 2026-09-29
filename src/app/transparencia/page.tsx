@@ -14,11 +14,13 @@ import {
   getPleitosPublicos,
   getTransparenciaData,
 } from "@/lib/transparencia";
+import { getDocumentosPublicos, type DocumentoView } from "@/lib/documentos";
 import { ProximasAberturas } from "@/components/proximas-aberturas";
 import { ApuracaoAoVivo } from "@/components/transparencia/apuracao-ao-vivo";
 import { AuditoriaLisura } from "@/components/transparencia/auditoria-lisura";
 import { ConformidadeLegal } from "@/components/transparencia/conformidade-legal";
 import { AtividadeDiretoria } from "@/components/transparencia/atividade-diretoria";
+import { DocumentosOficiais } from "@/components/transparencia/documentos-oficiais";
 import { MuralEleitos } from "@/components/transparencia/mural-eleitos";
 import { PortalTabs } from "@/components/transparencia/portal-tabs";
 import { SuplementarAviso } from "@/components/transparencia/suplementar-aviso";
@@ -129,6 +131,15 @@ export default async function TransparenciaPage({
     logoPleito: pleito.logoPleito,
     emailOficial: pleito.emailOficial,
   };
+
+  // Documentos oficiais (atas/editais) — FORA do Promise.all e com try/catch:
+  // uma falha aqui (ex.: ambiente sem a migração) NÃO pode derrubar o portal.
+  let documentos: DocumentoView[] = [];
+  try {
+    documentos = await getDocumentosPublicos(pleitoId);
+  } catch (error) {
+    console.error("Falha ao carregar documentos públicos:", error);
+  }
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -295,6 +306,8 @@ export default async function TransparenciaPage({
                   Baixar
                 </span>
               </a>
+
+              <DocumentosOficiais documentos={documentos} />
 
               <div data-tour="auditoria">
                 <AuditoriaLisura

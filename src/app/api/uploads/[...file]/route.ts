@@ -23,6 +23,8 @@ const CONTENT_TYPES: Record<string, string> = {
   ".webp": "image/webp",
   ".gif": "image/gif",
   ".svg": "image/svg+xml",
+  // Documentos oficiais (atas/editais) — admin-only no upload; servidos inline.
+  ".pdf": "application/pdf",
 };
 
 export async function GET(

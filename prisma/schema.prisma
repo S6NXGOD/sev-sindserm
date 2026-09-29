@@ -172,8 +172,37 @@ model Election {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  documentos Documento[]
+
   @@index([ano])
   @@map("elections")
+}
+
+/// Atas & documentos oficiais do pleito (edital, atas de apuração/desempate,
+/// homologação). Publicados por admin com permissão de PLEITOS; aparecem no
+/// Portal da Transparência para download. Cada publicação/remoção é registrada
+/// na Auditoria. `categoria` é código validado na aplicação (não enum de banco,
+/// no mesmo estilo de LocalEvento.tipo).
+model Documento {
+  id               String   @id @default(cuid())
+  electionId       String
+  // Denormalizado (coerente com Workplace/Voter/Vote) — filtro/exibição por ano.
+  anoEleicao       Int
+  titulo           String
+  categoria        String
+  // Caminho servido por /api/uploads (ex.: /api/uploads/documentos/<arquivo>).
+  arquivoUrl       String
+  tamanho          Int
+  mime             String
+  // Nome desnormalizado sobrevive à exclusão do usuário (padrão AuditLog.userNome).
+  publicadoPorId   String?
+  publicadoPorNome String
+  createdAt        DateTime @default(now())
+
+  election Election @relation(fields: [electionId], references: [id], onDelete: Cascade)
+
+  @@index([electionId, createdAt])
+  @@map("documentos")
 }
 
 /// Local de trabalho. Cada local possui um link público e uma janela de votação.

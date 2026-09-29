@@ -33,9 +33,11 @@ const nextConfig = {
   poweredByHeader: false,
   experimental: {
     serverActions: {
-      // Logos podem ter até 2 MB; o limite padrão de Server Actions é 1 MB e
-      // rejeitava o upload com "Failed to fetch". Damos margem para o multipart.
-      bodySizeLimit: "5mb",
+      // Limite de corpo das Server Actions. Precisa cobrir o MAIOR upload:
+      // documentos oficiais em PDF (até 8 MB) + overhead do multipart. É um
+      // limite GLOBAL (vale também para o voto público), então subimos só o
+      // necessário — de 5 para 10 MB — mantendo a superfície pequena.
+      bodySizeLimit: "10mb",
     },
   },
   async headers() {

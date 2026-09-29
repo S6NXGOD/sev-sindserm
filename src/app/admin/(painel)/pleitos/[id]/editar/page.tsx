@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, ImageIcon, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ImageIcon, AlertTriangle, FileText } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_LOGO, trienioLabel } from "@/lib/election";
 import { requireModule } from "@/lib/current-user";
@@ -19,6 +19,8 @@ import {
   type EditElectionData,
 } from "@/components/admin/edit-election-form";
 import { ElectionLogoManager } from "@/components/admin/election-logo-manager";
+import { DocumentosManager } from "@/components/admin/documentos-manager";
+import { getDocumentosDoPleito } from "@/lib/documentos";
 
 export const dynamic = "force-dynamic";
 
@@ -42,9 +44,10 @@ export default async function EditarPleitoPage({
   });
   if (!election) notFound();
 
-  const [votos, galleryImages] = await Promise.all([
+  const [votos, galleryImages, documentos] = await Promise.all([
     prisma.vote.count({ where: { anoEleicao: election.ano } }),
     listGalleryImages(),
+    getDocumentosDoPleito(election.id),
   ]);
 
   const data: EditElectionData = {
@@ -133,6 +136,23 @@ export default async function EditarPleitoPage({
             allowClear
             recomendacao="Recomendado: ~400×400 px (quadrada), PNG com fundo transparente."
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <FileText className="h-5 w-5" />
+            Documentos oficiais (atas, editais, resultados)
+          </CardTitle>
+          <CardDescription>
+            Publique PDFs oficiais deste pleito. Eles aparecem no Portal da
+            Transparência (aba “Regras &amp; Auditoria”) para fiscalização
+            pública. Somente PDF.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DocumentosManager electionId={election.id} documentos={documentos} />
         </CardContent>
       </Card>
     </div>
