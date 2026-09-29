@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/card";
 import { ProximasAberturas } from "@/components/proximas-aberturas";
 import { PeriodoPleito } from "@/components/periodo-pleito";
+import { SecaoRecolhivel } from "@/components/admin/secao-recolhivel";
 import { AutoRefresh } from "@/components/admin/auto-refresh";
 import { RitmoCard } from "@/components/admin/ritmo-card";
 import { StatusPieChart } from "@/components/admin/status-pie-chart";
@@ -263,19 +264,13 @@ export default async function DashboardPage({
         vazioTexto="Nenhuma votação agendada. Agende a janela na página de cada local."
       />
 
-      {/* Representação da Base: Candidatos vs Vagas vs Vagas preenchidas. */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Users className="h-5 w-5" />
-            Representação da Base
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Adesão e “buracos” na representação — vagas preenchidas por candidatos
-            que já receberam votos.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      {/* Representação da Base — recolhível (secundário). */}
+      <SecaoRecolhivel
+        titulo="Representação da Base"
+        descricao="Vagas preenchidas por candidatos que já receberam votos."
+        icon={Users}
+      >
+        <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-lg border bg-slate-50 p-3">
               <p className="text-2xl font-bold leading-none">
@@ -330,11 +325,12 @@ export default async function DashboardPage({
               de {d.kpis.vagas.toLocaleString("pt-BR")})
             </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </SecaoRecolhivel>
 
-      {/* Gráficos */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      {/* Ritmo e status dos links — recolhível. */}
+      <SecaoRecolhivel titulo="Ritmo e status dos links" icon={Activity}>
+        <div className="grid gap-6 lg:grid-cols-3">
         <RitmoCard ano={ano} inicial={d.ritmoHoje} />
         <Card>
           <CardHeader>
@@ -348,9 +344,10 @@ export default async function DashboardPage({
             <StatusPieChart data={d.statusPie} />
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </SecaoRecolhivel>
 
-      {/* Liderança parcial por local (zonas ativas) */}
+      {/* Liderança parcial por local (ao vivo — fica visível) */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -429,8 +426,9 @@ export default async function DashboardPage({
         </CardContent>
       </Card>
 
-      {/* Zonas + Ranking de adesão */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* Adesão por zona e ranking — recolhível (mescla Zonas + Ranking). */}
+      <SecaoRecolhivel titulo="Adesão por zona e ranking" icon={MapPin}>
+        <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -523,18 +521,27 @@ export default async function DashboardPage({
             </div>
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </SecaoRecolhivel>
 
-      {/* Alertas */}
-      {totalAlertas > 0 && (
-        <Card className="border-amber-200">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base text-amber-700">
-              <AlertTriangle className="h-5 w-5" />
-              Alertas ({totalAlertas})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-3">
+      {/* Alertas — sempre recolhível (aberto quando há alertas). */}
+      <SecaoRecolhivel
+        titulo="Alertas"
+        icon={AlertTriangle}
+        defaultOpen={totalAlertas > 0}
+        badge={
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+              totalAlertas > 0
+                ? "bg-amber-100 text-amber-700"
+                : "bg-slate-100 text-slate-500"
+            }`}
+          >
+            {totalAlertas}
+          </span>
+        }
+      >
+        <div className="grid gap-4 md:grid-cols-3">
             <div>
               <p className="mb-1 text-sm font-medium">Sem candidatos</p>
               {d.alertas.semCandidatos.length === 0 ? (
@@ -596,9 +603,8 @@ export default async function DashboardPage({
                 </ul>
               )}
             </div>
-          </CardContent>
-        </Card>
-      )}
+        </div>
+      </SecaoRecolhivel>
 
       {/* Lista de apuração (busca + paginação + regra de vagas) */}
       <Card>
