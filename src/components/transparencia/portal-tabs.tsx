@@ -52,6 +52,7 @@ export function PortalTabs({
       <nav
         role="tablist"
         aria-label="Seções do portal"
+        data-tour="abas"
         className="sticky top-0 z-20 mb-4 flex gap-1 overflow-x-auto rounded-xl border bg-white/95 p-1.5 shadow-sm backdrop-blur"
       >
         {ABAS.map((a) => {

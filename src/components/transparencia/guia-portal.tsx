@@ -6,8 +6,8 @@ import { ChevronLeft, ChevronRight, HelpCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // Bump a versão para reexibir o tour a todos (ex.: mudou bastante o portal).
-// v3: portal reorganizado em ABAS — cada passo abre a aba dona do alvo.
-const STORAGE_KEY = "sev_tour_portal_v3";
+// v3: portal em ABAS. v4: passo dedicado às abas + começa/volta em "Resultados".
+const STORAGE_KEY = "sev_tour_portal_v4";
 
 type AbaTour = "resultados" | "ao-vivo" | "regras";
 
@@ -26,7 +26,14 @@ const PASSOS: Passo[] = [
   {
     titulo: "Bem-vindo à Transparência 👋",
     texto:
-      "Vou te mostrar, em poucos passos, como acompanhar a eleição, ver os eleitos, baixar documentos e conferir que está tudo limpo. O portal está dividido em abas (Resultados · Ao vivo · Regras) — eu troco de aba pra você.",
+      "Em 30 segundos eu te mostro como acompanhar a eleição, ver os eleitos, baixar documentos e conferir que está tudo limpo.",
+  },
+  {
+    sel: '[data-tour="abas"]',
+    titulo: "O portal tem 3 abas",
+    texto:
+      "Para não virar uma página gigante, tudo fica em três abas: “Resultados” (eleitos e locais), “Ao vivo” (números e apuração) e “Regras & Auditoria” (regimento, lisura e o que a diretoria fez). Toque para alternar — e neste guia eu troco de aba pra você.",
+    tab: "resultados",
   },
   {
     sel: '[data-tour="relatorio"]',
@@ -111,6 +118,8 @@ export function GuiaPortal() {
     // Seções que somem quando vazias (suplementar/atividade/apuração ao vivo)
     // não existem no DOM e são puladas naturalmente.
     const visiveis = PASSOS.filter((p) => !p.sel || document.querySelector(p.sel) != null);
+    // Começa sempre na aba Resultados (a inicial).
+    window.dispatchEvent(new CustomEvent("sev:portal-tab", { detail: "resultados" }));
     setPassos(visiveis);
     setIdx(0);
     setAtivo(true);
@@ -122,6 +131,8 @@ export function GuiaPortal() {
     } catch {
       /* ignora */
     }
+    // Ao terminar/pular, volta para a aba Resultados (a página inicial esperada).
+    window.dispatchEvent(new CustomEvent("sev:portal-tab", { detail: "resultados" }));
     setAtivo(false);
     setRect(null);
   }, []);
