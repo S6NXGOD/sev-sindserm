@@ -268,7 +268,7 @@ export default async function DashboardPage({
       <SecaoRecolhivel
         titulo="Representação da Base"
         descricao="Vagas preenchidas por candidatos que já receberam votos."
-        icon={Users}
+        icon={<Users className="h-5 w-5" />}
       >
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -329,7 +329,7 @@ export default async function DashboardPage({
       </SecaoRecolhivel>
 
       {/* Ritmo e status dos links — recolhível. */}
-      <SecaoRecolhivel titulo="Ritmo e status dos links" icon={Activity}>
+      <SecaoRecolhivel titulo="Ritmo e status dos links" icon={<Activity className="h-5 w-5" />}>
         <div className="grid gap-6 lg:grid-cols-3">
         <RitmoCard ano={ano} inicial={d.ritmoHoje} />
         <Card>
@@ -427,7 +427,7 @@ export default async function DashboardPage({
       </Card>
 
       {/* Adesão por zona e ranking — recolhível (mescla Zonas + Ranking). */}
-      <SecaoRecolhivel titulo="Adesão por zona e ranking" icon={MapPin}>
+      <SecaoRecolhivel titulo="Adesão por zona e ranking" icon={<MapPin className="h-5 w-5" />}>
         <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -527,7 +527,7 @@ export default async function DashboardPage({
       {/* Alertas — sempre recolhível (aberto quando há alertas). */}
       <SecaoRecolhivel
         titulo="Alertas"
-        icon={AlertTriangle}
+        icon={<AlertTriangle className="h-5 w-5" />}
         defaultOpen={totalAlertas > 0}
         badge={
           <span

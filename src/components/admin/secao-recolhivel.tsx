@@ -16,14 +16,16 @@ import { cn } from "@/lib/utils";
 export function SecaoRecolhivel({
   titulo,
   descricao,
-  icon: Icon,
+  icon,
   badge,
   defaultOpen = false,
   children,
 }: {
   titulo: string;
   descricao?: string;
-  icon?: React.ComponentType<{ className?: string }>;
+  /** Ícone JÁ RENDERIZADO (ReactNode) — NÃO um componente. Passar uma função
+      (ex.: icon={Users}) de Server p/ Client Component quebra a serialização RSC. */
+  icon?: React.ReactNode;
   badge?: React.ReactNode;
   defaultOpen?: boolean;
   children: React.ReactNode;
@@ -37,9 +39,9 @@ export function SecaoRecolhivel({
         aria-expanded={aberto}
         className="flex w-full items-center gap-3 p-4 text-left transition hover:bg-slate-50 sm:p-5"
       >
-        {Icon && (
+        {icon && (
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-            <Icon className="h-5 w-5" />
+            {icon}
           </span>
         )}
         <div className="min-w-0 flex-1">
