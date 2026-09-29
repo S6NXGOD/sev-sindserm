@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { MonitorPlay } from "lucide-react";
 import type {
   DashboardData,
@@ -40,6 +41,10 @@ export function PresentationMode({
   trienio: string;
 }) {
   const { active, toggle, playSuccess } = usePresentationMode();
+
+  // Portal só monta no cliente (createPortal precisa de document).
+  const [montado, setMontado] = useState(false);
+  useEffect(() => setMontado(true), []);
 
   const [queue, setQueue] = useState<PresentationLocal[]>([]);
   const [current, setCurrent] = useState<PresentationLocal | null>(null);
@@ -115,38 +120,47 @@ export function PresentationMode({
         />
       </div>
 
-      {active && (
-        <div className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-slate-950 text-white">
-          <PresentationTopBar
-            data={data}
-            mural={mural}
-            trienio={trienio}
-            onExit={() => toggle()}
-          />
+      {/* O telão vai via PORTAL para o document.body: `fixed inset-0` precisa se
+          basear no VIEWPORT. Dentro do dashboard há `.sev-stagger` (anima com
+          transform) — um ancestral transformado vira containing block do fixed e
+          confinaria o overlay a uma faixa (o "modo apresentação bugado"). */}
+      {montado &&
+        active &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-[100] flex flex-col overflow-hidden bg-slate-950 text-white">
+              <PresentationTopBar
+                data={data}
+                mural={mural}
+                trienio={trienio}
+                onExit={() => toggle()}
+              />
 
-          {/* Carrossel de slides (key força a transição de entrada). */}
-          <main className="relative min-h-0 flex-1 px-8 py-4">
-            <div key={slide} className="h-full min-h-0">
-              {slide === 0 ? (
-                <SlideMonitor locais={locais} />
-              ) : (
-                <SlideMural mural={mural} />
-              )}
+              {/* Carrossel de slides (key força a transição de entrada). */}
+              <main className="relative min-h-0 flex-1 px-8 py-4">
+                <div key={slide} className="h-full min-h-0">
+                  {slide === 0 ? (
+                    <SlideMonitor locais={locais} />
+                  ) : (
+                    <SlideMural mural={mural} />
+                  )}
+                </div>
+              </main>
+
+              <PresentationTicker eleitos={mural.ultimos} />
             </div>
-          </main>
 
-          <PresentationTicker eleitos={mural.ultimos} />
-        </div>
-      )}
-
-      {/* Plantão de Apuração — interrompe o carrossel por 15s. */}
-      {active && current && (
-        <Celebration
-          local={current}
-          onClose={() => setCurrent(null)}
-          playSound={playSuccess}
-        />
-      )}
+            {/* Plantão de Apuração — interrompe o carrossel por 15s. */}
+            {current && (
+              <Celebration
+                local={current}
+                onClose={() => setCurrent(null)}
+                playSound={playSuccess}
+              />
+            )}
+          </>,
+          document.body,
+        )}
     </>
   );
 }
