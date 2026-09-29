@@ -267,6 +267,9 @@ export default async function TransparenciaPage({
           trienio={pleito.trienio}
           ano={eleitosData?.ano ?? pleito.ano}
           electionId={pleitoId}
+          titulo={pleito.titulo}
+          logoSindserm={pleito.logoSindserm}
+          logoPleito={pleito.logoPleito}
         />
 
         {/* Auditoria, integridade e lisura — prova pública de que é limpa e

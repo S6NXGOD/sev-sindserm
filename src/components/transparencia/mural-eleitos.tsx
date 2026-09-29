@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Award,
   Download,
+  FileText,
   Loader2,
   MapPin,
   PartyPopper,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react";
 import type { EleitoRow } from "@/lib/transparencia";
 import { fetchEleitosCsv } from "@/lib/actions/transparencia";
+import { downloadEleitosPdf } from "@/lib/eleitos-pdf";
 import { normalizeForSearch } from "@/lib/slug";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -39,15 +41,44 @@ export function MuralEleitos({
   trienio,
   ano,
   electionId,
+  titulo,
+  logoSindserm,
+  logoPleito,
 }: {
   eleitos: EleitoRow[];
   concluido: boolean;
   trienio: string;
   ano: number;
   electionId: string;
+  titulo: string;
+  logoSindserm: string;
+  logoPleito: string | null;
 }) {
   const [q, setQ] = useState("");
   const [baixando, setBaixando] = useState(false);
+  const [baixandoPdf, setBaixandoPdf] = useState(false);
+
+  function agora() {
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+      timeZone: "America/Sao_Paulo",
+    }).format(new Date());
+  }
+
+  async function baixarPdf() {
+    setBaixandoPdf(true);
+    try {
+      await downloadEleitosPdf(eleitos, {
+        logoSindserm,
+        logoPleito,
+        titulo,
+        geradoEm: agora(),
+      });
+    } finally {
+      setBaixandoPdf(false);
+    }
+  }
 
   // Confetti uma única vez, só quando concluído (e não repete no mesmo navegador).
   useEffect(() => {
@@ -266,25 +297,41 @@ export function MuralEleitos({
 
       {/* Baixar a lista */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t bg-slate-50/60 px-4 py-3 sm:px-5">
-        <p className="text-xs text-muted-foreground">
-          Lista oficial dos eleitos do pleito {ano}. O PDF completo está no botão
-          “Baixar relatório”, no topo.
+        <p className="min-w-0 text-xs text-muted-foreground">
+          Lista oficial dos eleitos do pleito {ano}.
         </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={baixarCsv}
-          disabled={baixando}
-          className="shrink-0 gap-1.5"
-        >
-          {baixando ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4" />
-          )}
-          Baixar lista (CSV)
-        </Button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={baixarPdf}
+            disabled={baixandoPdf}
+            className="gap-1.5"
+          >
+            {baixandoPdf ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="h-4 w-4" />
+            )}
+            Baixar PDF
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={baixarCsv}
+            disabled={baixando}
+            className="gap-1.5"
+          >
+            {baixando ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            CSV
+          </Button>
+        </div>
       </div>
     </section>
   );

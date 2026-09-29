@@ -14,6 +14,8 @@ import { notificarAdminsBg } from "@/lib/push";
 import { formatDateTime } from "@/lib/format";
 import { buildVoterWhere, type VoterFiltros } from "@/lib/voter-filters";
 import { isValidPhoneBr } from "@/lib/phone";
+import { getEleitosRows, type EleitoRow } from "@/lib/transparencia";
+import { getElectionLogos, tituloInstitucional } from "@/lib/election";
 import { apurarEleitos, calcularVagas } from "@/lib/vagas";
 import { apurarLocal } from "@/lib/apuracao";
 import { DEFAULT_LOGO } from "@/lib/logo-constants";
@@ -1520,6 +1522,32 @@ export async function getPhoneAnomalies(
   const invalidos = comTel.filter((v) => !isValidPhoneBr(v.telefone)).length;
 
   return { repetidos, invalidos, totalComTelefone: comTel.length };
+}
+
+/** Dados p/ o PDF LIMPO de eleitos (locais encerrados do pleito do ano). */
+export async function fetchEleitosPdfData(ano: number): Promise<{
+  rows: EleitoRow[];
+  titulo: string;
+  logoSindserm: string;
+  logoPleito: string | null;
+} | null> {
+  await ensureModule("encerradas", "VIEW");
+  const el = await prisma.election.findFirst({
+    where: { ano },
+    orderBy: [{ isEleicaoEspecial: "asc" }, { createdAt: "asc" }],
+    select: { id: true, titulo: true, duracaoMandato: true },
+  });
+  if (!el) return null;
+  const [eleitos, logos] = await Promise.all([
+    getEleitosRows(el.id),
+    getElectionLogos(ano),
+  ]);
+  return {
+    rows: eleitos?.rows ?? [],
+    titulo: tituloInstitucional(el.titulo, ano, el.duracaoMandato),
+    logoSindserm: logos.sindserm,
+    logoPleito: logos.pleito,
+  };
 }
 
 const REPORT_ROW_CAP = 50000;

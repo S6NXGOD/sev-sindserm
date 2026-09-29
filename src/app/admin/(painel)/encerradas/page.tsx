@@ -26,6 +26,7 @@ import { RelatorioPendenciasButton } from "@/components/admin/relatorio-pendenci
 import { EmpatesPanel } from "@/components/admin/empates-panel";
 import { VagasVaziasPanel } from "@/components/admin/vagas-vazias-panel";
 import { ExportEleitosButton } from "@/components/admin/export-eleitos-button";
+import { ExportEleitosPdfButton } from "@/components/admin/export-eleitos-pdf-button";
 
 export const dynamic = "force-dynamic";
 
@@ -212,6 +213,7 @@ export default async function EncerradasPage({
           {data.apuracoes.length > 0 && (
             <RelatorioPendenciasButton data={data} header={pdfHeader} />
           )}
+          <ExportEleitosPdfButton ano={ano} />
           <ExportEleitosButton ano={ano} />
           <Button asChild variant="outline" className="w-full sm:w-auto">
             <Link href="/admin/locais?status=closed">

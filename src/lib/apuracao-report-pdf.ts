@@ -16,11 +16,14 @@ async function fetchPngDataUrl(url: string): Promise<string | null> {
   }
 }
 
-// Paleta SINDSERM.
+// Paleta SINDSERM. O vermelho fica RESERVADO à faixa do topo (marca); o corpo
+// usa tons neutros — antes cada local levava um bloco rosa e o PDF inteiro
+// ficava "radioativo".
 const RED: [number, number, number] = [193, 39, 45];
-const RED_SOFT: [number, number, number] = [252, 232, 233];
 const GREEN: [number, number, number] = [22, 122, 76];
 const SLATE: [number, number, number] = [100, 116, 139];
+const INK: [number, number, number] = [30, 41, 59]; // slate-800 (títulos)
+const GROUP_BG: [number, number, number] = [241, 245, 249]; // slate-100 (calmo)
 
 export type ApuracaoPdfHeader = {
   logoSindserm: string;
@@ -138,11 +141,11 @@ export async function downloadApuracaoReportPdf(
     `${s.naoIniciadas} agendada(s)`,
     `${s.naoDefinidas} sem agenda`,
   ].join("   ·   ");
-  doc.setFillColor(RED_SOFT[0], RED_SOFT[1], RED_SOFT[2]);
+  doc.setFillColor(GROUP_BG[0], GROUP_BG[1], GROUP_BG[2]);
   doc.roundedRect(marginX, y - 12, contentW, 24, 4, 4, "F");
   doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(RED[0], RED[1], RED[2]);
+  doc.setTextColor(INK[0], INK[1], INK[2]);
   doc.text(resumo, marginX + 10, y + 3);
   doc.setTextColor(20);
   y += 26;
@@ -189,10 +192,13 @@ export async function downloadApuracaoReportPdf(
 
   const bloco = (a: Apuracao) => {
     ensureSpace(70);
-    // Cabeçalho do local (barra vermelha suave).
-    doc.setFillColor(RED_SOFT[0], RED_SOFT[1], RED_SOFT[2]);
+    // Cabeçalho do local — cinza calmo + acento vermelho fino à esquerda (a
+    // marca aparece como detalhe, não como bloco).
+    doc.setFillColor(GROUP_BG[0], GROUP_BG[1], GROUP_BG[2]);
     doc.roundedRect(marginX, y - 12, contentW, 32, 4, 4, "F");
-    doc.setTextColor(RED[0], RED[1], RED[2]);
+    doc.setFillColor(RED[0], RED[1], RED[2]);
+    doc.rect(marginX, y - 12, 3, 32, "F");
+    doc.setTextColor(INK[0], INK[1], INK[2]);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     doc.text(
