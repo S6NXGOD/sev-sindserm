@@ -5,6 +5,7 @@ import {
   Building2,
   CheckCircle2,
   ExternalLink,
+  FileText,
   Scale,
   Vote,
 } from "lucide-react";
@@ -141,12 +142,12 @@ export default async function EncerradasPage({
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Encerradas &amp; Eleitos
+          Resultados &amp; Relatórios
         </h1>
         <p className="text-sm text-muted-foreground">
-          Votações concluídas da eleição {ano}
+          Eleição {ano}
           {ano !== anoVigente ? " (histórico — auditoria)" : ""} — eleitos,
-          empates a resolver e o documento oficial.
+          empates a resolver e os documentos oficiais (PDF/CSV).
         </p>
       </div>
 
@@ -215,6 +216,12 @@ export default async function EncerradasPage({
           )}
           <ExportEleitosPdfButton ano={ano} />
           <ExportEleitosButton ano={ano} />
+          <Button asChild variant="outline" className="w-full sm:w-auto">
+            <Link href="/admin/relatorios">
+              <FileText className="mr-2 h-4 w-4" />
+              Relatório por critério
+            </Link>
+          </Button>
           <Button asChild variant="outline" className="w-full sm:w-auto">
             <Link href="/admin/locais?status=closed">
               <Building2 className="mr-2 h-4 w-4" />

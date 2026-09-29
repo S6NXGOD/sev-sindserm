@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Building2,
-  FileText,
   LayoutDashboard,
   Lock,
   LogOut,
@@ -39,22 +38,50 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-const NAV: {
+type NavItem = {
   href: string;
   label: string;
   icon: typeof LayoutDashboard;
   exact?: boolean;
-  modulo: Modulo;
-}[] = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true, modulo: "dashboard" },
-  { href: "/admin/locais", label: "Locais de Trabalho", icon: Building2, modulo: "locais" },
-  { href: "/admin/encerradas", label: "Encerradas & Eleitos", icon: Trophy, modulo: "encerradas" },
-  { href: "/admin/votantes", label: "Votantes", icon: Users, modulo: "votantes" },
-  { href: "/admin/relatorios", label: "Relatórios", icon: FileText, modulo: "relatorios" },
-  { href: "/admin/pleitos", label: "Pleitos", icon: Vote, modulo: "pleitos" },
-  { href: "/admin/auditoria", label: "Auditoria", icon: ScrollText, modulo: "auditoria" },
-  { href: "/admin/usuarios", label: "Usuários", icon: Shield, modulo: "usuarios" },
-  { href: "/admin/configuracoes", label: "Configurações", icon: Settings, modulo: "configuracoes" },
+  /** Visível se o usuário puder VER ao menos UM destes módulos. */
+  modulos: Modulo[];
+  /** Caminhos extras que também marcam este item como ativo. */
+  activePaths?: string[];
+};
+
+// Menu agrupado em SEÇÕES (menos "muitos menus soltos"). "Resultados &
+// Relatórios" funde Encerradas + Relatórios num só item — a rota /admin/relatorios
+// segue viva (fora do menu) para deep-links (ex.: relatório por local).
+const SECTIONS: { titulo: string; itens: NavItem[] }[] = [
+  {
+    titulo: "Gestão",
+    itens: [
+      { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true, modulos: ["dashboard"] },
+      { href: "/admin/locais", label: "Locais de Trabalho", icon: Building2, modulos: ["locais"] },
+      { href: "/admin/votantes", label: "Votantes", icon: Users, modulos: ["votantes"] },
+    ],
+  },
+  {
+    titulo: "Resultados",
+    itens: [
+      {
+        href: "/admin/encerradas",
+        label: "Resultados & Relatórios",
+        icon: Trophy,
+        modulos: ["encerradas", "relatorios"],
+        activePaths: ["/admin/encerradas", "/admin/relatorios"],
+      },
+    ],
+  },
+  {
+    titulo: "Sistema",
+    itens: [
+      { href: "/admin/pleitos", label: "Pleitos", icon: Vote, modulos: ["pleitos"] },
+      { href: "/admin/auditoria", label: "Auditoria", icon: ScrollText, modulos: ["auditoria"] },
+      { href: "/admin/usuarios", label: "Usuários", icon: Shield, modulos: ["usuarios"] },
+      { href: "/admin/configuracoes", label: "Configurações", icon: Settings, modulos: ["configuracoes"] },
+    ],
+  },
 ];
 
 export function Sidebar({
@@ -72,7 +99,15 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   // Só mostra os módulos que o usuário pode ao menos visualizar.
-  const navItems = NAV.filter((i) => pode(user.permissoes, i.modulo, "VIEW"));
+  // Seções com só os itens que o usuário pode ver (item = visível se puder VER
+  // ao menos um dos seus módulos). Seções vazias somem.
+  const podeVer = (it: NavItem) =>
+    it.modulos.some((m) => pode(user.permissoes, m, "VIEW"));
+  const secoesVisiveis = SECTIONS.map((s) => ({
+    titulo: s.titulo,
+    itens: s.itens.filter(podeVer),
+  })).filter((s) => s.itens.length > 0);
+  const navItems = secoesVisiveis.flatMap((s) => s.itens);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -94,9 +129,10 @@ export function Sidebar({
     elections.find((e) => e.ano === ano) ?? elections[0] ?? null;
   const semPleito = elections.length === 0;
 
-  function isActive(href: string, exact?: boolean) {
-    if (exact) return pathname === href;
-    return pathname === href || pathname.startsWith(`${href}/`);
+  function isActive(item: NavItem) {
+    if (item.exact) return pathname === item.href;
+    const paths = item.activePaths ?? [item.href];
+    return paths.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   }
 
   function trocarPleito(value: string) {
@@ -235,26 +271,33 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 p-3">
-        {navItems.map((item) => {
-          const active = isActive(item.href, item.exact);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                active
-                  ? "bg-primary text-primary-foreground"
-                  : "text-slate-600 hover:bg-slate-100",
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 space-y-4 overflow-y-auto p-3">
+        {secoesVisiveis.map((secao) => (
+          <div key={secao.titulo} className="space-y-1">
+            <p className="px-3 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              {secao.titulo}
+            </p>
+            {secao.itens.map((item) => {
+              const active = isActive(item);
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                    active
+                      ? "bg-primary text-primary-foreground"
+                      : "text-slate-600 hover:bg-slate-100",
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       <div className="space-y-3 border-t p-3">
