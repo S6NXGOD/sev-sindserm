@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import {
   getAtividadeDiretoria,
+  getEleitosRows,
   getPleitosPublicos,
   getTransparenciaData,
 } from "@/lib/transparencia";
@@ -18,6 +19,7 @@ import { ApuracaoAoVivo } from "@/components/transparencia/apuracao-ao-vivo";
 import { AuditoriaLisura } from "@/components/transparencia/auditoria-lisura";
 import { ConformidadeLegal } from "@/components/transparencia/conformidade-legal";
 import { AtividadeDiretoria } from "@/components/transparencia/atividade-diretoria";
+import { MuralEleitos } from "@/components/transparencia/mural-eleitos";
 import { SuplementarAviso } from "@/components/transparencia/suplementar-aviso";
 import { GuiaPortal } from "@/components/transparencia/guia-portal";
 import { PeriodoPleito } from "@/components/periodo-pleito";
@@ -99,7 +101,7 @@ export default async function TransparenciaPage({
       ? searchParams.pleito
       : defaultId;
 
-  const [data, atividade] = await Promise.all([
+  const [data, atividade, eleitosData] = await Promise.all([
     getTransparenciaData(pleitoId, {
       q: searchParams.q,
       orgao: searchParams.orgao,
@@ -113,8 +115,12 @@ export default async function TransparenciaPage({
           : "todos",
     }),
     getAtividadeDiretoria(pleitoId, 12),
+    getEleitosRows(pleitoId),
   ]);
   const pleito = data.pleito!;
+  // Pleito CONCLUÍDO = passou do fim geral oficial (ninguém mais vota).
+  const concluido =
+    !!pleito.dataFimGeral && new Date() > new Date(pleito.dataFimGeral);
   const pdfPleito = {
     titulo: pleito.titulo,
     trienio: pleito.trienio,
@@ -251,6 +257,16 @@ export default async function TransparenciaPage({
           totalVotantes={data.kpis.votos}
           eleitos={data.kpis.eleitos}
           vagas={data.kpis.vagas}
+        />
+
+        {/* Mural dos Eleitos — reconhecimento consolidado de todos os eleitos.
+            Vira celebração (com confetti) quando o pleito é concluído. */}
+        <MuralEleitos
+          eleitos={eleitosData?.rows ?? []}
+          concluido={concluido}
+          trienio={pleito.trienio}
+          ano={eleitosData?.ano ?? pleito.ano}
+          electionId={pleitoId}
         />
 
         {/* Auditoria, integridade e lisura — prova pública de que é limpa e
