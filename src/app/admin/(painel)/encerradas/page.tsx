@@ -234,6 +234,7 @@ export default async function EncerradasPage({
           defaultSort="fim_desc"
           showControls
           showStatusChips
+          pdfHeader={pdfHeader}
         />
       )}
 

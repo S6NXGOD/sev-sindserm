@@ -1,9 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Filter, Search, X } from "lucide-react";
+import { ChevronDown, FileDown, Filter, Loader2, Search, X } from "lucide-react";
 import type { Apuracao } from "@/lib/reports";
 import { searchScore, searchTokens } from "@/lib/slug";
+import { toast } from "sonner";
+import {
+  downloadLocalResultadoPdf,
+  type LocalPdfHeader,
+} from "@/lib/local-resultado-pdf";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,7 +44,7 @@ const STATUS_VARIANT: Record<
 > = {
   undefined: "outline",
   open: "success",
-  closed: "destructive",
+  closed: "secondary",
   upcoming: "secondary",
 };
 const MAX_ELEITOS_NOMES = 8;
@@ -87,12 +92,49 @@ function comparar(sort: ApuracaoSort) {
   };
 }
 
+/** Botão que gera o PDF do resultado DESTE local (cliente, jsPDF). */
+function PdfLocalButton({ a, header }: { a: Apuracao; header: LocalPdfHeader }) {
+  const [loading, setLoading] = useState(false);
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="shrink-0"
+      disabled={loading}
+      onClick={async () => {
+        setLoading(true);
+        try {
+          await downloadLocalResultadoPdf(a, header);
+        } catch {
+          toast.error("Não foi possível gerar o PDF.");
+        } finally {
+          setLoading(false);
+        }
+      }}
+    >
+      {loading ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <FileDown className="h-4 w-4" />
+      )}
+      <span className="ml-1.5">PDF</span>
+    </Button>
+  );
+}
+
 /**
  * Card de apuração de UM local com o ranking COLAPSÁVEL. Na tela o ranking fica
  * recolhido por padrão (lista compacta); na IMPRESSÃO ele é sempre exibido
  * (`print:block`), então o relatório/PDF continua completo.
  */
-function ApuracaoCard({ a }: { a: Apuracao }) {
+function ApuracaoCard({
+  a,
+  pdfHeader,
+}: {
+  a: Apuracao;
+  pdfHeader?: LocalPdfHeader;
+}) {
   const [aberto, setAberto] = useState(false);
   // "Sem votos" só quando não há votos NEM eleitos preservados (suplementar
   // recém-aberta ainda mostra os eleitos travados de rodadas anteriores).
@@ -183,13 +225,13 @@ function ApuracaoCard({ a }: { a: Apuracao }) {
 
       {!semVotos && (
         <>
-          {/* Alternador (só na tela). */}
-          <div className="px-6 pb-3 print:hidden">
+          {/* Alternador + PDF do local (só na tela). */}
+          <div className="flex items-center gap-2 px-6 pb-3 print:hidden">
             <button
               type="button"
               onClick={() => setAberto((o) => !o)}
               aria-expanded={aberto}
-              className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50"
+              className="flex flex-1 items-center justify-between rounded-md border px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50"
             >
               <span>
                 {aberto ? "Ocultar" : "Ver"} ranking ({a.votadosCount})
@@ -201,6 +243,7 @@ function ApuracaoCard({ a }: { a: Apuracao }) {
                 )}
               />
             </button>
+            {pdfHeader && <PdfLocalButton a={a} header={pdfHeader} />}
           </div>
           {/* Ranking: recolhido na tela (hidden); SEMPRE visível na impressão. */}
           <CardContent className={cn("pt-0", !aberto && "hidden", "print:block")}>
@@ -227,12 +270,15 @@ function ApuracaoCard({ a }: { a: Apuracao }) {
                           >
                             Não assumiu
                           </Badge>
-                        ) : c.preservado ? (
-                          <Badge className="bg-violet-600 hover:bg-violet-600">
-                            Eleito (rodada anterior)
-                          </Badge>
-                        ) : c.eleito ? (
-                          <Badge variant="success">Eleito</Badge>
+                        ) : c.eleito || c.preservado ? (
+                          <>
+                            <Badge variant="success">Eleito</Badge>
+                            {c.preservado && (
+                              <span className="text-[10px] text-muted-foreground">
+                                mantido da rodada anterior
+                              </span>
+                            )}
+                          </>
                         ) : (
                           <Badge
                             variant="outline"
@@ -278,6 +324,7 @@ export function ApuracoesList({
   defaultSort = "orgao_asc",
   showControls = false,
   showStatusChips = false,
+  pdfHeader,
 }: {
   apuracoes: Apuracao[];
   /** Se informado, mostra o filtro de órgão (derivado das apurações). */
@@ -289,6 +336,8 @@ export function ApuracoesList({
   showControls?: boolean;
   /** Chips de status (Com eleito / Empate / Sem eleito / Suplementar). */
   showStatusChips?: boolean;
+  /** Cabeçalho institucional p/ o PDF por local (logos + título + data). */
+  pdfHeader?: LocalPdfHeader;
 }) {
   const [q, setQ] = useState("");
   const [orgao, setOrgao] = useState("");
@@ -482,7 +531,7 @@ export function ApuracoesList({
       <div className="grid gap-4 lg:grid-cols-2 print:grid-cols-1">
         {ordenadas.map((a) => (
           <div key={a.id} className={cn(!casa(a) && "hidden print:block")}>
-            <ApuracaoCard a={a} />
+            <ApuracaoCard a={a} pdfHeader={pdfHeader} />
           </div>
         ))}
       </div>
