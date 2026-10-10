@@ -448,3 +448,46 @@ export async function desfazerHomologacao(
   revalidatePath("/transparencia");
   return ok(`Homologação de ${nome} desfeita.`);
 }
+
+/**
+ * POSSE COLETIVA — empossa de uma vez todos os representantes EM EXERCÍCIO
+ * (ATIVO/AFASTADO) do ano que ainda NÃO têm posse, com a MESMA data (a da
+ * cerimônia). Quem já foi empossado não é alterado (não sobrescreve). Ideal para
+ * a festa de posse do sindicato. formData: ano, data.
+ */
+export async function empossarColetivo(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const gp = await guard("pleitos", "EDIT");
+  if ("error" in gp) return err(gp.error);
+
+  const ano = Number(formData.get("ano"));
+  if (!Number.isInteger(ano)) return err("Ano inválido.");
+  const data = parseData(formData.get("data"));
+
+  const res = await prisma.mandato.updateMany({
+    where: {
+      anoEleicao: ano,
+      situacao: { in: ["ATIVO", "AFASTADO"] },
+      posseEm: null,
+    },
+    data: { posseEm: data },
+  });
+  if (res.count === 0) {
+    return err(
+      "Ninguém aguardando posse: todos os representantes em exercício já têm posse registrada.",
+    );
+  }
+
+  await registrarAuditoria("EMPOSSOU_COLETIVO", {
+    alvo: `${res.count} representante(s)`,
+    detalhe: `posse em ${data.toLocaleDateString("pt-BR")}`,
+    user: gp.user,
+  });
+  revalidatePath("/admin/representantes");
+  revalidatePath("/transparencia");
+  return ok(
+    `Posse coletiva registrada: ${res.count} representante(s) empossado(s) em ${data.toLocaleDateString("pt-BR")}.`,
+  );
+}

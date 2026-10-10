@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Gavel,
   Loader2,
+  PartyPopper,
   Search,
   Settings2,
   ShieldCheck,
@@ -23,6 +24,7 @@ import {
   afastarRepresentante,
   convocarSuplente,
   desfazerHomologacao,
+  empossarColetivo,
   homologarResultados,
   reativarRepresentante,
   registrarPosse,
@@ -105,6 +107,75 @@ function HomologarTodosForm({ ano, count }: { ano: number; count: number }) {
         Homologar {count} {count === 1 ? "local" : "locais"}
       </Pending>
     </form>
+  );
+}
+
+/* ---------------------------- Posse coletiva ----------------------------- */
+
+function PosseColetivaCard({ ano, pendentes }: { ano: number; pendentes: number }) {
+  const [open, setOpen] = useState(false);
+  const [state, formAction] = useFormState(empossarColetivo, initialActionState);
+  useActionToast(state, () => setOpen(false));
+  const hoje = new Date().toISOString().slice(0, 10);
+  return (
+    <Card className="border-emerald-200 bg-emerald-50/60">
+      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div className="flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+            <PartyPopper className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-900">Posse coletiva</p>
+            <p className="text-sm text-muted-foreground">
+              {pendentes} representante(s) aguardando posse. Emposse todos de uma
+              vez com a data da cerimônia — sem ir de um em um.
+            </p>
+          </div>
+        </div>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Button className="shrink-0">
+              <UserCheck className="mr-2 h-4 w-4" />
+              Dar posse a todos
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Posse coletiva</DialogTitle>
+              <DialogDescription>
+                Registra a MESMA data de posse para os {pendentes} representantes
+                em exercício que ainda não foram empossados. Quem já tem posse não
+                é alterado (reversível por representante no “Gerenciar”).
+              </DialogDescription>
+            </DialogHeader>
+            <form action={formAction} className="space-y-3">
+              <input type="hidden" name="ano" value={ano} />
+              <div className="space-y-1.5">
+                <Label htmlFor="posse-coletiva-data">
+                  Data da posse (cerimônia)
+                </Label>
+                <Input
+                  id="posse-coletiva-data"
+                  name="data"
+                  type="date"
+                  defaultValue={hoje}
+                  required
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                  Cancelar
+                </Button>
+                <Pending type="submit">
+                  <UserCheck className="mr-2 h-4 w-4" />
+                  Empossar {pendentes}
+                </Pending>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -439,6 +510,11 @@ export function RepresentantesManager({
 
   const grupos = useMemo(() => agrupar(mandatos), [mandatos]);
 
+  // Representantes em exercício ainda SEM posse (alvo da posse coletiva).
+  const aguardandoPosse = mandatos.filter(
+    (m) => (m.situacao === "ATIVO" || m.situacao === "AFASTADO") && !m.posseEm,
+  ).length;
+
   const comVaga = grupos.filter((g) => g.vagasAbertas > 0).length;
   const comAfastado = grupos.filter((g) => g.afastados.length > 0).length;
 
@@ -497,6 +573,10 @@ export function RepresentantesManager({
             )}
           </CardContent>
         </Card>
+      )}
+
+      {canManage && aguardandoPosse > 0 && (
+        <PosseColetivaCard ano={ano} pendentes={aguardandoPosse} />
       )}
 
       {grupos.length === 0 ? (
