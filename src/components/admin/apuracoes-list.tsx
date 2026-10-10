@@ -59,6 +59,13 @@ const SORTS: { value: ApuracaoSort; label: string }[] = [
   { value: "orgao_asc", label: "Órgão (A–Z)" },
 ];
 
+type StatusFiltro =
+  | "todos"
+  | "com_eleito"
+  | "empate"
+  | "sem_eleito"
+  | "suplementar";
+
 const ALL = "all";
 const MENOS_INF = Number.NEGATIVE_INFINITY;
 const MAIS_INF = Number.POSITIVE_INFINITY;
@@ -95,6 +102,12 @@ function ApuracaoCard({ a }: { a: Apuracao }) {
   const empatadosMostrados = a.empatados.slice(0, MAX_ELEITOS_NOMES);
   const semVotosCount = a.totalCandidatos - a.votadosCount;
   const naoListados = a.votadosCount - a.ranking.length;
+  // Linha de SUPLÊNCIA (derivada do ranking): quem assume se um titular sair.
+  // Suplente = votado, não eleito, não preservado, não renunciante, não empatado.
+  const suplentes = a.ranking.filter(
+    (c) =>
+      !c.eleito && !c.preservado && !c.renunciou && !a.empatados.includes(c.nome),
+  );
 
   return (
     <Card className="break-inside-avoid">
@@ -130,6 +143,16 @@ function ApuracaoCard({ a }: { a: Apuracao }) {
                 {a.status === "closed" ? "Eleito(s)" : "Parcial (projeção)"}:{" "}
                 {eleitosMostrados.join(", ")}
                 {eleitosRestantes > 0 ? ` +${eleitosRestantes}` : ""}
+              </p>
+            )}
+            {a.status === "closed" && suplentes.length > 0 && (
+              <p className="text-xs text-sky-700">
+                <span className="font-medium">Suplência (ordem):</span>{" "}
+                {suplentes
+                  .slice(0, 5)
+                  .map((s, i) => `${i + 1}º ${s.nome}`)
+                  .join(" · ")}
+                {suplentes.length > 5 ? ` +${suplentes.length - 5}` : ""}
               </p>
             )}
             {a.temEmpate && (
@@ -254,6 +277,7 @@ export function ApuracoesList({
   zonas,
   defaultSort = "orgao_asc",
   showControls = false,
+  showStatusChips = false,
 }: {
   apuracoes: Apuracao[];
   /** Se informado, mostra o filtro de órgão (derivado das apurações). */
@@ -263,18 +287,55 @@ export function ApuracoesList({
   defaultSort?: ApuracaoSort;
   /** Mostra a barra de ordenação/filtros (Encerradas). */
   showControls?: boolean;
+  /** Chips de status (Com eleito / Empate / Sem eleito / Suplementar). */
+  showStatusChips?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [orgao, setOrgao] = useState("");
   const [zona, setZona] = useState("");
   const [sort, setSort] = useState<ApuracaoSort>(defaultSort);
+  const [status, setStatus] = useState<StatusFiltro>("todos");
 
   const tokens = searchTokens(q);
-  const casa = (a: Apuracao) =>
-    (tokens.length === 0 ||
-      searchScore(`${a.nome} ${a.orgao} ${a.zona}`, tokens) > 0) &&
-    (orgao === "" || a.orgao === orgao) &&
-    (zona === "" || a.zona === zona);
+  const casa = (a: Apuracao) => {
+    const texto =
+      tokens.length === 0 ||
+      searchScore(`${a.nome} ${a.orgao} ${a.zona}`, tokens) > 0;
+    const campos =
+      (orgao === "" || a.orgao === orgao) && (zona === "" || a.zona === zona);
+    let st = true;
+    if (status === "com_eleito") st = a.eleitos.length > 0;
+    else if (status === "empate") st = a.temEmpate;
+    else if (status === "sem_eleito")
+      st =
+        a.status === "closed" &&
+        a.eleitos.length === 0 &&
+        !a.semRepresentacao;
+    else if (status === "suplementar") st = a.rodadaAtual > 1;
+    return texto && campos && st;
+  };
+
+  // Contagens para os chips (sobre TODAS as apurações, não só as visíveis).
+  const contagens = useMemo(() => {
+    let comEleito = 0;
+    let empate = 0;
+    let semEleito = 0;
+    let suplementar = 0;
+    for (const a of apuracoes) {
+      if (a.eleitos.length > 0) comEleito += 1;
+      if (a.temEmpate) empate += 1;
+      if (a.status === "closed" && a.eleitos.length === 0 && !a.semRepresentacao)
+        semEleito += 1;
+      if (a.rodadaAtual > 1) suplementar += 1;
+    }
+    return {
+      todos: apuracoes.length,
+      comEleito,
+      empate,
+      semEleito,
+      suplementar,
+    };
+  }, [apuracoes]);
 
   // Ordena TODAS (o filtro só decide o que fica visível na tela).
   const ordenadas = useMemo(
@@ -283,7 +344,16 @@ export function ApuracoesList({
   );
 
   const visiveis = ordenadas.filter(casa).length;
-  const temFiltro = q.trim() !== "" || orgao !== "" || zona !== "";
+  const temFiltro =
+    q.trim() !== "" || orgao !== "" || zona !== "" || status !== "todos";
+
+  const chips: { id: StatusFiltro; label: string; count: number }[] = [
+    { id: "todos", label: "Todos", count: contagens.todos },
+    { id: "com_eleito", label: "Com eleito", count: contagens.comEleito },
+    { id: "empate", label: "Empate", count: contagens.empate },
+    { id: "sem_eleito", label: "Sem eleito", count: contagens.semEleito },
+    { id: "suplementar", label: "Suplementar", count: contagens.suplementar },
+  ];
 
   return (
     <div className="space-y-3">
@@ -297,6 +367,40 @@ export function ApuracoesList({
             className="h-11 pl-9"
           />
         </div>
+
+        {showStatusChips && (
+          <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+            {chips
+              .filter((c) => c.id === "todos" || c.count > 0)
+              .map((c) => {
+                const ativo = status === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setStatus(c.id)}
+                    aria-pressed={ativo}
+                    className={cn(
+                      "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                      ativo
+                        ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    {c.label}
+                    <span
+                      className={cn(
+                        "rounded-full px-1.5 text-[10px] font-bold",
+                        ativo ? "bg-white/20" : "bg-slate-100 text-slate-500",
+                      )}
+                    >
+                      {c.count}
+                    </span>
+                  </button>
+                );
+              })}
+          </div>
+        )}
 
         {showControls && (
           <div className="grid grid-cols-2 gap-2 lg:flex lg:flex-wrap lg:items-center">
@@ -358,6 +462,7 @@ export function ApuracoesList({
                   setQ("");
                   setOrgao("");
                   setZona("");
+                  setStatus("todos");
                 }}
               >
                 <X className="mr-1 h-4 w-4" />

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  AlertTriangle,
   Award,
   Building2,
   CheckCircle2,
@@ -29,49 +28,38 @@ import { EmpatesPanel } from "@/components/admin/empates-panel";
 import { VagasVaziasPanel } from "@/components/admin/vagas-vazias-panel";
 import { ExportEleitosButton } from "@/components/admin/export-eleitos-button";
 import { ExportEleitosPdfButton } from "@/components/admin/export-eleitos-pdf-button";
+import { SecaoRecolhivel } from "@/components/admin/secao-recolhivel";
 
 export const dynamic = "force-dynamic";
 
-/** KPI compacto (mesma pegada dos cards da dashboard). */
-function Kpi({
-  label,
-  value,
+/** Item do resumo slim (ícone + número + rótulo numa faixa única e enxuta). */
+function ResumoItem({
   icon: Icon,
-  tone = "default",
+  tone,
+  value,
+  label,
 }: {
-  label: string;
-  value: number;
   icon: React.ComponentType<{ className?: string }>;
-  tone?: "default" | "green" | "blue" | "amber";
+  tone: string;
+  value: number;
+  label: string;
 }) {
-  const cls = {
-    default: "bg-slate-100 text-slate-700",
-    green: "bg-emerald-50 text-emerald-600",
-    blue: "bg-sky-50 text-sky-600",
-    amber: "bg-amber-50 text-amber-600",
-  }[tone];
   return (
-    <Card>
-      <CardContent className="flex items-center gap-3 p-4">
-        <div className={`rounded-lg p-2.5 ${cls}`}>
-          <Icon className="h-5 w-5" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-2xl font-bold leading-none">
-            {value.toLocaleString("pt-BR")}
-          </p>
-          <p className="mt-1 text-xs leading-tight text-muted-foreground">
-            {label}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex items-center gap-2">
+      <Icon className={`h-5 w-5 shrink-0 ${tone}`} />
+      <span className="text-xl font-bold leading-none text-slate-900">
+        {value.toLocaleString("pt-BR")}
+      </span>
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </div>
   );
 }
 
 /**
- * ÁREA RÁPIDA — Encerradas & Eleitos. Um só lugar para NAVEGAR as votações
- * concluídas, ver os eleitos, os EMPATES a resolver e baixar o documento.
+ * RESULTADOS & RELATÓRIOS — redesenho "lista primeiro".
+ * A ordem agora prioriza ACHAR UM LOCAL e VER OS ELEITOS: resumo enxuto →
+ * (pendências recolhidas, só 1 barra) → a LISTA buscável com chips de status e
+ * linha de suplência por local → (documentos/exportações recolhidos no fim).
  * Reaproveita getReportData({ somenteEncerradas }) e a ApuracoesList.
  */
 export default async function EncerradasPage({
@@ -119,8 +107,12 @@ export default async function EncerradasPage({
   const vagaVaziaAceitas = pendentesBase
     .filter((a) => a.vagasVazias > 0 && a.vagasVaziasAceitas)
     .map(toVagaItem);
-  // Encerrados SEM NENHUM eleito ainda pendentes de decisão (para o botão fácil).
-  const semEleitoCount = vagaVaziaPendentes.filter((i) => i.semEleito).length;
+
+  const temPendencias =
+    empates.length > 0 ||
+    vagaVaziaPendentes.length > 0 ||
+    vagaVaziaAceitas.length > 0;
+  const aDecidir = empates.length + vagaVaziaPendentes.length;
 
   // Opções de filtro derivadas do que REALMENTE existe entre as encerradas.
   const orgaos = [...new Set(data.apuracoes.map((a) => a.orgao))].sort((x, y) =>
@@ -140,70 +132,119 @@ export default async function EncerradasPage({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
           Resultados &amp; Relatórios
         </h1>
         <p className="text-sm text-muted-foreground">
           Eleição {ano}
-          {ano !== anoVigente ? " (histórico — auditoria)" : ""} — eleitos,
-          empates a resolver e os documentos oficiais (PDF/CSV).
+          {ano !== anoVigente ? " (histórico — auditoria)" : ""} — ache um local,
+          veja os eleitos e a suplência. Pendências e documentos ficam logo
+          abaixo.
         </p>
       </div>
 
-      {/* KPIs. O âmbar de "Empates" só acende quando há resultado travado. */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-        <Kpi
-          label="Locais encerrados"
-          value={data.apuracoes.length}
+      {/* Resumo enxuto numa faixa só (sem torre de cards). */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-xl border bg-card px-4 py-3 shadow-sm sm:px-5">
+        <ResumoItem
           icon={CheckCircle2}
-          tone="green"
+          tone="text-emerald-600"
+          value={data.apuracoes.length}
+          label="locais encerrados"
         />
-        <Kpi label="Eleitos" value={totalEleitos} icon={Award} tone="blue" />
-        <Kpi label="Votos apurados" value={totalVotos} icon={Vote} />
-        <Kpi
-          label="Empates a resolver"
-          value={empates.length}
+        <ResumoItem
+          icon={Award}
+          tone="text-sky-600"
+          value={totalEleitos}
+          label="eleitos"
+        />
+        <ResumoItem
+          icon={Vote}
+          tone="text-slate-500"
+          value={totalVotos}
+          label="votos apurados"
+        />
+        <ResumoItem
           icon={Scale}
-          tone={empates.length > 0 ? "amber" : "default"}
+          tone={empates.length > 0 ? "text-amber-600" : "text-slate-400"}
+          value={empates.length}
+          label="empates a resolver"
         />
       </div>
 
-      {/* Aviso SLIM (uma linha) — encerrados sem NENHUM eleito. Vermelho só como
-          ponto de acento no ícone, sem fundo saturado. Só aparece se houver. */}
-      {semEleitoCount > 0 && (
-        <a
-          href="#vagas-sem-eleito"
-          className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm transition hover:bg-slate-50"
+      {/* PENDÊNCIAS — uma barra recolhida (não empurra mais a lista para baixo).
+          Abre com 1 toque; o contador âmbar sinaliza o que precisa de decisão. */}
+      {temPendencias && (
+        <SecaoRecolhivel
+          titulo="Pendências a resolver"
+          descricao="Empates e vagas sem eleito — decida local a local (reversível)."
+          icon={<Scale className="h-5 w-5" />}
+          defaultOpen={false}
+          badge={
+            aDecidir > 0 ? (
+              <span className="flex flex-wrap items-center justify-end gap-1.5">
+                {empates.length > 0 && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
+                    {empates.length} empate{empates.length > 1 ? "s" : ""}
+                  </span>
+                )}
+                {vagaVaziaPendentes.length > 0 && (
+                  <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-bold text-rose-600">
+                    {vagaVaziaPendentes.length} a decidir
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-700">
+                em dia
+              </span>
+            )
+          }
         >
-          <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
-          <span className="min-w-0 flex-1 text-slate-700">
-            <strong className="font-semibold">{semEleitoCount}</strong>{" "}
-            {semEleitoCount === 1
-              ? "local encerrou sem nenhum eleito"
-              : "locais encerraram sem nenhum eleito"}{" "}
-            — revise e decida.
-          </span>
-          <span className="shrink-0 text-slate-400" aria-hidden>
-            →
-          </span>
-        </a>
+          <div className="space-y-4">
+            <EmpatesPanel empates={empates} />
+            <VagasVaziasPanel
+              pendentes={vagaVaziaPendentes}
+              aceitas={vagaVaziaAceitas}
+            />
+          </div>
+        </SecaoRecolhivel>
       )}
 
-      {/* EMPATES — no topo, para resolver rápido (só aparece se houver). */}
-      <EmpatesPanel empates={empates} />
+      {/* LISTA — o herói da página: busca + chips de status + eleitos/suplência. */}
+      {data.apuracoes.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
+            <CheckCircle2 className="h-8 w-8 text-muted-foreground/50" />
+            <p className="text-sm text-muted-foreground">
+              Nenhuma votação encerrada ainda. Assim que um local for encerrado,
+              os eleitos aparecem aqui.
+            </p>
+            <Button asChild variant="outline" size="sm" className="mt-1">
+              <Link href="/admin/locais">Ver locais de trabalho</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <ApuracoesList
+          apuracoes={data.apuracoes}
+          orgaos={orgaos}
+          zonas={zonas}
+          defaultSort="fim_desc"
+          showControls
+          showStatusChips
+        />
+      )}
 
-      {/* VAGAS SEM ELEITO → decisão caso a caso (suplementar OU manter assim). */}
-      <VagasVaziasPanel
-        pendentes={vagaVaziaPendentes}
-        aceitas={vagaVaziaAceitas}
-      />
-
-      {/* Ações & documentos — agrupadas por finalidade (menos "botões soltos").
-          O primário é a Lista de Eleitos; o resto fica como opções outline. */}
-      <Card>
-        <CardContent className="space-y-4 p-4 sm:p-5">
+      {/* DOCUMENTOS & EXPORTAÇÕES — recolhido no fim (não é a tarefa principal). */}
+      <SecaoRecolhivel
+        titulo="Documentos e exportações"
+        descricao="Lista de eleitos, apuração e relatórios (PDF/CSV)."
+        icon={<FileText className="h-5 w-5" />}
+        defaultOpen={false}
+      >
+        <div className="space-y-4">
           <div>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Lista de eleitos
@@ -257,32 +298,8 @@ export default async function EncerradasPage({
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Lista de apurações encerradas (busca + ordenação + cards). */}
-      {data.apuracoes.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-            <CheckCircle2 className="h-8 w-8 text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">
-              Nenhuma votação encerrada ainda. Assim que um local for encerrado,
-              os eleitos aparecem aqui.
-            </p>
-            <Button asChild variant="outline" size="sm" className="mt-1">
-              <Link href="/admin/locais">Ver locais de trabalho</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <ApuracoesList
-          apuracoes={data.apuracoes}
-          orgaos={orgaos}
-          zonas={zonas}
-          defaultSort="fim_desc"
-          showControls
-        />
-      )}
+        </div>
+      </SecaoRecolhivel>
     </div>
   );
 }
