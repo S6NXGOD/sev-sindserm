@@ -28,6 +28,7 @@ import {
   getSelectedElectionYear,
   requirePleito,
 } from "@/lib/election";
+import { getRepresentantesPorZona } from "@/lib/mandato";
 import { requireModule } from "@/lib/current-user";
 import { formatDateTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,7 @@ import {
 import { ProximasAberturas } from "@/components/proximas-aberturas";
 import { PeriodoPleito } from "@/components/periodo-pleito";
 import { SecaoRecolhivel } from "@/components/admin/secao-recolhivel";
+import { MapaZonas } from "@/components/admin/mapa-zonas";
 import { AutoRefresh } from "@/components/admin/auto-refresh";
 import { RitmoCard } from "@/components/admin/ritmo-card";
 import { StatusPieChart } from "@/components/admin/status-pie-chart";
@@ -104,11 +106,12 @@ export default async function DashboardPage({
   await requirePleito();
   const ano = getSelectedElectionYear(searchParams.ano);
   const anoVigente = getCurrentElectionYear();
-  const [d, lideranca, presentationLocais, mural] = await Promise.all([
+  const [d, lideranca, presentationLocais, mural, repZonas] = await Promise.all([
     getDashboardData(ano),
     getLiderancaParcial(ano),
     getPresentationData(ano),
     getMuralEleitos(ano),
+    getRepresentantesPorZona(ano),
   ]);
 
   const trienio = `${ano}-${ano + 3}`;
@@ -229,6 +232,13 @@ export default async function DashboardPage({
           tone="red"
         />
       </div>
+
+      {/* Mapa de representantes por zona (gamificado). */}
+      <MapaZonas
+        zonas={repZonas.zonas}
+        total={repZonas.total}
+        fonte={repZonas.fonte}
+      />
 
       {/* Faixa de SUPLEMENTAR: só aparece quando há rodada votando agora OU
           agendada (encerradas não alarmam). Texto honesto conforme o estado e

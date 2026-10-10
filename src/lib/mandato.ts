@@ -128,6 +128,59 @@ export async function getRepresentantesData(
   return { mandatos, aptos, locaisHomologados: homologados.size };
 }
 
+/* ----------------------- Representantes por zona -------------------------- */
+
+// Ordem fixa das zonas (enum Zona). Usada na dashboard (mapa esquemático).
+const ZONAS_ORDEM = ["NORTE", "SUL", "LESTE", "CENTRO", "SUDESTE", "RURAL"];
+
+export type ZonaRep = { zona: string; total: number };
+export type RepresentantesPorZona = {
+  zonas: ZonaRep[];
+  total: number;
+  /** "mandato" = em exercício (pós-homologação); "eleicao" = eleitos (votos). */
+  fonte: "mandato" | "eleicao";
+};
+
+/**
+ * Representantes por zona para o MAPA da dashboard. Prefere o MANDATO VIGENTE
+ * (ATIVO/AFASTADO) quando já há homologação (rápido); senão cai nos eleitos
+ * derivados dos votos (getReportData). Sempre devolve as 6 zonas (mesmo com 0).
+ */
+export async function getRepresentantesPorZona(
+  ano: number,
+): Promise<RepresentantesPorZona> {
+  const base: Record<string, number> = Object.fromEntries(
+    ZONAS_ORDEM.map((z) => [z, 0]),
+  );
+
+  const temMandatos = await prisma.mandato.count({ where: { anoEleicao: ano } });
+  let fonte: "mandato" | "eleicao" = "eleicao";
+
+  if (temMandatos > 0) {
+    fonte = "mandato";
+    const rows = await prisma.mandato.findMany({
+      where: { anoEleicao: ano, situacao: { in: ["ATIVO", "AFASTADO"] } },
+      select: { workplace: { select: { zona: true } } },
+    });
+    for (const r of rows) {
+      const z = r.workplace.zona;
+      base[z] = (base[z] ?? 0) + 1;
+    }
+  } else {
+    const report = await getReportData({
+      anoEleicao: ano,
+      somenteEncerradas: true,
+    });
+    for (const a of report.apuracoes) {
+      base[a.zona] = (base[a.zona] ?? 0) + a.eleitos.length;
+    }
+  }
+
+  const zonas = ZONAS_ORDEM.map((z) => ({ zona: z, total: base[z] ?? 0 }));
+  const total = zonas.reduce((s, z) => s + z.total, 0);
+  return { zonas, total, fonte };
+}
+
 /* --------------------------- Portal público ------------------------------ */
 
 export type RepresentantePublico = {
