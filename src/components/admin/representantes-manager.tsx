@@ -6,12 +6,12 @@ import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
 import { toast } from "sonner";
 import {
-  Award,
   CalendarPlus,
   ChevronDown,
   Gavel,
   Loader2,
   PartyPopper,
+  RotateCcw,
   Search,
   Settings2,
   ShieldCheck,
@@ -19,11 +19,13 @@ import {
   UserMinus,
   UserPlus,
   Undo2,
+  Users,
 } from "lucide-react";
 import {
   afastarRepresentante,
   convocarSuplente,
   desfazerHomologacao,
+  desfazerHomologacaoLote,
   empossarColetivo,
   homologarResultados,
   reativarRepresentante,
@@ -31,7 +33,7 @@ import {
   registrarVacancia,
   reverterMandato,
 } from "@/lib/actions/mandato";
-import { initialActionState } from "@/lib/types";
+import { initialActionState, type ActionState } from "@/lib/types";
 import {
   MOTIVOS_VACANCIA,
   MOTIVO_LABEL,
@@ -42,7 +44,6 @@ import type { AptoLocal, MandatoLinha } from "@/lib/mandato";
 import { cn } from "@/lib/utils";
 import { searchScore, searchTokens } from "@/lib/slug";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
@@ -63,6 +64,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+type ServerAction = (
+  prev: ActionState,
+  formData: FormData,
+) => Promise<ActionState>;
+
 function Pending({ children, ...props }: React.ComponentProps<typeof Button>) {
   const { pending } = useFormStatus();
   return (
@@ -73,7 +79,7 @@ function Pending({ children, ...props }: React.ComponentProps<typeof Button>) {
   );
 }
 
-/** Hook: ao concluir uma action, toast + refresh (e callback opcional p/ fechar). */
+/** Toast + refresh ao concluir; callback opcional (fechar dialog). */
 function useActionToast(
   state: { status: string; message: string },
   onSuccess?: () => void,
@@ -91,22 +97,56 @@ function useActionToast(
   }, [state]);
 }
 
-/* ------------------------------ Homologação ------------------------------ */
-
-function HomologarTodosForm({ ano, count }: { ano: number; count: number }) {
-  const [state, formAction] = useFormState(
-    homologarResultados,
-    initialActionState,
-  );
-  useActionToast(state);
+/**
+ * Ação com MODAL DE CONFIRMAÇÃO (anti-acidente). O gatilho é um botão; ao
+ * confirmar, submete a server action com os campos ocultos informados.
+ */
+function AcaoConfirm({
+  trigger,
+  titulo,
+  descricao,
+  confirmLabel,
+  action,
+  hidden,
+  destrutivo = false,
+}: {
+  trigger: React.ReactNode;
+  titulo: string;
+  descricao: React.ReactNode;
+  confirmLabel: string;
+  action: ServerAction;
+  hidden: Record<string, string | number>;
+  destrutivo?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [state, formAction] = useFormState(action, initialActionState);
+  useActionToast(state, () => setOpen(false));
   return (
-    <form action={formAction}>
-      <input type="hidden" name="ano" value={ano} />
-      <Pending type="submit">
-        <ShieldCheck className="mr-2 h-4 w-4" />
-        Homologar {count} {count === 1 ? "local" : "locais"}
-      </Pending>
-    </form>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{titulo}</DialogTitle>
+          <DialogDescription>{descricao}</DialogDescription>
+        </DialogHeader>
+        <form action={formAction}>
+          {Object.entries(hidden).map(([k, v]) => (
+            <input key={k} type="hidden" name={k} value={v} />
+          ))}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Pending
+              type="submit"
+              className={destrutivo ? "bg-rose-600 hover:bg-rose-700" : undefined}
+            >
+              {confirmLabel}
+            </Pending>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -118,7 +158,7 @@ function PosseColetivaCard({ ano, pendentes }: { ano: number; pendentes: number 
   useActionToast(state, () => setOpen(false));
   const hoje = new Date().toISOString().slice(0, 10);
   return (
-    <Card className="border-emerald-200 bg-emerald-50/60">
+    <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50 to-white">
       <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
@@ -127,8 +167,8 @@ function PosseColetivaCard({ ano, pendentes }: { ano: number; pendentes: number 
           <div className="min-w-0">
             <p className="font-semibold text-slate-900">Posse coletiva</p>
             <p className="text-sm text-muted-foreground">
-              {pendentes} representante(s) aguardando posse. Emposse todos de uma
-              vez com a data da cerimônia — sem ir de um em um.
+              {pendentes} representante(s) aguardando posse — emposse todos de uma
+              vez com a data da cerimônia.
             </p>
           </div>
         </div>
@@ -141,11 +181,11 @@ function PosseColetivaCard({ ano, pendentes }: { ano: number; pendentes: number 
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Posse coletiva</DialogTitle>
+              <DialogTitle>Confirmar posse coletiva</DialogTitle>
               <DialogDescription>
                 Registra a MESMA data de posse para os {pendentes} representantes
                 em exercício que ainda não foram empossados. Quem já tem posse não
-                é alterado (reversível por representante no “Gerenciar”).
+                é alterado. Reversível por representante no “Gerenciar”.
               </DialogDescription>
             </DialogHeader>
             <form action={formAction} className="space-y-3">
@@ -206,39 +246,20 @@ function ConvocarForm({
   );
 }
 
-/* --------------------------- Reverter (undo) ----------------------------- */
-
 function ReverterForm({ id, label }: { id: string; label: string }) {
   const [state, formAction] = useFormState(reverterMandato, initialActionState);
   useActionToast(state);
   return (
     <form action={formAction}>
       <input type="hidden" name="id" value={id} />
-      <Pending type="submit" size="sm" variant="ghost">
-        <Undo2 className="mr-1.5 h-3.5 w-3.5" />
+      <Pending
+        type="submit"
+        size="sm"
+        variant="ghost"
+        className="h-7 px-2 text-xs text-slate-500 hover:text-slate-700"
+      >
+        <Undo2 className="mr-1 h-3.5 w-3.5" />
         {label}
-      </Pending>
-    </form>
-  );
-}
-
-function DesfazerHomologarForm({ workplaceId }: { workplaceId: string }) {
-  const [state, formAction] = useFormState(
-    desfazerHomologacao,
-    initialActionState,
-  );
-  useActionToast(state);
-  return (
-    <form
-      action={formAction}
-      onSubmit={(e) => {
-        if (!window.confirm("Desfazer a homologação deste local? (só é possível se nada ainda foi registrado)"))
-          e.preventDefault();
-      }}
-    >
-      <input type="hidden" name="workplaceId" value={workplaceId} />
-      <Pending type="submit" size="sm" variant="ghost" className="text-slate-500">
-        Desfazer homologação
       </Pending>
     </form>
   );
@@ -250,7 +271,6 @@ function GerenciarDialog({ m }: { m: MandatoLinha }) {
   const [open, setOpen] = useState(false);
   const fechar = () => setOpen(false);
 
-  // Formulários independentes (cada um com seu estado).
   const [vac, vacAction] = useFormState(registrarVacancia, initialActionState);
   const [afa, afaAction] = useFormState(afastarRepresentante, initialActionState);
   const [rea, reaAction] = useFormState(reativarRepresentante, initialActionState);
@@ -266,9 +286,9 @@ function GerenciarDialog({ m }: { m: MandatoLinha }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          <Settings2 className="mr-1.5 h-4 w-4" />
-          Gerenciar
+        <Button size="sm" variant="ghost" className="h-8 shrink-0 px-2 text-slate-600">
+          <Settings2 className="h-4 w-4 sm:mr-1.5" />
+          <span className="hidden sm:inline">Gerenciar</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -280,14 +300,22 @@ function GerenciarDialog({ m }: { m: MandatoLinha }) {
         </DialogHeader>
 
         <div className="space-y-5">
-          {/* Posse */}
           <form action={posAction} className="space-y-2">
-            <Label htmlFor={`posse-${m.id}`} className="text-xs font-semibold uppercase text-muted-foreground">
+            <Label
+              htmlFor={`posse-${m.id}`}
+              className="text-xs font-semibold uppercase text-muted-foreground"
+            >
               Posse {m.posseEm ? `(registrada em ${dataCurta(m.posseEm)})` : ""}
             </Label>
             <div className="flex gap-2">
               <input type="hidden" name="id" value={m.id} />
-              <Input id={`posse-${m.id}`} name="data" type="date" defaultValue={hoje} className="h-9" />
+              <Input
+                id={`posse-${m.id}`}
+                name="data"
+                type="date"
+                defaultValue={hoje}
+                className="h-9"
+              />
               <Pending type="submit" size="sm" variant="outline">
                 <UserCheck className="mr-1.5 h-4 w-4" />
                 Registrar posse
@@ -295,7 +323,6 @@ function GerenciarDialog({ m }: { m: MandatoLinha }) {
             </div>
           </form>
 
-          {/* Afastar / Reativar */}
           {m.situacao === "AFASTADO" ? (
             <form action={reaAction} className="rounded-lg border bg-amber-50/60 p-3">
               <p className="mb-2 text-xs text-amber-800">
@@ -309,11 +336,19 @@ function GerenciarDialog({ m }: { m: MandatoLinha }) {
             </form>
           ) : (
             <form action={afaAction} className="space-y-2">
-              <Label htmlFor={`afa-${m.id}`} className="text-xs font-semibold uppercase text-muted-foreground">
+              <Label
+                htmlFor={`afa-${m.id}`}
+                className="text-xs font-semibold uppercase text-muted-foreground"
+              >
                 Afastar (licença temporária)
               </Label>
               <input type="hidden" name="id" value={m.id} />
-              <Input id={`afa-${m.id}`} name="observacao" placeholder="Ex.: licença-saúde até 30/11 (opcional)" className="h-9" />
+              <Input
+                id={`afa-${m.id}`}
+                name="observacao"
+                placeholder="Ex.: licença-saúde até 30/11 (opcional)"
+                className="h-9"
+              />
               <Pending type="submit" size="sm" variant="outline">
                 <UserMinus className="mr-1.5 h-4 w-4" />
                 Afastar
@@ -321,8 +356,10 @@ function GerenciarDialog({ m }: { m: MandatoLinha }) {
             </form>
           )}
 
-          {/* Vacância (saída definitiva) */}
-          <form action={vacAction} className="space-y-2 rounded-lg border border-rose-200 bg-rose-50/50 p-3">
+          <form
+            action={vacAction}
+            className="space-y-2 rounded-lg border border-rose-200 bg-rose-50/50 p-3"
+          >
             <p className="text-xs font-semibold uppercase text-rose-700">
               Registrar vacância (saída definitiva)
             </p>
@@ -412,9 +449,7 @@ function agrupar(mandatos: MandatoLinha[]): Grupo[] {
       .sort((a, b) => a.ordem - b.ordem);
     const encerrados = arr
       .filter((m) => m.situacao === "ENCERRADO")
-      .sort(
-        (a, b) => (b.saidaEm?.getTime() ?? 0) - (a.saidaEm?.getTime() ?? 0),
-      );
+      .sort((a, b) => (b.saidaEm?.getTime() ?? 0) - (a.saidaEm?.getTime() ?? 0));
     const servindo = ativos.length + afastados.length;
     const vagasAbertas = Math.max(0, seats - servindo);
     const intocado = arr.every(
@@ -448,43 +483,53 @@ function agrupar(mandatos: MandatoLinha[]): Grupo[] {
 
 /* --------------------------------- Linha --------------------------------- */
 
-function PapelTag({ m }: { m: MandatoView }) {
-  const convocado = m.papel === "SUPLENTE" && m.assumiuEm != null;
-  if (convocado) {
-    return (
-      <Badge className="bg-sky-600 hover:bg-sky-600">Suplente convocado</Badge>
-    );
-  }
-  if (m.papel === "TITULAR")
-    return <Badge variant="success">Titular</Badge>;
-  return (
-    <Badge variant="outline" className="border-sky-300 text-sky-700">
-      Suplente
-    </Badge>
-  );
-}
-
 function HolderRow({ m, canManage }: { m: MandatoLinha; canManage: boolean }) {
+  const convocado = m.papel === "SUPLENTE" && m.assumiuEm != null;
+  const afastado = m.situacao === "AFASTADO";
+
+  // Cor do "selo" por situação (titular verde, convocado azul, afastado âmbar).
+  const corIcone = afastado
+    ? "bg-amber-100 text-amber-700"
+    : convocado
+      ? "bg-sky-100 text-sky-700"
+      : "bg-emerald-100 text-emerald-700";
+  const tag = afastado
+    ? { txt: "Afastado", cls: "bg-amber-50 text-amber-700 ring-amber-200" }
+    : convocado
+      ? { txt: "Suplente convocado", cls: "bg-sky-50 text-sky-700 ring-sky-200" }
+      : { txt: "Titular", cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" };
+
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2">
-      <Award className="h-4 w-4 shrink-0 text-emerald-600" />
-      <span className="font-medium">{m.nome}</span>
-      <PapelTag m={m} />
-      {m.situacao === "AFASTADO" && (
-        <Badge variant="outline" className="border-amber-300 text-amber-700">
-          Afastado
-        </Badge>
-      )}
-      <span className="text-xs text-muted-foreground">
-        {m.votosHomologados} voto(s)
-        {m.posseEm ? ` · posse ${dataCurta(m.posseEm)}` : ""}
-        {m.substituiuNome ? ` · no lugar de ${m.substituiuNome}` : ""}
+    <div className="flex items-center gap-3 px-3 py-2.5">
+      <span
+        className={cn(
+          "grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold",
+          corIcone,
+        )}
+      >
+        {m.nome.trim().charAt(0).toUpperCase() || "?"}
       </span>
-      {canManage && (
-        <span className="ml-auto">
-          <GerenciarDialog m={m} />
-        </span>
-      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="truncate text-sm font-semibold text-slate-800">
+            {m.nome}
+          </span>
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1",
+              tag.cls,
+            )}
+          >
+            {tag.txt}
+          </span>
+        </div>
+        <p className="truncate text-xs text-muted-foreground">
+          {m.votosHomologados} voto(s)
+          {m.posseEm ? ` · posse ${dataCurta(m.posseEm)}` : ""}
+          {m.substituiuNome ? ` · no lugar de ${m.substituiuNome}` : ""}
+        </p>
+      </div>
+      {canManage && <GerenciarDialog m={m} />}
     </div>
   );
 }
@@ -510,13 +555,12 @@ export function RepresentantesManager({
 
   const grupos = useMemo(() => agrupar(mandatos), [mandatos]);
 
-  // Representantes em exercício ainda SEM posse (alvo da posse coletiva).
   const aguardandoPosse = mandatos.filter(
     (m) => (m.situacao === "ATIVO" || m.situacao === "AFASTADO") && !m.posseEm,
   ).length;
-
   const comVaga = grupos.filter((g) => g.vagasAbertas > 0).length;
   const comAfastado = grupos.filter((g) => g.afastados.length > 0).length;
+  const intocados = grupos.filter((g) => g.intocado).length;
 
   const tokens = searchTokens(q);
   const visiveis = grupos.filter((g) => {
@@ -543,9 +587,9 @@ export function RepresentantesManager({
 
   return (
     <div className="space-y-5">
-      {/* Banner de homologação */}
+      {/* Banner de homologação (com modal de confirmação) */}
       {aptos.length > 0 && (
-        <Card className="border-sky-200 bg-sky-50/60">
+        <Card className="border-sky-200 bg-gradient-to-br from-sky-50 to-white">
           <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
@@ -553,19 +597,30 @@ export function RepresentantesManager({
               </span>
               <div className="min-w-0">
                 <p className="font-semibold text-slate-900">
-                  {aptos.length} {aptos.length === 1 ? "local pronto" : "locais prontos"}{" "}
-                  para homologar
+                  {aptos.length}{" "}
+                  {aptos.length === 1 ? "local pronto" : "locais prontos"} para
+                  homologar
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Materialize os representantes (titulares e suplentes) para gerir o
-                  mandato: posse, licença, renúncia e convocação de suplente.
+                  Transforme o resultado em representantes para gerir o mandato
+                  (posse, licença, renúncia e convocação de suplente).
                 </p>
               </div>
             </div>
             {canManage ? (
-              <div className="shrink-0">
-                <HomologarTodosForm ano={ano} count={aptos.length} />
-              </div>
+              <AcaoConfirm
+                action={homologarResultados}
+                hidden={{ ano }}
+                titulo={`Homologar ${aptos.length} ${aptos.length === 1 ? "local" : "locais"}?`}
+                descricao="Materializa os representantes (titulares + suplentes) destes locais. Locais com empate ou sem eleito são ignorados. É reversível enquanto nada for registrado."
+                confirmLabel="Confirmar homologação"
+                trigger={
+                  <Button className="shrink-0">
+                    <ShieldCheck className="mr-2 h-4 w-4" />
+                    Homologar {aptos.length}
+                  </Button>
+                }
+              />
             ) : (
               <p className="shrink-0 text-xs text-muted-foreground">
                 Sem permissão para homologar.
@@ -582,7 +637,7 @@ export function RepresentantesManager({
       {grupos.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center">
-            <ShieldCheck className="h-8 w-8 text-muted-foreground/50" />
+            <ShieldCheck className="h-8 w-8 text-muted-foreground/40" />
             <p className="max-w-md text-sm text-muted-foreground">
               Nenhum representante homologado ainda. Encerre as votações, resolva
               os empates e use <strong>Homologar</strong> para materializar os
@@ -592,30 +647,36 @@ export function RepresentantesManager({
         </Card>
       ) : (
         <>
-          {/* Resumo + busca + chips */}
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border bg-card px-4 py-3 text-sm shadow-sm sm:px-5">
-              <div className="flex items-center gap-2">
-                <UserCheck className="h-5 w-5 text-emerald-600" />
-                <span className="text-xl font-bold leading-none">{totalVigentes}</span>
-                <span className="text-xs text-muted-foreground">em exercício</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Award className="h-5 w-5 text-slate-500" />
-                <span className="text-xl font-bold leading-none">{grupos.length}</span>
-                <span className="text-xs text-muted-foreground">locais com mandato</span>
-              </div>
-              {comVaga > 0 && (
-                <div className="flex items-center gap-2">
-                  <UserPlus className="h-5 w-5 text-amber-600" />
-                  <span className="text-xl font-bold leading-none text-amber-700">
-                    {comVaga}
-                  </span>
-                  <span className="text-xs text-muted-foreground">com vaga aberta</span>
-                </div>
-              )}
-            </div>
+          {/* Resumo (métricas) */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <ResumoTile
+              icon={<UserCheck className="h-5 w-5" />}
+              tone="emerald"
+              value={totalVigentes}
+              label="em exercício"
+            />
+            <ResumoTile
+              icon={<Users className="h-5 w-5" />}
+              tone="slate"
+              value={grupos.length}
+              label="locais com mandato"
+            />
+            <ResumoTile
+              icon={<UserPlus className="h-5 w-5" />}
+              tone="amber"
+              value={comVaga}
+              label="com vaga aberta"
+            />
+            <ResumoTile
+              icon={<PartyPopper className="h-5 w-5" />}
+              tone="sky"
+              value={aguardandoPosse}
+              label="aguardando posse"
+            />
+          </div>
 
+          {/* Busca + chips + desfazer em lote */}
+          <div className="space-y-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -626,35 +687,65 @@ export function RepresentantesManager({
               />
             </div>
 
-            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
-              {chips
-                .filter((c) => c.id === "todos" || c.count > 0)
-                .map((c) => {
-                  const ativo = chip === c.id;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setChip(c.id)}
-                      className={cn(
-                        "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
-                        ativo
-                          ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-                      )}
-                    >
-                      {c.label}
-                      <span
+            <div className="flex items-center justify-between gap-2">
+              <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+                {chips
+                  .filter((c) => c.id === "todos" || c.count > 0)
+                  .map((c) => {
+                    const ativo = chip === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setChip(c.id)}
                         className={cn(
-                          "rounded-full px-1.5 text-[10px] font-bold",
-                          ativo ? "bg-white/20" : "bg-slate-100 text-slate-500",
+                          "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                          ativo
+                            ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                            : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
                         )}
                       >
-                        {c.count}
-                      </span>
-                    </button>
-                  );
-                })}
+                        {c.label}
+                        <span
+                          className={cn(
+                            "rounded-full px-1.5 text-[10px] font-bold",
+                            ativo ? "bg-white/20" : "bg-slate-100 text-slate-500",
+                          )}
+                        >
+                          {c.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+              </div>
+
+              {canManage && intocados > 0 && (
+                <AcaoConfirm
+                  action={desfazerHomologacaoLote}
+                  hidden={{ ano }}
+                  destrutivo
+                  titulo="Desfazer homologação em lote?"
+                  descricao={
+                    <>
+                      Remove os representantes de <strong>{intocados}</strong>{" "}
+                      local(is) <strong>intocado(s)</strong> (sem posse, vacância
+                      ou convocação). Locais com histórico são preservados. Isto
+                      não afeta outros pleitos — mandatos são isolados por ano.
+                    </>
+                  }
+                  confirmLabel={`Desfazer ${intocados} local(is)`}
+                  trigger={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 text-slate-500"
+                    >
+                      <RotateCcw className="mr-1.5 h-4 w-4" />
+                      <span className="hidden sm:inline">Desfazer em lote</span>
+                    </Button>
+                  }
+                />
+              )}
             </div>
           </div>
 
@@ -663,32 +754,36 @@ export function RepresentantesManager({
             {visiveis.map((g) => {
               const hist = verHist[g.workplaceId] ?? false;
               return (
-                <Card key={g.workplaceId} className="overflow-hidden">
-                  <CardContent className="space-y-3 p-4 sm:p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
+                <Card key={g.workplaceId} className="flex flex-col overflow-hidden">
+                  <CardContent className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
+                    <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="font-semibold leading-tight">{g.localNome}</p>
+                        <p className="font-semibold leading-tight text-slate-900">
+                          {g.localNome}
+                        </p>
                         <p className="truncate text-xs text-muted-foreground">
                           {g.orgao} · Zona {g.zona} · {g.seats}{" "}
                           {g.seats === 1 ? "cadeira" : "cadeiras"}
                         </p>
                       </div>
-                      {g.vagasAbertas > 0 ? (
-                        <Badge variant="outline" className="border-amber-300 text-amber-700">
-                          {g.vagasAbertas} vaga{g.vagasAbertas > 1 ? "s" : ""} aberta
-                          {g.vagasAbertas > 1 ? "s" : ""}
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="border-emerald-300 text-emerald-700">
-                          Completo
-                        </Badge>
-                      )}
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1",
+                          g.vagasAbertas > 0
+                            ? "bg-amber-50 text-amber-700 ring-amber-200"
+                            : "bg-emerald-50 text-emerald-700 ring-emerald-200",
+                        )}
+                      >
+                        {g.vagasAbertas > 0
+                          ? `${g.vagasAbertas} vaga${g.vagasAbertas > 1 ? "s" : ""}`
+                          : "Completo"}
+                      </span>
                     </div>
 
                     {/* Em exercício */}
-                    <div className="divide-y rounded-lg border px-3">
+                    <div className="divide-y rounded-lg border">
                       {g.ativos.length === 0 && g.afastados.length === 0 ? (
-                        <p className="py-3 text-sm text-muted-foreground">
+                        <p className="px-3 py-3 text-sm text-muted-foreground">
                           Nenhum representante em exercício.
                         </p>
                       ) : (
@@ -730,15 +825,26 @@ export function RepresentantesManager({
 
                     {/* Suplência (reserva) */}
                     {g.reserva.length > 0 && (
-                      <div>
-                        <p className="mb-1 text-xs font-semibold uppercase text-muted-foreground">
-                          Suplência (ordem)
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Próximos suplentes
                         </p>
-                        <p className="text-sm text-slate-600">
-                          {g.reserva
-                            .map((s, i) => `${i + 1}º ${s.nome} (${s.votosHomologados})`)
-                            .join(" · ")}
-                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {g.reserva.slice(0, 6).map((s, i) => (
+                            <span
+                              key={s.id}
+                              className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs text-slate-600 ring-1 ring-slate-200"
+                            >
+                              <span className="font-bold text-slate-400">{i + 1}º</span>
+                              {s.nome}
+                            </span>
+                          ))}
+                          {g.reserva.length > 6 && (
+                            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs text-slate-400">
+                              +{g.reserva.length - 6}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -748,10 +854,7 @@ export function RepresentantesManager({
                         <button
                           type="button"
                           onClick={() =>
-                            setVerHist((v) => ({
-                              ...v,
-                              [g.workplaceId]: !hist,
-                            }))
+                            setVerHist((v) => ({ ...v, [g.workplaceId]: !hist }))
                           }
                           className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700"
                         >
@@ -766,7 +869,10 @@ export function RepresentantesManager({
                         {hist && (
                           <ul className="mt-2 space-y-1.5 border-l-2 border-slate-200 pl-3 text-xs text-muted-foreground">
                             {g.encerrados.map((m) => (
-                              <li key={m.id} className="flex flex-wrap items-center gap-2">
+                              <li
+                                key={m.id}
+                                className="flex flex-wrap items-center gap-x-2 gap-y-0.5"
+                              >
                                 <span className="font-medium text-slate-700">
                                   {m.nome}
                                 </span>
@@ -784,10 +890,33 @@ export function RepresentantesManager({
                       </div>
                     )}
 
-                    {/* Desfazer homologação (só se intocado) */}
+                    {/* Rodapé: desfazer homologação do local (só se intocado) */}
                     {canManage && g.intocado && (
-                      <div className="flex justify-end">
-                        <DesfazerHomologarForm workplaceId={g.workplaceId} />
+                      <div className="mt-auto flex justify-end border-t pt-2">
+                        <AcaoConfirm
+                          action={desfazerHomologacao}
+                          hidden={{ workplaceId: g.workplaceId }}
+                          destrutivo
+                          titulo="Desfazer homologação deste local?"
+                          descricao={
+                            <>
+                              Remove os representantes de{" "}
+                              <strong>{g.localNome}</strong>. Só é possível porque
+                              nada foi registrado ainda (posse/vacância/convocação).
+                            </>
+                          }
+                          confirmLabel="Desfazer"
+                          trigger={
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-slate-400 hover:text-slate-600"
+                            >
+                              <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                              Desfazer homologação
+                            </Button>
+                          }
+                        />
                       </div>
                     )}
                   </CardContent>
@@ -803,6 +932,36 @@ export function RepresentantesManager({
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/* --------------------------------- Tile ---------------------------------- */
+
+function ResumoTile({
+  icon,
+  tone,
+  value,
+  label,
+}: {
+  icon: React.ReactNode;
+  tone: "emerald" | "slate" | "amber" | "sky";
+  value: number;
+  label: string;
+}) {
+  const cls = {
+    emerald: "bg-emerald-50 text-emerald-600",
+    slate: "bg-slate-100 text-slate-600",
+    amber: "bg-amber-50 text-amber-600",
+    sky: "bg-sky-50 text-sky-600",
+  }[tone];
+  return (
+    <div className="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-sm sm:p-4">
+      <span className={cn("shrink-0 rounded-lg p-2", cls)}>{icon}</span>
+      <div className="min-w-0">
+        <p className="text-xl font-bold leading-none text-slate-900">{value}</p>
+        <p className="mt-1 text-xs leading-tight text-muted-foreground">{label}</p>
+      </div>
     </div>
   );
 }

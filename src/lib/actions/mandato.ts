@@ -450,6 +450,79 @@ export async function desfazerHomologacao(
 }
 
 /**
+ * DESFAZER HOMOLOGAÇÃO EM LOTE — remove os mandatos de todos os locais do ano
+ * que estão INTOCADOS (sem posse/vacância/convocação). Locais com eventos de
+ * mandato são PRESERVADOS (não apaga histórico). Útil para recomeçar a
+ * homologação de um ano. Mandatos são isolados por ano: não afeta outros pleitos.
+ * formData: ano.
+ */
+export async function desfazerHomologacaoLote(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const gp = await guard("pleitos", "EDIT");
+  if ("error" in gp) return err(gp.error);
+
+  const ano = Number(formData.get("ano"));
+  if (!Number.isInteger(ano)) return err("Ano inválido.");
+
+  const rows = await prisma.mandato.findMany({
+    where: { anoEleicao: ano },
+    select: {
+      workplaceId: true,
+      papel: true,
+      situacao: true,
+      posseEm: true,
+      saidaEm: true,
+      assumiuEm: true,
+    },
+  });
+  if (rows.length === 0) return err("Nada homologado neste ano.");
+
+  const byWp = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const arr = byWp.get(r.workplaceId) ?? [];
+    arr.push(r);
+    byWp.set(r.workplaceId, arr);
+  }
+  const intocados: string[] = [];
+  for (const [wp, arr] of byWp) {
+    const intocado = arr.every(
+      (m) =>
+        !m.posseEm &&
+        !m.saidaEm &&
+        !m.assumiuEm &&
+        ((m.papel === "TITULAR" && m.situacao === "ATIVO") ||
+          (m.papel === "SUPLENTE" && m.situacao === "RESERVA")),
+    );
+    if (intocado) intocados.push(wp);
+  }
+  if (intocados.length === 0) {
+    return err(
+      "Nenhum local intocado para desfazer — todos já têm posse, vacância ou convocação registradas.",
+    );
+  }
+
+  const del = await prisma.mandato.deleteMany({
+    where: { anoEleicao: ano, workplaceId: { in: intocados } },
+  });
+  await registrarAuditoria("DESFEZ_HOMOLOGACAO_LOTE", {
+    alvo: `${intocados.length} locais`,
+    detalhe: `${del.count} registros`,
+    user: gp.user,
+  });
+  revalidatePath("/admin/representantes");
+  revalidatePath("/transparencia");
+  const preservados = byWp.size - intocados.length;
+  return ok(
+    `Homologação desfeita em ${intocados.length} local(is) intocado(s).` +
+      (preservados > 0
+        ? ` ${preservados} local(is) com histórico foram preservados.`
+        : ""),
+  );
+}
+
+/**
  * POSSE COLETIVA — empossa de uma vez todos os representantes EM EXERCÍCIO
  * (ATIVO/AFASTADO) do ano que ainda NÃO têm posse, com a MESMA data (a da
  * cerimônia). Quem já foi empossado não é alterado (não sobrescreve). Ideal para
