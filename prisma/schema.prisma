@@ -173,6 +173,7 @@ model Election {
   updatedAt DateTime @updatedAt
 
   documentos Documento[]
+  mandatos   Mandato[]
 
   @@index([ano])
   @@map("elections")
@@ -203,6 +204,57 @@ model Documento {
 
   @@index([electionId, createdAt])
   @@map("documentos")
+}
+
+/// Camada de MANDATO (pós-eleição). Materializada na HOMOLOGAÇÃO do resultado de
+/// um local: cada eleito vira um Mandato TITULAR (ATIVO) e cada suplente vira um
+/// Mandato SUPLENTE (RESERVA), com os votos congelados. A partir daí a vida do
+/// mandato (posse, licença, renúncia/vacância, convocação de suplente) é
+/// registrada AQUI — SEM reescrever a apuração histórica (que segue derivada dos
+/// votos). `papel`, `situacao` e `saidaMotivo` são códigos validados na aplicação.
+model Mandato {
+  id          String @id @default(cuid())
+  electionId  String
+  anoEleicao  Int
+  workplaceId String
+  // Rodada da votação no momento da homologação (rastro da suplementar).
+  rodadaHomologada Int @default(1)
+
+  // Pessoa (snapshot — sobrevive a edições/remoções do Candidate de origem).
+  nome              String
+  candidateIdOrigem String?
+
+  // Papel na eleição + ordem (1..N titulares por votos; 1..M suplentes por votos).
+  papel            String
+  ordem            Int
+  votosHomologados Int    @default(0)
+
+  // Ciclo de vida. TITULAR nasce ATIVO; SUPLENTE nasce RESERVA.
+  // ATIVO = exercendo · AFASTADO = licença temporária · ENCERRADO = saiu
+  // (ver saidaMotivo) · RESERVA = suplente aguardando convocação.
+  situacao       String    @default("ATIVO")
+  posseEm        DateTime?
+  saidaEm        DateTime?
+  saidaMotivo    String?
+  // Suplente convocado: quando assumiu e o nome do titular que substituiu.
+  assumiuEm      DateTime?
+  substituiuNome String?
+  observacao     String?
+
+  homologadoPorNome String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  election  Election  @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  workplace Workplace @relation(fields: [workplaceId], references: [id], onDelete: Cascade)
+
+  // Unicidade: 1 linha por (local, papel, ordem) — torna a homologação idempotente
+  // (duplo-clique / 2 admins não duplicam) junto com createMany(skipDuplicates).
+  @@unique([workplaceId, papel, ordem])
+  @@index([electionId, anoEleicao])
+  @@index([workplaceId])
+  @@index([anoEleicao, situacao])
+  @@map("mandatos")
 }
 
 /// Local de trabalho. Cada local possui um link público e uma janela de votação.
@@ -269,6 +321,7 @@ model Workplace {
   votes      Vote[]
   voters     Voter[]
   eventos    LocalEvento[]
+  mandatos   Mandato[]
 
   @@unique([linkToken, anoEleicao])
   @@index([anoEleicao])

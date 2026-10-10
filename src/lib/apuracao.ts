@@ -9,7 +9,10 @@ export type ApuracaoLocal = {
   totalVotos: number;
   temEmpate: boolean;
   vagasVazias: number;
+  /** Titulares finais = preservados (travados) + eleitos da rodada atual. */
   eleitos: { id: string; nome: string; votos: number }[];
+  /** Fila de suplência (ordem de votos): elegíveis não eleitos nem empatados. */
+  suplentes: { id: string; nome: string; votos: number }[];
   semVotos: boolean;
 };
 
@@ -32,7 +35,9 @@ export async function apurarLocal(workplaceId: string): Promise<ApuracaoLocal> {
     where: { workplaceId },
   });
   const vagas = calcularVagas(totalCandidatos);
-  const takeApuracao = Math.min(Math.max(vagas + 30, 50), 500);
+  // Cobre TODOS os candidatos votados (suplência completa p/ homologação), com teto
+  // de segurança. Antes era vagas+30 (min 50), que truncava a fila em locais grandes.
+  const takeApuracao = Math.min(Math.max(totalCandidatos, 50), 1000);
 
   const [totalVotos, grupos, preservadosRaw] = await Promise.all([
     // Comparecimento/votos da RODADA ATUAL.
@@ -79,6 +84,18 @@ export async function apurarLocal(workplaceId: string): Promise<ApuracaoLocal> {
   const vagasRestantes = Math.max(0, vagas - preservados.length);
 
   const r = apurarEleitos(ranked, vagasRestantes);
+
+  // Suplência = elegíveis da rodada atual que NÃO foram eleitos nem ficaram
+  // empatados na linha de corte (mesma definição do portal público), por votos.
+  const eleitoIds = new Set(r.eleitos.map((c) => c.id));
+  const empateIds = new Set(r.empatados.map((c) => c.id));
+  const suplentes = ranked
+    .filter((c) => !c.renunciou && !eleitoIds.has(c.id) && !empateIds.has(c.id))
+    // Desempate determinístico por nome (igual ao relatório/portal) — a ordem de
+    // suplência define a sequência de convocação, não pode variar entre execuções.
+    .sort((a, b) => b.votos - a.votos || a.nome.localeCompare(b.nome))
+    .map((c) => ({ id: c.id, nome: c.nome, votos: c.votos }));
+
   return {
     vagas,
     totalVotos,
@@ -90,6 +107,7 @@ export async function apurarLocal(workplaceId: string): Promise<ApuracaoLocal> {
       nome: e.nome,
       votos: e.votos,
     })),
+    suplentes,
     semVotos: totalVotos === 0,
   };
 }

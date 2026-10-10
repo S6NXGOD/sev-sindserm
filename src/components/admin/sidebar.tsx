@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+  Award,
   Building2,
   LayoutDashboard,
   Lock,
@@ -70,6 +71,12 @@ const SECTIONS: { titulo: string; itens: NavItem[] }[] = [
         icon: Trophy,
         modulos: ["encerradas", "relatorios"],
         activePaths: ["/admin/encerradas", "/admin/relatorios"],
+      },
+      {
+        href: "/admin/representantes",
+        label: "Representantes",
+        icon: Award,
+        modulos: ["encerradas"],
       },
     ],
   },
