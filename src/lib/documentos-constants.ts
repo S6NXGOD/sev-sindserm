@@ -6,8 +6,10 @@
 
 // Categorias oficiais (atas, editais, etc.). A ordem é a ordem do seletor.
 export const CATEGORIAS_DOCUMENTO = [
-  "Ata",
   "Edital",
+  "Ata de apuração",
+  "Ata de posse",
+  "Ata de sucessão",
   "Resultado oficial",
   "Regulamento",
   "Comunicado",

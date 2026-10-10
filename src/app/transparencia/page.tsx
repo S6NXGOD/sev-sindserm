@@ -15,12 +15,17 @@ import {
   getTransparenciaData,
 } from "@/lib/transparencia";
 import { getDocumentosPublicos, type DocumentoView } from "@/lib/documentos";
+import {
+  getRepresentantesPublicos,
+  type RepresentantesPublicos as RepresentantesPublicosData,
+} from "@/lib/mandato";
 import { ProximasAberturas } from "@/components/proximas-aberturas";
 import { ApuracaoAoVivo } from "@/components/transparencia/apuracao-ao-vivo";
 import { AuditoriaLisura } from "@/components/transparencia/auditoria-lisura";
 import { ConformidadeLegal } from "@/components/transparencia/conformidade-legal";
 import { AtividadeDiretoria } from "@/components/transparencia/atividade-diretoria";
 import { DocumentosOficiais } from "@/components/transparencia/documentos-oficiais";
+import { RepresentantesPublicos } from "@/components/transparencia/representantes-publicos";
 import { MuralEleitos } from "@/components/transparencia/mural-eleitos";
 import { PortalTabs } from "@/components/transparencia/portal-tabs";
 import { SuplementarAviso } from "@/components/transparencia/suplementar-aviso";
@@ -141,6 +146,19 @@ export default async function TransparenciaPage({
     console.error("Falha ao carregar documentos públicos:", error);
   }
 
+  // Representantes do triênio (mandato vigente) — só após a HOMOLOGAÇÃO. Em
+  // try/catch (blast-radius): um ambiente sem a tabela não derruba o portal.
+  let representantes: RepresentantesPublicosData = {
+    temMandatos: false,
+    vigentes: [],
+    sucessoes: [],
+  };
+  try {
+    representantes = await getRepresentantesPublicos(pleitoId);
+  } catch (error) {
+    console.error("Falha ao carregar representantes:", error);
+  }
+
   return (
     <main className="min-h-screen bg-slate-50">
       {/* Cabeçalho oficial com as logos do pleito */}
@@ -208,6 +226,13 @@ export default async function TransparenciaPage({
         <PortalTabs
           resultados={
             <>
+              {representantes.temMandatos && (
+                <RepresentantesPublicos
+                  vigentes={representantes.vigentes}
+                  sucessoes={representantes.sucessoes}
+                  trienio={pleito.trienio}
+                />
+              )}
               <MuralEleitos
                 eleitos={eleitosData?.rows ?? []}
                 concluido={concluido}
