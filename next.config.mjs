@@ -41,7 +41,15 @@ const nextConfig = {
     },
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    // Não indexar painel, links de votação (com token) e API — mantém login e
+    // tokens fora dos buscadores (robots.txt é só uma dica; o header é efetivo).
+    const noindex = [{ key: "X-Robots-Tag", value: "noindex, nofollow" }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      { source: "/admin/:path*", headers: noindex },
+      { source: "/votacao/:path*", headers: noindex },
+      { source: "/api/:path*", headers: noindex },
+    ];
   },
 };
 

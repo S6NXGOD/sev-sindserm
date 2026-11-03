@@ -1,0 +1,8 @@
+# SEV SINDSERM — Sistema Eletrônico de Votação
+# O portal da transparência é público; painel e links de votação (com token)
+# NÃO devem ser indexados por buscadores.
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /votacao
+Disallow: /api
