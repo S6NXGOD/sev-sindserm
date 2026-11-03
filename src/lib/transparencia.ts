@@ -1053,13 +1053,16 @@ export type EleitoRow = {
   votos: number;
 };
 
+/** Como EleitoRow, mas com o id do local (uso INTERNO: cruzar telefone por local). */
+export type EleitoRowDetalhe = EleitoRow & { workplaceId: string };
+
 /**
  * Linhas ESTRUTURADAS do relatório geral de eleitos (locais ENCERRADOS, apenas
  * titulares por vaga). Base única para o CSV e para o PDF do Portal.
  */
-export async function getEleitosRows(
+export async function getEleitosDetalhado(
   electionId: string,
-): Promise<{ ano: number; rows: EleitoRow[] } | null> {
+): Promise<{ ano: number; rows: EleitoRowDetalhe[] } | null> {
   const election = await prisma.election.findUnique({
     where: { id: electionId },
     select: { ano: true, duracaoMandato: true },
@@ -1136,7 +1139,7 @@ export async function getEleitosRows(
     byLocal.set(r.wid, arr);
   }
 
-  const rows: EleitoRow[] = [];
+  const rows: EleitoRowDetalhe[] = [];
   const metaById = new Map(fechados.map((l) => [l.id, l]));
   for (const l of fechados.sort((a, b) => a.nome.localeCompare(b.nome))) {
     const vagas = calcularVagas(candMap.get(l.id) ?? 0);
@@ -1160,11 +1163,34 @@ export async function getEleitosRows(
         zona: meta.zona,
         eleito: c.nome,
         votos: c.votos,
+        workplaceId: l.id,
       });
     }
   }
 
   return { ano, rows };
+}
+
+/**
+ * Linhas do relatório geral de eleitos (público) — SEM o id do local. Fonte
+ * ÚNICA: getEleitosDetalhado (apuração canônica); aqui só removemos o
+ * workplaceId para não vazar ids internos ao portal/CSV/PDF.
+ */
+export async function getEleitosRows(
+  electionId: string,
+): Promise<{ ano: number; rows: EleitoRow[] } | null> {
+  const d = await getEleitosDetalhado(electionId);
+  if (!d) return null;
+  return {
+    ano: d.ano,
+    rows: d.rows.map(({ local, orgao, zona, eleito, votos }) => ({
+      local,
+      orgao,
+      zona,
+      eleito,
+      votos,
+    })),
+  };
 }
 
 export async function getEleitosCsv(electionId: string): Promise<{
